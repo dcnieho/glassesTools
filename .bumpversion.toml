@@ -1,0 +1,11 @@
+[tool.bumpversion]
+current_version = "0.5.0"
+
+[[tool.bumpversion.files]]
+filename = "src/glassesTools/version.py"
+
+
+[[tool.bumpversion.files]]
+filename = "README.md"
+search = "GlassesTools v{current_version}"
+replace = "GlassesTools v{new_version}"

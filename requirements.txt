@@ -1,0 +1,6 @@
+numpy
+pandas
+msgpack
+opencv-python-headless==4.9.0.80
+ffpyplayer
+scipy==1.11.3

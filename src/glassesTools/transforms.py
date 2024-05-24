@@ -1,0 +1,190 @@
+import numpy as np
+import math
+import cv2
+
+from . import gaze_headref, gaze_worldref, plane
+
+def toNormPos(x,y,bbox):
+    # transforms input (x,y) which is on a plane in world units
+    # (e.g. mm on an aruco poster) to a normalized position
+    # in an image of the plane, given the image's bounding box in
+    # world units
+    # for input (0,0) is bottom left, for output (0,0) is top left
+    # bbox is [left, top, right, bottom]
+
+    extents = [bbox[2]-bbox[0], bbox[1]-bbox[3]]
+    pos     = [(x-bbox[0])/extents[0], (bbox[1]-y)/extents[1]]    # bbox[1]-y instead of y-bbox[3] to flip y
+    return pos
+
+def toImagePos(x,y,bbox,imSize,margin=[0,0]):
+    # transforms input (x,y) which is on a plane in world units
+    # (e.g. mm on an aruco poster) to a pixel position in the
+    # image, given the image's bounding box in world units
+    # imSize should be active image area in pixels, excluding margin
+
+    # fractional position between bounding box edges, (0,0) in bottom left
+    pos = toNormPos(x,y, bbox)
+    # turn into int, add margin
+    pos = [p*s+m for p,s,m in zip(pos,imSize,margin)]
+    return pos
+
+
+def estimateHomography(known, detectedCorners, detectedIDs):
+    # collect matching corners in image and in world
+    pts_src = []
+    pts_dst = []
+    detectedIDs = detectedIDs.flatten()
+    if len(detectedIDs) != len(detectedCorners):
+        raise ValueError('unexpected number of IDs (%d) given number of corner arrays (%d)' % (len(detectedIDs),len(detectedCorners)))
+    for i in range(0, len(detectedIDs)):
+        if detectedIDs[i] in known:
+            dc = detectedCorners[i]
+            if dc.shape[0]==1 and dc.shape[1]==4:
+                dc = np.reshape(dc,(4,1,2))
+            pts_src.extend( [x.flatten() for x in dc] )
+            pts_dst.extend( known[detectedIDs[i]].corners )
+
+    if len(pts_src) < 4:
+        return None, False
+
+    # compute Homography
+    pts_src = np.float32(pts_src)
+    pts_dst = np.float32(pts_dst)
+    h, _ = cv2.findHomography(pts_src, pts_dst)
+    return h, True
+
+def applyHomography(h, x, y):
+    if math.isnan(x) or math.isnan(y):
+        return np.array([np.nan, np.nan])
+
+    src = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
+    dst = cv2.perspectiveTransform(src,h)
+    return dst.flatten()
+
+
+def distortPoint(x, y, cameraMatrix, distCoeff):
+    if math.isnan(x) or math.isnan(y):
+        return np.array([np.nan, np.nan])
+
+    # unproject, ignoring distortion as this is an undistored point
+    points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
+    points_2d = cv2.undistortPoints(points_2d, cameraMatrix, np.asarray([[0.0, 0.0, 0.0, 0.0, 0.0]]))
+    points_3d = cv2.convertPointsToHomogeneous(points_2d)
+    points_3d.shape = -1, 3
+
+    # reproject, applying distortion
+    points_2d, _ = cv2.projectPoints(points_3d, np.zeros((1, 1, 3)), np.zeros((1, 1, 3)), cameraMatrix, distCoeff)
+    return points_2d.flatten()
+
+def undistortPoint(x, y, cameraMatrix, distCoeff):
+    if math.isnan(x) or math.isnan(y):
+        return np.array([np.nan, np.nan])
+
+    points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
+    points_2d = cv2.undistortPoints(points_2d, cameraMatrix, distCoeff, P=cameraMatrix) # P=cameraMatrix to reproject to camera
+    return points_2d.flatten()
+
+def unprojectPoint(x, y, cameraMatrix, distCoeff):
+    if math.isnan(x) or math.isnan(y):
+        return np.array([np.nan, np.nan, np.nan])
+
+    points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
+    points_2d = cv2.undistortPoints(points_2d, cameraMatrix, distCoeff)
+    points_3d = cv2.convertPointsToHomogeneous(points_2d)
+    points_3d.shape = -1, 3
+    return points_3d.flatten()
+
+
+def intersect_plane_ray(planeNormal, planePoint, rayDirection, rayPoint, epsilon=1e-6):
+    # from https://rosettacode.org/wiki/Find_the_intersection_of_a_line_with_a_plane#Python
+
+    ndotu = planeNormal.dot(rayDirection)
+    if abs(ndotu) < epsilon:
+        # raise RuntimeError("no intersection or line is within plane")
+        np.array([np.nan, np.nan, np.nan])
+
+    w = rayPoint - planePoint
+    si = -planeNormal.dot(w) / ndotu
+    return w + si * rayDirection + planePoint
+
+
+def angle_between(v1, v2):
+    return (180.0 / math.pi) * math.atan2(np.linalg.norm(np.cross(v1,v2)), np.dot(v1,v2))
+
+
+def gazeToPlane(gaze: gaze_headref.Gaze, pose: plane.Pose, cameraRotation,cameraPosition, cameraMatrix=None, distCoeffs=None) -> gaze_worldref.Gaze:
+    hasCameraPose = (pose.pose_R_vec is not None) and (pose.pose_T_vec is not None)
+    gazeWorld     = gaze_worldref.Gaze(gaze.timestamp, gaze.frame_idx)
+    if hasCameraPose:
+        # get transform from ET data's coordinate frame to camera's coordinate frame
+        if cameraRotation is None:
+            cameraRotation = np.zeros((3,1))
+        RCam  = cv2.Rodrigues(cameraRotation)[0]
+        if cameraPosition is None:
+            cameraPosition = np.zeros((3,1))
+        RtCam = np.hstack((RCam, cameraPosition))
+
+        # project gaze on video to reference poster using camera pose
+        # turn observed gaze position on video into position on tangent plane
+        g3D = unprojectPoint(gaze.gaze_pos_vid[0],gaze.gaze_pos_vid[1], cameraMatrix, distCoeffs)
+
+        # find intersection of 3D gaze with poster
+        gazeWorld.gazePosCam_vidPos_ray = pose.vectorIntersect(g3D)  # default vec origin (0,0,0) because we use g3D from camera's view point
+
+        # above intersection is in camera space, turn into poster space to get position on poster
+        (x,y,z) = pose.camToWorld(gazeWorld.gazePosCam_vidPos_ray) # z should be very close to zero
+        gazeWorld.gazePosPlane2D_vidPos_ray = np.asarray([x, y])
+
+        # project world-space gaze point (often binocular gaze point) to plane
+        if gaze.gaze_pos_3d is not None:
+            # transform 3D gaze point from eye tracker space to camera space
+            g3D = np.matmul(RtCam,np.array(np.append(gaze.gaze_pos_3d, 1)).reshape(4,1))
+
+            # find intersection with poster (NB: pose is in camera reference frame)
+            gazeWorld.gazePosCamWorld = pose.vectorIntersect(g3D)    # default vec origin (0,0,0) is fine because we work from camera's view point
+
+            # above intersection is in camera space, turn into poster space to get position on poster
+            (x,y,z) = pose.camToWorld(gazeWorld.gazePosCamWorld)   # z should be very close to zero
+            gazeWorld.gazePosPlane2DWorld = np.asarray([x, y])
+
+    # unproject 2D gaze point on video to point on poster (should yield values very close to
+    # the above method of intersecting video gaze point ray with poster, and usually also very
+    # close to binocular gaze point (though for at least one tracker the latter is not the case;
+    # the AdHawk has an optional parallax correction using a vergence signal))
+    if pose.homography_mat is not None:
+        ux, uy = gaze.gaze_pos_vid
+        if (cameraMatrix is not None) and (distCoeffs is not None):
+            ux, uy = undistortPoint( ux, uy, cameraMatrix, distCoeffs)
+        (xW, yW) = applyHomography(pose.homography_mat, ux, uy)
+        gazeWorld.gazePosPlane2D_vidPos_homography = np.asarray([xW, yW])
+
+        # get this point in camera space
+        if hasCameraPose:
+            gazeWorld.gazePosCam_vidPos_homography = pose.worldToCam(np.array([xW,yW,0.]))
+
+    # project gaze vectors to reference poster (and draw on video)
+    if not hasCameraPose:
+        # nothing to do anymore
+        return gazeWorld
+
+    gazeVecs    = [gaze.gaze_dir_l, gaze.gaze_dir_r]
+    gazeOrigins = [gaze.gaze_ori_l, gaze.gaze_ori_r]
+    attrs       = [['gazeOriCamLeft','gazePosCamLeft','gazePosPlane2DLeft'],['gazeOriCamRight','gazePosCamRight','gazePosPlane2DRight']]
+    for gVec,gOri,attr in zip(gazeVecs,gazeOrigins,attrs):
+        if gVec is None or gOri is None:
+            continue
+        # get gaze vector and point on vector (origin, e.g. pupil center) ->
+        # transform from ET data coordinate frame into camera coordinate frame
+        gVec    = np.matmul(RCam ,          gVec    )
+        gOri    = np.matmul(RtCam,np.append(gOri,1.))
+        setattr(gazeWorld,attr[0],gOri)
+
+        # intersect with poster -> yield point on poster in camera reference frame
+        gPoster = pose.vectorIntersect(gVec, gOri)
+        setattr(gazeWorld,attr[1],gPoster)
+
+        # transform intersection with poster from camera space to poster space
+        (x,y,z)  = pose.camToWorld(gPoster)  # z should be very close to zero
+        setattr(gazeWorld,attr[2],np.asarray([x, y]))
+
+    return gazeWorld
