@@ -116,9 +116,8 @@ def angle_between(v1, v2):
 
 
 def gazeToPlane(gaze: gaze_headref.Gaze, pose: plane.Pose, cameraRotation,cameraPosition, cameraMatrix=None, distCoeffs=None) -> gaze_worldref.Gaze:
-    hasCameraPose = (pose.pose_R_vec is not None) and (pose.pose_T_vec is not None)
     gazeWorld     = gaze_worldref.Gaze(gaze.timestamp, gaze.frame_idx)
-    if hasCameraPose:
+    if pose.pose_N_markers>0:
         # get transform from ET data's coordinate frame to camera's coordinate frame
         if cameraRotation is None:
             cameraRotation = np.zeros((3,1))
@@ -154,7 +153,7 @@ def gazeToPlane(gaze: gaze_headref.Gaze, pose: plane.Pose, cameraRotation,camera
     # the above method of intersecting video gaze point ray with poster, and usually also very
     # close to binocular gaze point (though for at least one tracker the latter is not the case;
     # the AdHawk has an optional parallax correction using a vergence signal))
-    if pose.homography_mat is not None:
+    if pose.homography_N_markers>0:
         ux, uy = gaze.gaze_pos_vid
         if (cameraMatrix is not None) and (distCoeffs is not None):
             ux, uy = undistortPoint( ux, uy, cameraMatrix, distCoeffs)
@@ -162,11 +161,11 @@ def gazeToPlane(gaze: gaze_headref.Gaze, pose: plane.Pose, cameraRotation,camera
         gazeWorld.gazePosPlane2D_vidPos_homography = np.asarray([xW, yW])
 
         # get this point in camera space
-        if hasCameraPose:
+        if pose.pose_N_markers>0:
             gazeWorld.gazePosCam_vidPos_homography = pose.worldToCam(np.array([xW,yW,0.]))
 
     # project gaze vectors to reference poster (and draw on video)
-    if not hasCameraPose:
+    if not pose.pose_N_markers>0:
         # nothing to do anymore
         return gazeWorld
 
