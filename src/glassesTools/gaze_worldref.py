@@ -67,26 +67,9 @@ class Gaze:
 
     @staticmethod
     def writeToFile(gazes: list['Gaze'], fileName, skip_missing=False):
-        if not gazes:
-            return
-
-        records = [{k:getattr(p,k) for k in vars(p) if not k.startswith('_')} for p in gazes]
-        df = pd.DataFrame.from_records(records)
-
-        # unpack array columns
-        allCols = [data_files.getXYZLabels(c,N) if (N:=Gaze._columns_compressed[c])>1 else [c] for c in Gaze._columns_compressed]
-        for c,ac in zip(Gaze._columns_compressed,allCols):
-            if len(ac)>1:
-                df[ac] = np.vstack([data_files.allNanIfNone(v,len(ac)).flatten() for v in df[c].values])
-
-        # keep only columns to be written out and order them correctly
-        df = df[[c for cs in allCols for c in cs]]
-
-        # drop rows where are all data columns are nan
-        if skip_missing:
-            df = df.dropna(how='all',subset=[c for cs in allCols if len(cs)>1 for c in cs])
-
-        df.to_csv(str(fileName), index=False, sep='\t', na_rep='nan', float_format="%.8f")
+        data_files.write_array_to_file(gazes, fileName,
+                                       Gaze._columns_compressed,
+                                       skip_all_nan=skip_missing)
 
     def drawOnWorldVideo(self, img, cameraMatrix, distCoeff, subPixelFac=1):
         # project to camera, display

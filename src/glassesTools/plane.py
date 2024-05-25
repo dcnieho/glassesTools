@@ -67,34 +67,9 @@ class Pose:
 
     @staticmethod
     def writeToFile(poses: list['Pose'], fileName, skip_failed=False):
-        if not poses:
-            return
-
-        records = [{k:getattr(p,k) for k in vars(p) if not k.startswith('_')} for p in poses]
-        df = pd.DataFrame.from_records(records)
-
-        # unpack array columns
-        allCols = []
-        for c in Pose._columns_compressed:
-            N = Pose._columns_compressed[c]
-            if N==1:
-                allCols.append([c])
-            elif N==3:
-                allCols.append(data_files.getXYZLabels(c))
-            else:
-                allCols.append(['homography[%d,%d]' % (r,c) for r in range(3) for c in range(3)])
-        for c,ac in zip(Pose._columns_compressed,allCols):
-            if len(ac)>1:
-                df[ac] = np.vstack([data_files.allNanIfNone(v,len(ac)).flatten() for v in df[c].values])
-
-        # keep only columns to be written out and order them correctly
-        df = df[[c for cs in allCols for c in cs]]
-
-        # drop rows where are all data columns are nan
-        if skip_failed:
-            df = df.dropna(how='all', subset=[c for cs in allCols if len(cs)>1 for c in cs])
-
-        df.to_csv(str(fileName), index=False, sep='\t', na_rep='nan', float_format="%.8f")
+        data_files.write_array_to_file(poses, fileName,
+                                       Pose._columns_compressed,
+                                       skip_all_nan=skip_failed)
 
     def camToWorld(self, point):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
