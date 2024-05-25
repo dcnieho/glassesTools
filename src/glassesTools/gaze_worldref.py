@@ -10,7 +10,6 @@ class Gaze:
     _columns_compressed = {'timestamp': 1, 'frame_idx':1,
                            'gazePosCam_vidPos_ray':3,'gazePosCam_vidPos_homography':3,'gazePosCamWorld':3,'gazeOriCamLeft':3,'gazePosCamLeft':3,'gazeOriCamRight':3,'gazePosCamRight':3,
                            'gazePosPlane2D_vidPos_ray':2,'gazePosPlane2D_vidPos_homography':2,'gazePosPlane2DWorld':2,'gazePosPlane2DLeft':2,'gazePosPlane2DRight':2}
-    _num_columns        = 1+sum(_columns_compressed.values())
 
     def __init__(self, timestamp, frame_idx,
                  gazePosCam_vidPos_ray=None, gazePosCam_vidPos_homography=None, gazePosCamWorld=None, gazeOriCamLeft=None, gazePosCamLeft=None, gazeOriCamRight=None, gazePosCamRight=None,
