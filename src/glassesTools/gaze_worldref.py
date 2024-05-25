@@ -72,46 +72,45 @@ class Gaze:
 
     def drawOnWorldVideo(self, img, cameraMatrix, distCoeff, subPixelFac=1):
         # project to camera, display
+        def project_and_draw(img,pos,sz,clr,subPixelFac):
+            pPointCam = cv2.projectPoints(pos.reshape(1,3),np.zeros((1,3)),np.zeros((1,3)),cameraMatrix,distCoeff)[0][0][0]
+            if not math.isnan(pPointCam[0]):
+                drawing.openCVCircle(img, pPointCam, sz, clr, -1, subPixelFac)
+
         # gaze ray
         if self.gazePosCam_vidPos_ray is not None:
-            pPointCam = cv2.projectPoints(self.gazePosCam_vidPos_ray.reshape(1,3),np.zeros((1,3)),np.zeros((1,3)),cameraMatrix,distCoeff)[0][0][0]
-            drawing.openCVCircle(img, pPointCam, 3, (255,255,0), -1, subPixelFac)
+            project_and_draw(img, self.gazePosCam_vidPos_ray, 3, (255,255,0), subPixelFac)
         # binocular gaze point
         if self.gazePosCamWorld is not None:
-            pPointCam = cv2.projectPoints(self.gazePosCamWorld.reshape(1,3),np.zeros((1,3)),np.zeros((1,3)),cameraMatrix,distCoeff)[0][0][0]
-            drawing.openCVCircle(img, pPointCam, 3, (255,0,255), -1, subPixelFac)
+            project_and_draw(img, self.gazePosCamWorld, 3, (255,0,255), subPixelFac)
         # left eye
         if self.gazePosCamLeft is not None:
-            pPointCam = cv2.projectPoints(self.gazePosCamLeft.reshape(1,3),np.zeros((1,3)),np.zeros((1,3)),cameraMatrix,distCoeff)[0][0][0]
-            drawing.openCVCircle(img, pPointCam, 3, (0,0,255), -1, subPixelFac)
+            project_and_draw(img, self.gazePosCamLeft, 3, (0,0,255), subPixelFac)
         # right eye
         if self.gazePosCamRight is not None:
-            pPointCam = cv2.projectPoints(self.gazePosCamRight.reshape(1,3),np.zeros((1,3)),np.zeros((1,3)),cameraMatrix,distCoeff)[0][0][0]
-            drawing.openCVCircle(img, pPointCam, 3, (255,0,0), -1, subPixelFac)
+            project_and_draw(img, self.gazePosCamRight, 3, (255,0,0), subPixelFac)
         # average
         if (self.gazePosCamLeft is not None) and (self.gazePosCamRight is not None):
-            pointCam  = np.array([(x+y)/2 for x,y in zip(self.gazePosCamLeft,self.gazePosCamRight)]).reshape(1,3)
-            pPointCam = cv2.projectPoints(pointCam,np.zeros((1,3)),np.zeros((1,3)),cameraMatrix,distCoeff)[0][0][0]
-            if not math.isnan(pPointCam[0]):
-                drawing.openCVCircle(img, pPointCam, 6, (255,0,255), -1, subPixelFac)
+            pointCam  = np.array([(x+y)/2 for x,y in zip(self.gazePosCamLeft,self.gazePosCamRight)])
+            project_and_draw(img, pointCam, 6, (255,0,255), subPixelFac)
 
     def drawOnPoster(self, img, reference, subPixelFac=1):
         # binocular gaze point
         if self.gazePosPlane2DWorld is not None:
-            reference.draw(img, self.gazePosPlane2DWorld[0],self.gazePosPlane2DWorld[1], subPixelFac, (0,255,255), 3)
+            reference.draw(img, *self.gazePosPlane2DWorld, subPixelFac, (0,255,255), 3)
         # left eye
         if self.gazePosPlane2DLeft is not None:
-            reference.draw(img, self.gazePosPlane2DLeft[0],self.gazePosPlane2DLeft[1], subPixelFac, (0,0,255), 3)
+            reference.draw(img, *self.gazePosPlane2DLeft, subPixelFac, (0,0,255), 3)
         # right eye
         if self.gazePosPlane2DRight is not None:
-            reference.draw(img, self.gazePosPlane2DRight[0],self.gazePosPlane2DRight[1], subPixelFac, (255,0,0), 3)
+            reference.draw(img, *self.gazePosPlane2DRight, subPixelFac, (255,0,0), 3)
         # average
         if (self.gazePosPlane2DLeft is not None) and (self.gazePosPlane2DRight is not None):
-            average = np.array([(x+y)/2 for x,y in zip(self.gazePosPlane2DLeft,self.gazePosPlane2DRight)])
+            average = np.array([(x1+x2)/2 for x1,x2 in zip(self.gazePosPlane2DLeft,self.gazePosPlane2DRight)])
             if not math.isnan(average[0]):
-                reference.draw(img, average[0], average[1], subPixelFac, (255,0,255))
+                reference.draw(img, *average, subPixelFac, (255,0,255))
         # video gaze position
         if self.gazePosPlane2D_vidPos_homography is not None:
-            reference.draw(img, self.gazePosPlane2D_vidPos_homography[0],self.gazePosPlane2D_vidPos_homography[1], subPixelFac, (0,255,0), 5)
+            reference.draw(img, *self.gazePosPlane2D_vidPos_homography, subPixelFac, (0,255,0), 5)
         if self.gazePosPlane2D_vidPos_ray is not None:
-            reference.draw(img, self.gazePosPlane2D_vidPos_ray[0],self.gazePosPlane2D_vidPos_ray[1], subPixelFac, (255,255,0), 3)
+            reference.draw(img, *self.gazePosPlane2D_vidPos_ray, subPixelFac, (255,255,0), 3)
