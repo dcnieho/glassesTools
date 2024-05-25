@@ -5,21 +5,6 @@ import pathlib
 import bisect
 
 
-def arucoRefineDetectedMarkers(detector, image, arucoBoard, detectedCorners, detectedIds, rejectedCorners, cameraMatrix = None, distCoeffs= None):
-    corners, ids, rejectedImgPoints, recoveredIds = detector.refineDetectedMarkers(
-                            image = image, board = arucoBoard,
-                            detectedCorners = detectedCorners, detectedIds = detectedIds, rejectedCorners = rejectedCorners,
-                            cameraMatrix = cameraMatrix, distCoeffs = distCoeffs)
-    if corners and corners[0].shape[0]==4:
-        # there are versions out there where there is a bug in output shape of each set of corners, fix up
-        corners = [np.reshape(c,(1,4,2)) for c in corners]
-    if rejectedImgPoints and rejectedImgPoints[0].shape[0]==4:
-        # same as for corners
-        rejectedImgPoints = [np.reshape(c,(1,4,2)) for c in rejectedImgPoints]
-
-    return corners, ids, rejectedImgPoints, recoveredIds
-
-
 def readCameraCalibrationFile(fileName):
     fs = cv2.FileStorage(str(fileName), cv2.FILE_STORAGE_READ)
     cameraMatrix    = fs.getNode("cameraMatrix").mat()

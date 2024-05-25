@@ -9,13 +9,12 @@ from . import data_files, transforms, utils
 
 class Pose:
     _columns_compressed = {'frame_idx':1,
-                           'pose_ok': 1, 'pose_N_markers': 1, 'pose_R_vec': 3, 'pose_T_vec': 3,
+                           'pose_N_markers': 1, 'pose_R_vec': 3, 'pose_T_vec': 3,
                            'homography_N_markers': 1, 'homography_mat': 9}
     _non_float          = {'frame_idx': int, 'pose_ok': bool, 'pose_N_markers': int, 'homography_N_markers': int}
 
     def __init__(self,
                  frame_idx:int,
-                 pose_ok=False,
                  pose_N_markers=0,
                  pose_R_vec:np.ndarray=None,
                  pose_T_vec:np.ndarray=None,
@@ -23,12 +22,11 @@ class Pose:
                  homography_mat:np.ndarray=None):
         self.frame_idx            : int         = frame_idx
         # pose
-        self.pose_ok              : bool        = pose_ok               # Output of cv2.SolvePnP(), whether successful or not
-        self.pose_N_markers       : int         = pose_N_markers        # number of ArUco markers this pose estimate is based on
+        self.pose_N_markers       : int         = pose_N_markers        # number of ArUco markers this pose estimate is based on. 0 if failed
         self.pose_R_vec           : np.ndarray  = pose_R_vec
         self.pose_T_vec           : np.ndarray  = pose_T_vec
         # homography
-        self.homography_N_markers : int         = homography_N_markers  # number of ArUco markers this homongraphy estimate is based on
+        self.homography_N_markers : int         = homography_N_markers  # number of ArUco markers this homongraphy estimate is based on. 0 if failed
         self.homography_mat       : np.ndarray  = homography_mat.reshape(3,3) if homography_mat is not None else homography_mat
 
         # internals

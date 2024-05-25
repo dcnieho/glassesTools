@@ -2,7 +2,7 @@ import numpy as np
 import math
 import cv2
 
-from . import gaze_headref, gaze_worldref, plane
+from . import gaze_headref, gaze_worldref, marker, plane
 
 def toNormPos(x,y,bbox):
     # transforms input (x,y) which is on a plane in world units
@@ -29,10 +29,10 @@ def toImagePos(x,y,bbox,imSize,margin=[0,0]):
     return pos
 
 
-def estimateHomography(known, detectedCorners, detectedIDs):
+def estimateHomographyKnownMarker(known: list[marker.Marker], detectedCorners, detectedIDs):
     # collect matching corners in image and in world
-    pts_src = []
-    pts_dst = []
+    imgP = []
+    objP = []
     detectedIDs = detectedIDs.flatten()
     if len(detectedIDs) != len(detectedCorners):
         raise ValueError('unexpected number of IDs (%d) given number of corner arrays (%d)' % (len(detectedIDs),len(detectedCorners)))
@@ -41,24 +41,27 @@ def estimateHomography(known, detectedCorners, detectedIDs):
             dc = detectedCorners[i]
             if dc.shape[0]==1 and dc.shape[1]==4:
                 dc = np.reshape(dc,(4,1,2))
-            pts_src.extend( [x.flatten() for x in dc] )
-            pts_dst.extend( known[detectedIDs[i]].corners )
+            imgP.extend( [x.flatten() for x in dc] )
+            objP.extend( known[detectedIDs[i]].corners )
 
-    if len(pts_src) < 4:
+    if len(imgP) < 4:
         return None, False
 
     # compute Homography
-    pts_src = np.float32(pts_src)
-    pts_dst = np.float32(pts_dst)
-    h, _ = cv2.findHomography(pts_src, pts_dst)
+    return estimateHomography(objP, imgP)
+
+def estimateHomography(objP, imgP):
+    imgP = np.float32(imgP)
+    objP = np.float32(objP)
+    h, _ = cv2.findHomography(imgP, objP)
     return h, True
 
-def applyHomography(h, x, y):
+def applyHomography(H, x, y):
     if math.isnan(x) or math.isnan(y):
         return np.array([np.nan, np.nan])
 
     src = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
-    dst = cv2.perspectiveTransform(src,h)
+    dst = cv2.perspectiveTransform(src,H)
     return dst.flatten()
 
 
