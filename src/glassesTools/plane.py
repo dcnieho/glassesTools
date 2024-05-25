@@ -67,6 +67,9 @@ class Pose:
 
     @staticmethod
     def writeToFile(poses: list['Pose'], fileName, skip_failed=False):
+        if not poses:
+            return
+
         records = [{k:getattr(p,k) for k in vars(p) if not k.startswith('_')} for p in poses]
         df = pd.DataFrame.from_records(records)
 

@@ -67,6 +67,9 @@ class Gaze:
 
     @staticmethod
     def writeToFile(gazes: list['Gaze'], fileName, skip_missing=False):
+        if not gazes:
+            return
+
         records = [{k:getattr(p,k) for k in vars(p) if not k.startswith('_')} for p in gazes]
         df = pd.DataFrame.from_records(records)
 
