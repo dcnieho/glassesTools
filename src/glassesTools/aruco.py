@@ -167,7 +167,7 @@ def run_pose_estimation(in_video, frame_timestamp_file, calibration_file,
     poses = []
     while True:
         # process frame-by-frame
-        done, frame, frame_idx, frame_ts = cap.read_frame()
+        done, frame, frame_idx, frame_ts = cap.read_frame(report_gap=True)
         if done or intervals.beyond_last_interval(frame_idx, processing_intervals):
             break
         cap.report_frame()

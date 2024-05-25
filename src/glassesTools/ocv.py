@@ -46,7 +46,7 @@ class CV2VideoReader:
     def set_prop(self, cv2_prop, val):
         return self.cap.set(cv2_prop, val)
 
-    def read_frame(self):
+    def read_frame(self, report_gap=False):
         ts0 = self.cap.get(cv2.CAP_PROP_POS_MSEC)
         ret, frame = self.cap.read()
         ts1 = self.cap.get(cv2.CAP_PROP_POS_MSEC)
@@ -75,6 +75,8 @@ class CV2VideoReader:
                     idx -= 1
                 self.frame_idx = idx
                 ts_from_list = self.ts[self.frame_idx]
+                if report_gap and self.frame_idx-self._last_good_ts[0]>1:
+                    print(f'Frame discontinuity detected (jumped from {self._last_good_ts[0]} to {self.frame_idx}), there are probably corrupt frames in your video')
             self._last_good_ts = (self.frame_idx, ts1, ts_from_list)
 
         # we might not have a valid frame, but we're not done yet
@@ -82,3 +84,7 @@ class CV2VideoReader:
             return False, None,  self.frame_idx, ts_from_list
         else:
             return False, frame, self.frame_idx, ts_from_list
+
+    def report_frame(self, interval=100):
+        if self.frame_idx%interval==0:
+            print('  frame {}'.format(self.frame_idx))
