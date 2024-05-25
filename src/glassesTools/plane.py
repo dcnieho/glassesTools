@@ -4,7 +4,7 @@ import cv2
 import math
 from collections import defaultdict
 
-from . import data_files, transforms, utils
+from . import data_files
 
 
 class Pose:
@@ -118,6 +118,8 @@ class Pose:
         return np.matmul(self._RtMat,np.append(np.array(point),1.).reshape((4,1))).flatten()
 
     def vectorIntersect(self, vector, origin = np.array([0.,0.,0.])):
+        from . import transforms
+
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(vector)):
             return np.array([np.nan, np.nan, np.nan])
 
