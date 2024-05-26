@@ -1,6 +1,5 @@
 import numpy as np
 import pandas as pd
-import itertools
 import pathlib
 from typing import Optional, Any
 from collections import defaultdict
@@ -27,30 +26,36 @@ def allNanIfNone(vals,numel):
         return vals
 
 
-def readfile(fileName: str|pathlib.Path,
-             array_cols: list[str],
-             col_order : list[str],
-             none_if_any_nan: bool,
-             object: Any,
+def read_file(fileName: str|pathlib.Path,
+              object: Any,
+              drop_if_all_nan: bool,
+              none_if_any_nan: bool,
+              as_list_dict: bool,
+              start:Optional[int]=None,
+              end:Optional[int]=None,
+              subset_var='frame_idx'):
 
-             start:Optional[int]=None,
-             end:Optional[int]=None,
-             subset_var='frame_idx'):
+    # interrogate destination object
+    cols_compressed: dict[str, int] = object._columns_compressed
+    dtypes         : dict[str, Any] = object._non_float
 
-    df          = pd.read_csv(str(fileName), delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, frame_idx=int, poseOk=bool, poseNMarker=int, homographyNMarker=int))
+    # read file and select, if wanted
+    df          = pd.read_csv(str(fileName), delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **defaultdict(lambda: float, **dtypes)))
     if start is not None and end is not None:
         df = df[(df[subset_var] >= start) & (df[subset_var] <= end)]
 
     # figure out what the data columns are
-    array_cols = ('poseRvec','poseTvec','homography[')
-    all_cols   = tuple([c for c in df.columns if col in c] for col in array_cols)
+    cols_uncompressed = [getColumnLabels(c,N) if (N:=cols_compressed[c])>1 else [c] for c in cols_compressed]
 
-    # drop rows that are all data columns are nan
-    df = df.dropna(how='all',subset=[c for cs in all_cols for c in cs])
+    # drop rows where are all data columns are nan
+    if drop_if_all_nan:
+        df = df.dropna(how='all',subset=[c for cs in cols_uncompressed if len(cs)>1 for c in cs])
 
-    # group columns into numpy arrays, insert None if missing
-    for c,ac in zip(array_cols,all_cols):
-        if ac:
+    # group columns into numpy arrays, optionally insert None if missing
+    for c,ac in zip(cols_compressed,cols_uncompressed):
+        if len(ac)==1:
+            continue    # nothing to do, would just copy column to itself
+        elif ac:
             if none_if_any_nan:
                 df[c] = [noneIfAnyNan(x) for x in df[ac].values]  # make list of numpy arrays, or None if there are any NaNs in the array
             else:
@@ -58,24 +63,22 @@ def readfile(fileName: str|pathlib.Path,
         else:
             df[c] = None
 
-    # clean up so we can assign into gaze objects directly
-    lookup = {'frame_idx'           :'frameIdx',
-                'poseOk'              :'poseOk',
-                'poseNMarker'         :'nMarkers',
-                'poseRvec'            :'rVec',
-                'poseTvec'            :'tVec',
-                'homographyNMarker'   :'nMarkersH',
-                'homography['         :'hMat'}
-    # keep only the columns we want and ensure that they are in the right order (doesn't matter since we use kwargs, still doesn't hurt either)
-    df = df[lookup.keys()]
-    # ensure they have names matching the input parameters of the Pose constructor
-    df = df.rename(columns=lookup)
+    # keep only the columns we want (this also puts them in the right order even if that doesn't matter since we use kwargs to construct objects)
+    df = df[cols_compressed.keys()]
 
-    poses = {idx:Pose(**kwargs) for idx,kwargs in zip(df['frameIdx'].values,df.to_dict(orient='records'))}
-    return poses
+    if as_list_dict:
+        obj_list = [object(**kwargs) for kwargs in df.to_dict(orient='records')]
 
-def write_array_to_file(objects: list[Any], fileName,
-                        cols_compressed, skip_all_nan=False):
+        # organize into dict by frame index
+        objs = {}
+        for k,v in zip(df[subset_var],obj_list):
+            objs.setdefault(k, []).append(v)
+    else:
+        objs = {idx:object(**kwargs) for idx,kwargs in zip(df[subset_var].values,df.to_dict(orient='records'))}
+    return objs, df[subset_var].max()
+
+def write_array_to_file(objects: list[Any], fileName: str|pathlib.Path,
+                        cols_compressed: dict[str, int], skip_all_nan=False):
     if not objects:
         return
 

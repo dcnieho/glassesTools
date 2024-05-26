@@ -1,15 +1,15 @@
 import numpy as np
-import pandas as pd
 import math
 import cv2
-from collections import defaultdict
+import pathlib
 
-from . import data_files, drawing, utils
+from . import data_files, drawing
 
 class Gaze:
     _columns_compressed = {'timestamp': 1, 'frame_idx':1,
                            'gazePosCam_vidPos_ray':3,'gazePosCam_vidPos_homography':3,'gazePosCamWorld':3,'gazeOriCamLeft':3,'gazePosCamLeft':3,'gazeOriCamRight':3,'gazePosCamRight':3,
                            'gazePosPlane2D_vidPos_ray':2,'gazePosPlane2D_vidPos_homography':2,'gazePosPlane2DWorld':2,'gazePosPlane2DLeft':2,'gazePosPlane2DRight':2}
+    _non_float          = {'frame_idx': int}
 
     def __init__(self, timestamp, frame_idx,
                  gazePosCam_vidPos_ray=None, gazePosCam_vidPos_homography=None, gazePosCamWorld=None, gazeOriCamLeft=None, gazePosCamLeft=None, gazeOriCamRight=None, gazePosCamRight=None,
@@ -36,33 +36,10 @@ class Gaze:
         self.gazePosPlane2DRight                = gazePosPlane2DRight              # rGaze3D in poster space
 
     @staticmethod
-    def readFromFile(fileName,start=None,end=None):
-        readSubset  = start is not None and end is not None
-        df          = pd.read_csv(str(fileName), delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, frame_idx=int))
-        if readSubset:
-            df = df[(df['frame_idx'] >= start) & (df['frame_idx'] <= end)]
-
-        # group columns into numpy arrays, insert None if missing
-        cols = [col for col in Gaze._columns_compressed if Gaze._columns_compressed[col]>1]
-        allCols = tuple([c for c in df.columns if col in c] for col in cols)
-        for c,ac in zip(cols,allCols):
-            if ac:
-                df[c] = [x for x in df[ac].values]  # make list of numpy arrays
-            else:
-                df[c] = None
-
-        # keep only the columns we want (this also puts them in the right order even if that doesn't matter since we use kwargs to construct objects)
-        df = df[Gaze._columns_compressed.keys()]
-
-        # make the gaze objects
-        gaze = [Gaze(**kwargs) for kwargs in df.to_dict(orient='records')]
-
-        # organize into dict by frame index
-        gazes = {}
-        for k,v in zip(df['frame_idx'],gaze):
-            gazes.setdefault(k, []).append(v)
-
-        return gazes
+    def readFromFile(fileName:str|pathlib.Path, start:int=None, end:int=None) -> dict[int,list['Gaze']]:
+        return data_files.read_file(fileName,
+                                    Gaze, False, False, True,
+                                    start=start,end=end)[0]
 
     @staticmethod
     def writeToFile(gazes: list['Gaze'], fileName, skip_missing=False):

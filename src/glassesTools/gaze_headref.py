@@ -1,9 +1,8 @@
 import numpy as np
-import pandas as pd
 import cv2
-from collections import defaultdict
+import pathlib
 
-from . import drawing
+from . import data_files, drawing
 
 
 class Gaze:
@@ -31,30 +30,9 @@ class Gaze:
         self.gaze_ori_r  : np.ndarray   = gaze_ori_r
 
     @staticmethod
-    def readFromFile(fileName) -> dict[int,list['Gaze']]:
-        df = pd.read_csv(str(fileName), delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **Gaze._non_float))
-
-        # group columns into numpy arrays, insert None if missing
-        cols = [col for col in Gaze._columns_compressed if Gaze._columns_compressed[col]>1]
-        allCols = tuple([c for c in df.columns if col in c] for col in cols)
-        for c,ac in zip(cols,allCols):
-            if ac:
-                df[c] = [x for x in df[ac].values]  # make list of numpy arrays
-            else:
-                df[c] = None
-
-        # keep only the columns we want (this also puts them in the right order even if that doesn't matter since we use kwargs to construct objects)
-        df = df[Gaze._columns_compressed.keys()]
-
-        # make the gaze objects
-        gaze = [Gaze(**kwargs) for kwargs in df.to_dict(orient='records')]
-
-        # organize into dict by frame index
-        gazes = {}
-        for k,v in zip(df['frame_idx'].values,gaze):
-            gazes.setdefault(k, []).append(v)
-
-        return gazes, df['frame_idx'].max()
+    def readFromFile(fileName:str|pathlib.Path) -> tuple[dict[int,list['Gaze']], int]:
+        return data_files.read_file(fileName,
+                                    Gaze, False, False, True)
 
     def draw(self, img, subPixelFac=1, camRot=None, camPos=None, cameraMatrix=None, distCoeff=None):
         drawing.openCVCircle(img, self.gaze_pos_vid, 8, (0,255,0), 2, subPixelFac)
