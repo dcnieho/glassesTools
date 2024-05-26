@@ -57,7 +57,7 @@ class Gaze:
                                     start=start,end=end)[0]
 
     @staticmethod
-    def writeToFile(gazes: list['Gaze'], fileName:str|pathlib.Path, skip_missing=False):
+    def writeToFile(gazes: list['Gaze'] | dict[int,list['Gaze']], fileName:str|pathlib.Path, skip_missing=False):
         data_files.write_array_to_file(gazes, fileName,
                                        Gaze._columns_compressed,
                                        skip_all_nan=skip_missing)

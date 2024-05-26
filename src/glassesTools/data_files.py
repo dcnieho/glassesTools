@@ -77,12 +77,16 @@ def read_file(fileName          : str|pathlib.Path,
         objs = {idx:object(**kwargs) for idx,kwargs in zip(df[subset_var].values,df.to_dict(orient='records'))}
     return objs, df[subset_var].max()
 
-def write_array_to_file(objects         : list[Any],
+def write_array_to_file(objects         : list[Any] | dict[int,list[Any]],
                         fileName        : str|pathlib.Path,
                         cols_compressed : dict[str, int],
                         skip_all_nan    : bool              = False):
     if not objects:
         return
+
+    if isinstance(objects, dict):
+        # flatten
+        objects = [o for olist in objects.values() for o in olist]
 
     records = [{k:getattr(p,k) for k in vars(p) if not k.startswith('_')} for p in objects]
     df = pd.DataFrame.from_records(records)
