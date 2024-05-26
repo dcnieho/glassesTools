@@ -64,27 +64,27 @@ class Gaze:
 
     def drawOnWorldVideo(self, img, cameraParams: ocv.CameraParams, subPixelFac=1):
         # project to camera, display
-        def project_and_draw(img,pos,sz,clr,subPixelFac):
+        def project_and_draw(img,pos,sz,clr):
             pPointCam = cv2.projectPoints(pos.reshape(1,3),np.zeros((1,3)),np.zeros((1,3)),cameraParams.camera_mtx, cameraParams.distort_coeffs)[0][0][0]
             if not math.isnan(pPointCam[0]):
                 drawing.openCVCircle(img, pPointCam, sz, clr, -1, subPixelFac)
 
         # gaze ray
         if self.gazePosCam_vidPos_ray is not None:
-            project_and_draw(img, self.gazePosCam_vidPos_ray, 3, (255,255,0), subPixelFac)
+            project_and_draw(img, self.gazePosCam_vidPos_ray, 3, (255,255,0))
         # binocular gaze point
         if self.gazePosCamWorld is not None:
-            project_and_draw(img, self.gazePosCamWorld, 3, (255,0,255), subPixelFac)
+            project_and_draw(img, self.gazePosCamWorld, 3, (255,0,255))
         # left eye
         if self.gazePosCamLeft is not None:
-            project_and_draw(img, self.gazePosCamLeft, 3, (0,0,255), subPixelFac)
+            project_and_draw(img, self.gazePosCamLeft, 3, (0,0,255))
         # right eye
         if self.gazePosCamRight is not None:
-            project_and_draw(img, self.gazePosCamRight, 3, (255,0,0), subPixelFac)
+            project_and_draw(img, self.gazePosCamRight, 3, (255,0,0))
         # average
         if (self.gazePosCamLeft is not None) and (self.gazePosCamRight is not None):
             pointCam  = np.array([(x+y)/2 for x,y in zip(self.gazePosCamLeft,self.gazePosCamRight)])
-            project_and_draw(img, pointCam, 6, (255,0,255), subPixelFac)
+            project_and_draw(img, pointCam, 6, (255,0,255))
 
     def drawOnPlane(self, img, reference, subPixelFac=1):
         # binocular gaze point
