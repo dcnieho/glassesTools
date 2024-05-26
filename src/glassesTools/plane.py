@@ -6,18 +6,19 @@ from . import data_files
 
 
 class Pose:
+    # description of tsv file used for storage
     _columns_compressed = {'frame_idx':1,
                            'pose_N_markers': 1, 'pose_R_vec': 3, 'pose_T_vec': 3,
                            'homography_N_markers': 1, 'homography_mat': 9}
     _non_float          = {'frame_idx': int, 'pose_ok': bool, 'pose_N_markers': int, 'homography_N_markers': int}
 
     def __init__(self,
-                 frame_idx:int,
-                 pose_N_markers=0,
-                 pose_R_vec:np.ndarray=None,
-                 pose_T_vec:np.ndarray=None,
-                 homography_N_markers=0,
-                 homography_mat:np.ndarray=None):
+                 frame_idx              : int,
+                 pose_N_markers         : int       = 0,
+                 pose_R_vec             : np.ndarray= None,
+                 pose_T_vec             : np.ndarray= None,
+                 homography_N_markers   : int       = 0,
+                 homography_mat         : np.ndarray= None):
         self.frame_idx            : int         = frame_idx
         # pose
         self.pose_N_markers       : int         = pose_N_markers        # number of ArUco markers this pose estimate is based on. 0 if failed
@@ -42,12 +43,12 @@ class Pose:
                                     start=start, end=end)[0]
 
     @staticmethod
-    def writeToFile(poses: list['Pose'], fileName, skip_failed=False):
+    def writeToFile(poses: list['Pose'], fileName:str|pathlib.Path, skip_failed=False):
         data_files.write_array_to_file(poses, fileName,
                                        Pose._columns_compressed,
                                        skip_all_nan=skip_failed)
 
-    def camToWorld(self, point):
+    def camToWorld(self, point: np.ndarray):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
             return np.array([np.nan, np.nan, np.nan])
 
@@ -60,7 +61,7 @@ class Pose:
 
         return np.matmul(self._RtMatInv,np.append(np.array(point),1.).reshape((4,1))).flatten()
 
-    def worldToCam(self, point):
+    def worldToCam(self, point: np.ndarray):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
             return np.array([np.nan, np.nan, np.nan])
 

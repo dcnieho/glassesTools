@@ -6,14 +6,29 @@ import pathlib
 from . import data_files, drawing
 
 class Gaze:
+    # description of tsv file used for storage
     _columns_compressed = {'timestamp': 1, 'frame_idx':1,
                            'gazePosCam_vidPos_ray':3,'gazePosCam_vidPos_homography':3,'gazePosCamWorld':3,'gazeOriCamLeft':3,'gazePosCamLeft':3,'gazeOriCamRight':3,'gazePosCamRight':3,
                            'gazePosPlane2D_vidPos_ray':2,'gazePosPlane2D_vidPos_homography':2,'gazePosPlane2DWorld':2,'gazePosPlane2DLeft':2,'gazePosPlane2DRight':2}
     _non_float          = {'frame_idx': int}
 
-    def __init__(self, timestamp, frame_idx,
-                 gazePosCam_vidPos_ray=None, gazePosCam_vidPos_homography=None, gazePosCamWorld=None, gazeOriCamLeft=None, gazePosCamLeft=None, gazeOriCamRight=None, gazePosCamRight=None,
-                 gazePosPlane2D_vidPos_ray=None, gazePosPlane2D_vidPos_homography=None, gazePosPlane2DWorld=None, gazePosPlane2DLeft=None, gazePosPlane2DRight=None):
+    def __init__(self,
+                 timestamp                          : float,
+                 frame_idx                          : int,
+
+                 gazePosCam_vidPos_ray              : np.ndarray = None,
+                 gazePosCam_vidPos_homography       : np.ndarray = None,
+                 gazePosCamWorld                    : np.ndarray = None,
+                 gazeOriCamLeft                     : np.ndarray = None,
+                 gazePosCamLeft                     : np.ndarray = None,
+                 gazeOriCamRight                    : np.ndarray = None,
+                 gazePosCamRight                    : np.ndarray = None,
+
+                 gazePosPlane2D_vidPos_ray          : np.ndarray = None,
+                 gazePosPlane2D_vidPos_homography   : np.ndarray = None,
+                 gazePosPlane2DWorld                : np.ndarray = None,
+                 gazePosPlane2DLeft                 : np.ndarray = None,
+                 gazePosPlane2DRight                : np.ndarray = None):
         # 3D gaze is in world space, w.r.t. scene camera
         # 2D gaze is on the poster
         self.timestamp                          = timestamp
@@ -29,11 +44,11 @@ class Gaze:
         self.gazePosCamRight                    = gazePosCamRight                   # 3D gaze point on plane (right eye gaze vector intersected with plane)
 
         # in poster space (2D coordinates)
-        self.gazePosPlane2D_vidPos_ray          = gazePosPlane2D_vidPos_ray        # Video gaze point mapped to poster by turning into direction ray and intersecting with poster
-        self.gazePosPlane2D_vidPos_homography   = gazePosPlane2D_vidPos_homography # Video gaze point directly mapped to poster through homography transformation
-        self.gazePosPlane2DWorld                = gazePosPlane2DWorld              # wGaze3D in poster space
-        self.gazePosPlane2DLeft                 = gazePosPlane2DLeft               # lGaze3D in poster space
-        self.gazePosPlane2DRight                = gazePosPlane2DRight              # rGaze3D in poster space
+        self.gazePosPlane2D_vidPos_ray          = gazePosPlane2D_vidPos_ray         # Video gaze point mapped to poster by turning into direction ray and intersecting with poster
+        self.gazePosPlane2D_vidPos_homography   = gazePosPlane2D_vidPos_homography  # Video gaze point directly mapped to poster through homography transformation
+        self.gazePosPlane2DWorld                = gazePosPlane2DWorld               # wGaze3D in poster space
+        self.gazePosPlane2DLeft                 = gazePosPlane2DLeft                # lGaze3D in poster space
+        self.gazePosPlane2DRight                = gazePosPlane2DRight               # rGaze3D in poster space
 
     @staticmethod
     def readFromFile(fileName:str|pathlib.Path, start:int=None, end:int=None) -> dict[int,list['Gaze']]:
@@ -42,12 +57,12 @@ class Gaze:
                                     start=start,end=end)[0]
 
     @staticmethod
-    def writeToFile(gazes: list['Gaze'], fileName, skip_missing=False):
+    def writeToFile(gazes: list['Gaze'], fileName:str|pathlib.Path, skip_missing=False):
         data_files.write_array_to_file(gazes, fileName,
                                        Gaze._columns_compressed,
                                        skip_all_nan=skip_missing)
 
-    def drawOnWorldVideo(self, img, cameraMatrix, distCoeff, subPixelFac=1):
+    def drawOnWorldVideo(self, img, cameraMatrix: np.ndarray, distCoeff: np.ndarray, subPixelFac=1):
         # project to camera, display
         def project_and_draw(img,pos,sz,clr,subPixelFac):
             pPointCam = cv2.projectPoints(pos.reshape(1,3),np.zeros((1,3)),np.zeros((1,3)),cameraMatrix,distCoeff)[0][0][0]
@@ -71,7 +86,7 @@ class Gaze:
             pointCam  = np.array([(x+y)/2 for x,y in zip(self.gazePosCamLeft,self.gazePosCamRight)])
             project_and_draw(img, pointCam, 6, (255,0,255), subPixelFac)
 
-    def drawOnPoster(self, img, reference, subPixelFac=1):
+    def drawOnPlane(self, img, reference, subPixelFac=1):
         # binocular gaze point
         if self.gazePosPlane2DWorld is not None:
             reference.draw(img, *self.gazePosPlane2DWorld, subPixelFac, (0,255,255), 3)

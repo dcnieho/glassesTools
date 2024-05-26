@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import pathlib
-from typing import Optional, Any
+from typing import Any, Optional
 from collections import defaultdict
 
 
@@ -19,21 +19,21 @@ def noneIfAnyNan(vals):
     else:
         return None
 
-def allNanIfNone(vals,numel):
+def allNanIfNone(vals, numel):
     if vals is None:
         return np.array([np.nan for _ in range(numel)])
     else:
         return vals
 
 
-def read_file(fileName: str|pathlib.Path,
-              object: Any,
-              drop_if_all_nan: bool,
-              none_if_any_nan: bool,
-              as_list_dict: bool,
-              start:Optional[int]=None,
-              end:Optional[int]=None,
-              subset_var='frame_idx'):
+def read_file(fileName          : str|pathlib.Path,
+              object            : Any,
+              drop_if_all_nan   : bool,
+              none_if_any_nan   : bool,
+              as_list_dict      : bool,
+              start             : Optional[int]     = None,
+              end               : Optional[int]     = None,
+              subset_var                            = 'frame_idx'):
 
     # interrogate destination object
     cols_compressed: dict[str, int] = object._columns_compressed
@@ -77,8 +77,10 @@ def read_file(fileName: str|pathlib.Path,
         objs = {idx:object(**kwargs) for idx,kwargs in zip(df[subset_var].values,df.to_dict(orient='records'))}
     return objs, df[subset_var].max()
 
-def write_array_to_file(objects: list[Any], fileName: str|pathlib.Path,
-                        cols_compressed: dict[str, int], skip_all_nan=False):
+def write_array_to_file(objects         : list[Any],
+                        fileName        : str|pathlib.Path,
+                        cols_compressed : dict[str, int],
+                        skip_all_nan    : bool              = False):
     if not objects:
         return
 

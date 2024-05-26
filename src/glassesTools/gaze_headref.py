@@ -6,19 +6,20 @@ from . import data_files, drawing
 
 
 class Gaze:
+    # description of tsv file used for storage
     _columns_compressed = {'timestamp': 1, 'frame_idx':1,
                            'gaze_pos_vid': 2, 'gaze_pos_3d': 3, 'gaze_dir_l': 3, 'gaze_ori_l': 3, 'gaze_dir_r': 3, 'gaze_ori_r': 3}
     _non_float          = {'frame_idx': int}
 
     def __init__(self,
-                 timestamp:float,
-                 frame_idx:int,
-                 gaze_pos_vid:np.ndarray,
-                 gaze_pos_3d:np.ndarray=None,
-                 gaze_dir_l:np.ndarray=None,
-                 gaze_ori_l:np.ndarray=None,
-                 gaze_dir_r:np.ndarray=None,
-                 gaze_ori_r:np.ndarray=None):
+                 timestamp      : float,
+                 frame_idx      : int,
+                 gaze_pos_vid   : np.ndarray,
+                 gaze_pos_3d    : np.ndarray = None,
+                 gaze_dir_l     : np.ndarray = None,
+                 gaze_ori_l     : np.ndarray = None,
+                 gaze_dir_r     : np.ndarray = None,
+                 gaze_ori_r     : np.ndarray = None):
         self.timestamp   : float        = timestamp
         self.frame_idx   : int          = frame_idx
 
@@ -34,7 +35,7 @@ class Gaze:
         return data_files.read_file(fileName,
                                     Gaze, False, False, True)
 
-    def draw(self, img, subPixelFac=1, camRot=None, camPos=None, cameraMatrix=None, distCoeff=None):
+    def draw(self, img, subPixelFac=1, camRot: np.ndarray=None, camPos: np.ndarray=None, cameraMatrix: np.ndarray=None, distCoeff: np.ndarray=None):
         drawing.openCVCircle(img, self.gaze_pos_vid, 8, (0,255,0), 2, subPixelFac)
         # draw 3D gaze point as well, usually coincides with 2D gaze point, but not always. E.g. the Adhawk MindLink may
         # apply a correction for parallax error to the projected gaze point using the vergence signal.
