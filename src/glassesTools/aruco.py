@@ -62,7 +62,7 @@ class ArUcoDetector():
     def _match_image_points(self, corners, ids):
         return self._board.matchImagePoints(corners, ids) # -> objP, imgP
 
-    def estimate_pose(self, corners, ids) -> tuple[int, bool, np.ndarray, np.ndarray]:
+    def estimate_pose(self, corners, ids) -> tuple[int, np.ndarray, np.ndarray]:
         objP, imgP = self._match_image_points(corners, ids)
         return self._estimate_pose_impl(objP, imgP)
 
@@ -78,7 +78,6 @@ class ArUcoDetector():
 
     def estimate_homography(self, corners, ids) -> tuple[np.ndarray, bool]:
         objP, imgP = self._match_image_points(corners, ids)
-        # use undistorted marker corners if possible
         return self._estimate_homography_impl(objP, imgP)
 
     def _estimate_homography_impl(self, objP, imgP):
@@ -86,6 +85,7 @@ class ArUcoDetector():
         if objP is None:
             return N_markers, H
 
+        # use undistorted marker corners if possible
         if self._has_camera_mtx and self._has_dist_coeffs:
             imgP = np.vstack([cv2.undistortPoints(x, self._camera_mtx, self._distort_coeffs, P=self._camera_mtx) for x in imgP])
 
@@ -95,7 +95,7 @@ class ArUcoDetector():
         return N_markers, H
 
     # higher level functions for detecting + pose estimation, and for results visualization
-    def detect_and_estimate(self, frame, frame_idx, min_num_markers):
+    def detect_and_estimate(self, frame, frame_idx, min_num_markers) -> tuple[plane.Pose, dict[str,Any]]:
         pose = plane.Pose(frame_idx)
         corners, ids, rejectedImgPoints, recoveredIds = self.detect_markers(frame, min_nmarker_refine=min_num_markers)
 
@@ -152,7 +152,7 @@ def run_pose_estimation(in_video, frame_timestamp_file, calibration_file,
     show_visualization = gui is not None
 
     # open video
-    cap     = ocv.CV2VideoReader(in_video, timestamps.from_file(frame_timestamp_file))
+    cap = ocv.CV2VideoReader(in_video, timestamps.from_file(frame_timestamp_file))
 
     # get camera calibration info
     cameraMatrix,distCoeff = ocv.readCameraCalibrationFile(calibration_file)[0:2]
