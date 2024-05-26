@@ -62,10 +62,10 @@ class Gaze:
                                        Gaze._columns_compressed,
                                        skip_all_nan=skip_missing)
 
-    def drawOnWorldVideo(self, img, cameraMatrix: np.ndarray, distCoeff: np.ndarray, subPixelFac=1):
+    def drawOnWorldVideo(self, img, cameraParams: ocv.CameraParams, subPixelFac=1):
         # project to camera, display
         def project_and_draw(img,pos,sz,clr,subPixelFac):
-            pPointCam = cv2.projectPoints(pos.reshape(1,3),np.zeros((1,3)),np.zeros((1,3)),cameraMatrix,distCoeff)[0][0][0]
+            pPointCam = cv2.projectPoints(pos.reshape(1,3),np.zeros((1,3)),np.zeros((1,3)),cameraParams.camera_mtx, cameraParams.distort_coeffs)[0][0][0]
             if not math.isnan(pPointCam[0]):
                 drawing.openCVCircle(img, pPointCam, sz, clr, -1, subPixelFac)
 

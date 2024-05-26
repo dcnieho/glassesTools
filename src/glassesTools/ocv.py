@@ -5,18 +5,38 @@ import pathlib
 import bisect
 
 
-def readCameraCalibrationFile(fileName):
-    fs = cv2.FileStorage(str(fileName), cv2.FILE_STORAGE_READ)
-    cameraMatrix    = fs.getNode("cameraMatrix").mat()
-    distCoeff       = fs.getNode("distCoeff").mat()
-    # camera extrinsics for 3D gaze
-    cameraRotation  = fs.getNode("rotation").mat()
-    if cameraRotation is not None:
-        cameraRotation  = cv2.Rodrigues(cameraRotation)[0]  # need rotation vector, not rotation matrix
-    cameraPosition  = fs.getNode("position").mat()
-    fs.release()
+class CameraParams:
+    def __init__(self,
+                 # camera info
+                 resolution: np.ndarray,
+                 # intrinsics
+                 camera_mtx: np.ndarray, distort_coeffs: np.ndarray = None,
+                 # extrinsics
+                 rotation_vec: np.ndarray = None, position: np.ndarray = None):
 
-    return (cameraMatrix,distCoeff,cameraRotation,cameraPosition)
+        self.resolution     : np.ndarray = resolution
+        self.camera_mtx     : np.ndarray = camera_mtx
+        self.distort_coeffs : np.ndarray = distort_coeffs
+        self.rotation_vec   : np.ndarray = rotation_vec
+        self.position       : np.ndarray = position
+
+    @staticmethod
+    def readFromFile(fileName: str|pathlib.Path) -> 'CameraParams':
+        fs = cv2.FileStorage(str(fileName), cv2.FILE_STORAGE_READ)
+        resolution      = fs.getNode("resolution").mat()
+        cameraMatrix    = fs.getNode("cameraMatrix").mat()
+        distCoeff       = fs.getNode("distCoeff").mat()
+        # camera extrinsics for 3D gaze
+        cameraRotation  = fs.getNode("rotation").mat()
+        if cameraRotation is not None:
+            cameraRotation  = cv2.Rodrigues(cameraRotation)[0]  # need rotation vector, not rotation matrix
+        cameraPosition  = fs.getNode("position").mat()
+        fs.release()
+
+        return CameraParams(resolution,cameraMatrix,distCoeff,cameraRotation,cameraPosition)
+
+    def has_intrinsics(self):
+        return (self.camera_mtx is not None) and (self.distort_coeffs is not None)
 
 
 class CV2VideoReader:

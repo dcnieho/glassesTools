@@ -16,10 +16,7 @@ class ArUcoDetector():
         self._det                       = cv2.aruco.ArucoDetector(self._dict, self._det_params)
         self._board: cv2.aruco.Board    = None
 
-        self._camera_mtx                = None
-        self._distort_coeffs            = None
-        self._has_camera_mtx            = False
-        self._has_dist_coeffs           = False
+        self._camera_params             = ocv.CameraParams(None, None)
 
     def create_board(self, board_corner_points, ids):
         self._board = create_board(board_corner_points, ids, self._dict)
@@ -27,11 +24,8 @@ class ArUcoDetector():
     def set_board(self, board):
         self._board = board
 
-    def set_intrinsics(self, camera_matrix: np.ndarray, distortion_coeffs: np.ndarray):
-        self._camera_mtx     = camera_matrix
-        self._distort_coeffs = distortion_coeffs
-        self._has_camera_mtx = self._camera_mtx     is not None
-        self._has_dist_coeffs= self._distort_coeffs is not None
+    def set_intrinsics(self, camera_params: ocv.CameraParams):
+        self._camera_params = camera_params
 
     def detect_markers(self, image: cv2.UMat, min_nmarker_refine = 3):
         corners, ids, rejected_corners = self._det.detectMarkers(image)
@@ -49,7 +43,7 @@ class ArUcoDetector():
         corners, ids, rejectedImgPoints, recoveredIds = self._det.refineDetectedMarkers(
                                 image = image, board = self._board,
                                 detectedCorners = detected_corners, detectedIds = detected_ids, rejectedCorners = rejected_corners,
-                                cameraMatrix = self._camera_mtx, distCoeffs = self._distort_coeffs)
+                                cameraMatrix = self._camera_params.camera_mtx, distCoeffs = self._camera_params.distort_coeffs)
         if corners and corners[0].shape[0]==4:
             # there are versions out there where there is a bug in output shape of each set of corners, fix up
             corners = [np.reshape(c,(1,4,2)) for c in corners]
@@ -68,10 +62,10 @@ class ArUcoDetector():
 
     def _estimate_pose_impl(self, objP, imgP):
         N_markers, R_vec, T_vec = 0, None, None
-        if objP is None:
+        if objP is None or not self._camera_params.has_intrinsics():
             return N_markers, R_vec, T_vec
 
-        ok, R_vec, T_vec = cv2.solvePnP(objP, imgP, self._camera_mtx, self._distort_coeffs, np.empty(1), np.empty(1))
+        ok, R_vec, T_vec = cv2.solvePnP(objP, imgP, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, np.empty(1), np.empty(1))
         if ok:
             N_markers = int(objP.shape[0]/4)
         return N_markers, R_vec, T_vec
@@ -86,8 +80,8 @@ class ArUcoDetector():
             return N_markers, H
 
         # use undistorted marker corners if possible
-        if self._has_camera_mtx and self._has_dist_coeffs:
-            imgP = np.vstack([cv2.undistortPoints(x, self._camera_mtx, self._distort_coeffs, P=self._camera_mtx) for x in imgP])
+        if self._camera_params.has_intrinsics():
+            imgP = np.vstack([cv2.undistortPoints(x, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, P=self._camera_params.camera_mtx) for x in imgP])
 
         H, status = transforms.estimateHomography(objP, imgP)
         if status:
@@ -104,9 +98,8 @@ class ArUcoDetector():
             objP, imgP = self._match_image_points(corners, ids)
 
             # get camera pose
-            if self._has_camera_mtx and self._has_dist_coeffs:
-                pose.pose_N_markers, pose.pose_R_vec, pose.pose_T_vec = \
-                    self._estimate_pose_impl(objP, imgP)
+            pose.pose_N_markers, pose.pose_R_vec, pose.pose_T_vec = \
+                self._estimate_pose_impl(objP, imgP)
 
             # also get homography (direct image plane to plane in world transform)
             pose.homography_N_markers, pose.homography_mat = \
@@ -117,14 +110,11 @@ class ArUcoDetector():
     def visualize(self, frame, pose: plane.Pose, detect_dict, arm_length, sub_pixel_fac = 8, show_rejected_markers = False):
         if pose.pose_N_markers>0:
             # draw axis indicating poster pose (origin and orientation)
-            drawing.openCVFrameAxis(frame, self._camera_mtx, self._distort_coeffs, pose.pose_R_vec, pose.pose_T_vec, arm_length, 3, sub_pixel_fac)
+            drawing.openCVFrameAxis(frame, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, pose.pose_R_vec, pose.pose_T_vec, arm_length, 3, sub_pixel_fac)
 
         if pose.homography_N_markers>0:
             # find where plane origin is expected to be in the image
-            iH = np.linalg.inv(pose.homography_mat)
-            target = transforms.applyHomography(iH, 0., 0.)
-            if self._has_camera_mtx and self._has_dist_coeffs:
-                target = transforms.distortPoint(*target, self._camera_mtx, self._distort_coeffs)
+            target = pose.planeToCamHomography([0., 0.], self._camera_params)
             # draw target location on image
             if target[0] >= 0 and target[0] < frame.shape[1] and target[1] >= 0 and target[1] < frame.shape[0]:
                 drawing.openCVCircle(frame, target, 3, (0,0,0), -1, sub_pixel_fac)
@@ -144,7 +134,7 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     board_corner_points = np.pad(board_corner_points,((0,0),(0,0),(0,1)),'constant', constant_values=(0.,0.)) # Nx4x2 -> Nx4x3
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
 
-def run_pose_estimation(in_video, frame_timestamp_file, calibration_file,
+def run_pose_estimation(in_video, frame_timestamp_file, camera_calibration_file,
                         output_dir, out_file,
                         processing_intervals,
                         ArUco_board, aruco_params, min_num_markers,
@@ -154,13 +144,11 @@ def run_pose_estimation(in_video, frame_timestamp_file, calibration_file,
     # open video
     cap = ocv.CV2VideoReader(in_video, timestamps.from_file(frame_timestamp_file))
 
-    # get camera calibration info
-    cameraMatrix,distCoeff = ocv.readCameraCalibrationFile(calibration_file)[0:2]
-
     # setup aruco marker detection
     detector = ArUcoDetector(ArUco_board.getDictionary(), aruco_params)
     detector.set_board(ArUco_board)
-    detector.set_intrinsics(cameraMatrix, distCoeff)
+    # get camera calibration info
+    detector.set_intrinsics(ocv.CameraParams.readFromFile(camera_calibration_file))
 
 
     stop_all_processing = False

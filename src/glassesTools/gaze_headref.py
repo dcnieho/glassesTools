@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import pathlib
 
-from . import data_files, drawing
+from . import data_files, drawing, ocv
 
 
 class Gaze:
@@ -35,10 +35,12 @@ class Gaze:
         return data_files.read_file(fileName,
                                     Gaze, False, False, True)
 
-    def draw(self, img, subPixelFac=1, camRot: np.ndarray=None, camPos: np.ndarray=None, cameraMatrix: np.ndarray=None, distCoeff: np.ndarray=None):
+    def draw(self, img:np.ndarray, cameraParams:ocv.CameraParams=None, subPixelFac=1):
         drawing.openCVCircle(img, self.gaze_pos_vid, 8, (0,255,0), 2, subPixelFac)
         # draw 3D gaze point as well, usually coincides with 2D gaze point, but not always. E.g. the Adhawk MindLink may
         # apply a correction for parallax error to the projected gaze point using the vergence signal.
-        if self.gaze_pos_3d is not None and camRot is not None and camPos is not None and cameraMatrix is not None and distCoeff is not None:
-            a = cv2.projectPoints(np.array(self.gaze_pos_3d).reshape(1,3),camRot,camPos,cameraMatrix,distCoeff)[0][0][0]
+        if self.gaze_pos_3d is not None and cameraParams.has_intrinsics():
+            camRot = np.zeros((1,3)) if cameraParams.rotation_vec is None else cameraParams.rotation_vec
+            camPos = np.zeros((1,3)) if cameraParams.position     is None else cameraParams.position
+            a = cv2.projectPoints(np.array(self.gaze_pos_3d).reshape(1,3),camRot,camPos,cameraParams.camera_mtx,cameraParams.distort_coeffs)[0][0][0]
             drawing.openCVCircle(img, a, 5, (0,255,255), -1, subPixelFac)
