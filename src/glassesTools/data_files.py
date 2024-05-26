@@ -21,7 +21,7 @@ def noneIfAnyNan(vals):
 
 def allNanIfNone(vals, numel):
     if vals is None:
-        return np.array([np.nan for _ in range(numel)])
+        return np.full((numel,), np.nan)
     else:
         return vals
 

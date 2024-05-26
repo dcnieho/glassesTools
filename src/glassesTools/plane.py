@@ -51,7 +51,7 @@ class Pose:
 
     def camToWorld(self, point: np.ndarray):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
-            return np.array([np.nan, np.nan, np.nan])
+            return np.full((3,), np.nan)
 
         if self._RtMatInv is None:
             if self._RMatInv is None:
@@ -64,7 +64,7 @@ class Pose:
 
     def worldToCam(self, point: np.ndarray):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
-            return np.array([np.nan, np.nan, np.nan])
+            return np.full((3,), np.nan)
 
         if self._RtMat is None:
             if self._RMat is None:
@@ -109,7 +109,7 @@ class Pose:
         from . import transforms
 
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(vector)):
-            return np.array([np.nan, np.nan, np.nan])
+            return np.full((3,), np.nan)
 
         if self._planeNormal is None:
             if self._RtMat is None:

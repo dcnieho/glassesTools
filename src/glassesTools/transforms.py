@@ -58,7 +58,7 @@ def estimateHomography(objP, imgP):
 
 def applyHomography(H, x, y):
     if math.isnan(x) or math.isnan(y):
-        return np.array([np.nan, np.nan])
+        return np.full((2,), np.nan)
 
     src = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
     dst = cv2.perspectiveTransform(src,H)
@@ -67,7 +67,7 @@ def applyHomography(H, x, y):
 
 def distortPoint(x, y, cameraMatrix, distCoeff):
     if math.isnan(x) or math.isnan(y):
-        return np.array([np.nan, np.nan])
+        return np.full((2,), np.nan)
 
     # unproject, ignoring distortion as this is an undistored point
     points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
@@ -81,7 +81,7 @@ def distortPoint(x, y, cameraMatrix, distCoeff):
 
 def undistortPoint(x, y, cameraMatrix, distCoeff):
     if math.isnan(x) or math.isnan(y):
-        return np.array([np.nan, np.nan])
+        return np.full((2,), np.nan)
 
     points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
     points_2d = cv2.undistortPoints(points_2d, cameraMatrix, distCoeff, P=cameraMatrix) # P=cameraMatrix to reproject to camera
@@ -89,7 +89,7 @@ def undistortPoint(x, y, cameraMatrix, distCoeff):
 
 def unprojectPoint(x, y, cameraMatrix, distCoeff):
     if math.isnan(x) or math.isnan(y):
-        return np.array([np.nan, np.nan, np.nan])
+        return np.full((3,), np.nan)
 
     points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
     points_2d = cv2.undistortPoints(points_2d, cameraMatrix, distCoeff)
@@ -104,7 +104,7 @@ def intersect_plane_ray(planeNormal, planePoint, rayDirection, rayPoint, epsilon
     ndotu = planeNormal.dot(rayDirection)
     if abs(ndotu) < epsilon:
         # raise RuntimeError("no intersection or line is within plane")
-        np.array([np.nan, np.nan, np.nan])
+        return np.full((3,), np.nan)
 
     w = rayPoint - planePoint
     si = -planeNormal.dot(w) / ndotu
