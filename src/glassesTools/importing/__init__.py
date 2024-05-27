@@ -12,20 +12,20 @@ from .SMI_ETG import preprocessData as SMI_ETG
 from .tobii_G2 import preprocessData as tobii_G2
 from .tobii_G3 import preprocessData as tobii_G3
 
-def pupil_core(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None):
+def pupil_core(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None) -> Recording:
     from .pupilLabs import preprocessData
     return preprocessData(output_dir, 'Pupil Core', source_dir, rec_info)
 
-def pupil_invisible(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None):
+def pupil_invisible(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None) -> Recording:
     from .pupilLabs import preprocessData
     return preprocessData(output_dir, 'Pupil Invisible', source_dir, rec_info)
 
-def pupil_neon(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None):
+def pupil_neon(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None) -> Recording:
     from .pupilLabs import preprocessData
     return preprocessData(output_dir, 'Pupil Neon', source_dir, rec_info)
 
 
-def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker):
+def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker) -> list[Recording]:
     source_dir  = pathlib.Path(source_dir)
     device = eyetracker.string_to_enum(device)
 
@@ -94,13 +94,11 @@ def check_output_dir(output_dir: str|pathlib.Path, rec_info: Recording) -> tuple
         rec_info.working_directory = output_dir
     return output_dir, rec_info
 
-def check_rec_info(rec_info: Recording, eye_tracker: EyeTracker):
-    if rec_info is not None:
-        if rec_info.eye_tracker!=eye_tracker:
-            raise ValueError(f'Provided rec_info is for a device ({rec_info.eye_tracker.value}) that is not a {eye_tracker.value}. Cannot use.')
+def check_folders(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path, rec_info: Recording, expected_eye_tracker: EyeTracker) -> tuple[pathlib.Path, pathlib.Path, Recording]:
+    if rec_info is not None and rec_info.eye_tracker:
+        if rec_info.eye_tracker!=expected_eye_tracker:
+            raise ValueError(f'Provided rec_info is for a device ({rec_info.eye_tracker.value}) that is not a {expected_eye_tracker.value}. Cannot use.')
 
-def check_folders(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path, rec_info: Recording, eye_tracker: EyeTracker) -> tuple[pathlib.Path, pathlib.Path, Recording]:
-    check_rec_info(rec_info, eye_tracker)
     source_dir, rec_info = check_source_dir(source_dir, rec_info)
     output_dir, rec_info = check_output_dir(output_dir, rec_info)
     return output_dir, source_dir, rec_info
@@ -110,7 +108,7 @@ def check_device(device: str|EyeTracker, rec_info: Recording):
         raise RuntimeError('Either the "device" or the eye_tracker field of the "rec_info" input argument should be set.')
     if device is not None:
         device = eyetracker.string_to_enum(device)
-    if rec_info is not None:
+    if rec_info is not None and rec_info.eye_tracker:
         if device is not None:
             if rec_info.eye_tracker != device:
                 raise ValueError(f'Provided device ({device.value}) did not match device specific in rec_info ({rec_info.eye_tracker.value}). Provide matching values or do not provide the device input argument.')
