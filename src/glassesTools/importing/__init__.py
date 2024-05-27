@@ -61,6 +61,39 @@ def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker)
     return rec_info
 
 
+# single front end to the various device import functions for convenience
+def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.Path = None, device: str | EyeTracker = None, rec_info: Recording = None) -> Recording:
+    # output_dir is the working directory folder where the export of this recording will be placed
+    # should match rec_info.working_directory if both are provided (is checked below)
+    if rec_info is not None:
+        if isinstance(rec_info,list):
+            raise ValueError('You should provide a single Recording to this function''s "rec_info" input argument, not a list of Recordings.')
+    device    , rec_info = check_device    (device    , rec_info)
+    source_dir, rec_info = check_source_dir(source_dir, rec_info)
+    output_dir, rec_info = check_output_dir(output_dir, rec_info)
+
+    # do the actual import/pre-process
+    match device:
+        case EyeTracker.AdHawk_MindLink:
+            rec_info = adhawk_mindlink(output_dir, source_dir, rec_info)
+        case EyeTracker.Pupil_Core:
+            rec_info = pupil_core(output_dir, source_dir, rec_info)
+        case EyeTracker.Pupil_Invisible:
+            rec_info = pupil_invisible(output_dir, source_dir, rec_info)
+        case EyeTracker.Pupil_Neon:
+            rec_info = pupil_neon(output_dir, source_dir, rec_info)
+        case EyeTracker.SeeTrue_STONE:
+            rec_info = SeeTrue_STONE(output_dir, source_dir, rec_info)
+        case EyeTracker.SMI_ETG:
+            rec_info = SMI_ETG(output_dir, source_dir, rec_info)
+        case EyeTracker.Tobii_Glasses_2:
+            rec_info = tobii_G2(output_dir, source_dir, rec_info)
+        case EyeTracker.Tobii_Glasses_3:
+            rec_info = tobii_G3(output_dir, source_dir, rec_info)
+
+    return rec_info
+
+
 def check_source_dir(source_dir: str|pathlib.Path, rec_info: Recording) -> tuple[pathlib.Path, Recording]:
     if source_dir is not None:
         source_dir  = pathlib.Path(source_dir)
