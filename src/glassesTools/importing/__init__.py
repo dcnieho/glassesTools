@@ -14,15 +14,15 @@ from .tobii_G3 import preprocessData as tobii_G3
 
 def pupil_core(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None):
     from .pupilLabs import preprocessData
-    preprocessData(output_dir, 'Pupil Core', source_dir, rec_info)
+    return preprocessData(output_dir, 'Pupil Core', source_dir, rec_info)
 
 def pupil_invisible(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None):
     from .pupilLabs import preprocessData
-    preprocessData(output_dir, 'Pupil Invisible', source_dir, rec_info)
+    return preprocessData(output_dir, 'Pupil Invisible', source_dir, rec_info)
 
 def pupil_neon(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None):
     from .pupilLabs import preprocessData
-    preprocessData(output_dir, 'Pupil Neon', source_dir, rec_info)
+    return preprocessData(output_dir, 'Pupil Neon', source_dir, rec_info)
 
 
 def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker):
