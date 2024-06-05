@@ -138,7 +138,7 @@ def copySMIRecordings(inputDir: pathlib.Path, outputDir: pathlib.Path, recInfo: 
     if shutil.which('ffmpeg') is not None:
         # make mp4
         destFile = outputDir / 'worldCamera.mp4'
-        cmd_str = ' '.join(['ffmpeg', '-y', '-i', '"'+str(srcFile)+'"', '-vcodec', 'copy', '-acodec', 'aac', '"'+str(destFile)+'"'])
+        cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', '"'+str(srcFile)+'"', '-vcodec', 'copy', '-acodec', 'aac', '"'+str(destFile)+'"'])
         os.system(cmd_str)
     else:
         if copy_scene_video:
