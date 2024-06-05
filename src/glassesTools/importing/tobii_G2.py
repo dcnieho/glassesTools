@@ -253,53 +253,52 @@ def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> tupl
     evtsSync = list()       # eye video timestamp sync (only if eye video was recorded)
     df = pd.DataFrame()     # empty dataframe to write data to
 
-    with open(jsonFile, 'rb') as j:
+    with open(jsonFile, 'r') as file:
+        entries = json.loads('[' + file.read().replace('\n', ',')[:-1] + ']')
 
-        # loop over all lines in json file, each line represents unique json object
-        for line in j:
-            entry = json.loads(line)
+    # loop over all lines in json file, each line represents unique json object
+    for entry in entries:
+        # if non-zero status (error), ensure data found in packet is marked as missing
+        isError = False
+        if entry['s'] != 0:
+            isError = True
 
-            # if non-zero status (error), ensure data found in packet is marked as missing
-            isError = False
-            if entry['s'] != 0:
-                isError = True
+        ### a number of different dictKeys are possible, respond accordingly
+        if 'vts' in entry.keys(): # "vts" key signfies a scene video timestamp (first frame, first keyframe, and ~1/min afterwards)
+            vtsSync.append((entry['ts'], entry['vts'] if not isError else math.nan))
+            continue
 
-            ### a number of different dictKeys are possible, respond accordingly
-            if 'vts' in entry.keys(): # "vts" key signfies a scene video timestamp (first frame, first keyframe, and ~1/min afterwards)
-                vtsSync.append((entry['ts'], entry['vts'] if not isError else math.nan))
-                continue
+        ### a number of different dictKeys are possible, respond accordingly
+        if 'evts' in entry.keys(): # "evts" key signfies an eye video timestamp (first frame, first keyframe, and ~1/min afterwards)
+            evtsSync.append((entry['ts'], entry['evts'] if not isError else math.nan))
+            continue
 
-            ### a number of different dictKeys are possible, respond accordingly
-            if 'evts' in entry.keys(): # "evts" key signfies an eye video timestamp (first frame, first keyframe, and ~1/min afterwards)
-                evtsSync.append((entry['ts'], entry['evts'] if not isError else math.nan))
-                continue
+        # if this json object contains "eye" data (e.g. pupil info)
+        if 'eye' in entry.keys():
+            which_eye = entry['eye'][:1]
+            if 'pc' in entry.keys():
+                # origin of gaze vector is the pupil center
+                df.loc[entry['ts'], 'gaze_ori_'+which_eye+'_x'] = entry['pc'][0] if not isError else math.nan
+                df.loc[entry['ts'], 'gaze_ori_'+which_eye+'_y'] = entry['pc'][1] if not isError else math.nan
+                df.loc[entry['ts'], 'gaze_ori_'+which_eye+'_z'] = entry['pc'][2] if not isError else math.nan
+            elif 'pd' in entry.keys():
+                df.loc[entry['ts'], 'pup_diam_'+which_eye] = entry['pd'] if not isError else math.nan
+            elif 'gd' in entry.keys():
+                df.loc[entry['ts'], 'gaze_dir_'+which_eye+'_x'] = entry['gd'][0] if not isError else math.nan
+                df.loc[entry['ts'], 'gaze_dir_'+which_eye+'_y'] = entry['gd'][1] if not isError else math.nan
+                df.loc[entry['ts'], 'gaze_dir_'+which_eye+'_z'] = entry['gd'][2] if not isError else math.nan
 
-            # if this json object contains "eye" data (e.g. pupil info)
-            if 'eye' in entry.keys():
-                which_eye = entry['eye'][:1]
-                if 'pc' in entry.keys():
-                    # origin of gaze vector is the pupil center
-                    df.loc[entry['ts'], 'gaze_ori_'+which_eye+'_x'] = entry['pc'][0] if not isError else math.nan
-                    df.loc[entry['ts'], 'gaze_ori_'+which_eye+'_y'] = entry['pc'][1] if not isError else math.nan
-                    df.loc[entry['ts'], 'gaze_ori_'+which_eye+'_z'] = entry['pc'][2] if not isError else math.nan
-                elif 'pd' in entry.keys():
-                    df.loc[entry['ts'], 'pup_diam_'+which_eye] = entry['pd'] if not isError else math.nan
-                elif 'gd' in entry.keys():
-                    df.loc[entry['ts'], 'gaze_dir_'+which_eye+'_x'] = entry['gd'][0] if not isError else math.nan
-                    df.loc[entry['ts'], 'gaze_dir_'+which_eye+'_y'] = entry['gd'][1] if not isError else math.nan
-                    df.loc[entry['ts'], 'gaze_dir_'+which_eye+'_z'] = entry['gd'][2] if not isError else math.nan
+        # otherwise it contains gaze position data
+        else:
+            if 'gp' in entry.keys():
+                df.loc[entry['ts'], 'gaze_pos_vid_x'] = entry['gp'][0]*sceneVideoDimensions[0] if not isError else math.nan
+                df.loc[entry['ts'], 'gaze_pos_vid_y'] = entry['gp'][1]*sceneVideoDimensions[1] if not isError else math.nan
+            elif 'gp3' in entry.keys():
+                df.loc[entry['ts'], 'gaze_pos_3d_x'] = entry['gp3'][0] if not isError else math.nan
+                df.loc[entry['ts'], 'gaze_pos_3d_y'] = entry['gp3'][1] if not isError else math.nan
+                df.loc[entry['ts'], 'gaze_pos_3d_z'] = entry['gp3'][2] if not isError else math.nan
 
-            # otherwise it contains gaze position data
-            else:
-                if 'gp' in entry.keys():
-                    df.loc[entry['ts'], 'gaze_pos_vid_x'] = entry['gp'][0]*sceneVideoDimensions[0] if not isError else math.nan
-                    df.loc[entry['ts'], 'gaze_pos_vid_y'] = entry['gp'][1]*sceneVideoDimensions[1] if not isError else math.nan
-                elif 'gp3' in entry.keys():
-                    df.loc[entry['ts'], 'gaze_pos_3d_x'] = entry['gp3'][0] if not isError else math.nan
-                    df.loc[entry['ts'], 'gaze_pos_3d_y'] = entry['gp3'][1] if not isError else math.nan
-                    df.loc[entry['ts'], 'gaze_pos_3d_z'] = entry['gp3'][2] if not isError else math.nan
-
-            # ignore anything else
+        # ignore anything else
 
     # find out t0. Do the same as GlassesViewer so timestamps are compatible
     # that is t0 is at timestamp of last video start (scene or eye)
