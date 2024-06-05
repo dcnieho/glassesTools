@@ -36,10 +36,10 @@ class Recording:
             # dump to file
             json.dump(to_dump, f, cls=utils.CustomTypeEncoder)
 
-    @classmethod
-    def load_from_json(cls, path: str | pathlib.Path):
+    @staticmethod
+    def load_from_json(path: str | pathlib.Path):
         path = pathlib.Path(path)
         if path.is_dir():
-            path /= cls.default_json_file_name
+            path /= Recording.default_json_file_name
         with open(path, 'r') as f:
-            return cls(**json.load(f, object_hook=utils.json_reconstitute))
+            return Recording(**json.load(f, object_hook=utils.json_reconstitute))
