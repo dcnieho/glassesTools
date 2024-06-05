@@ -18,11 +18,12 @@ from ..recording import Recording
 from ..eyetracker import EyeTracker
 from .. import video_utils
 
-def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, cam_cal_file: str|pathlib.Path=None) -> Recording:
+def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, cam_cal_file: str|pathlib.Path=None, copy_scene_video = True) -> Recording:
     from . import check_folders
+    # NB: copy_scene_video input argument is ignored, SeeTrue recordings must be transcoded with ffmpeg to be useful
 
     if shutil.which('ffmpeg') is None:
-        RuntimeError('ffmpeg must be on path to import SeeTrue recordings')
+        raise RuntimeError('ffmpeg not found on path. ffmpeg is required for importing SeeTrue recordings. Cannot continue')
 
     """
     Run all preprocessing steps on SeeTrue STONE data and store in output_dir
@@ -46,9 +47,6 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
     if not output_dir.is_dir():
         output_dir.mkdir()
 
-    # store rec info
-    rec_info.store_as_json(output_dir)
-
 
     #### prep the data
     # NB: gaze data and scene video prep are intertwined, status messages are output inside this function
@@ -67,6 +65,9 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
 
     # also store frame timestamps
     frameTimestamps.to_csv(str(output_dir / 'frameTimestamps.tsv'), sep='\t')
+
+    # store rec info
+    rec_info.store_as_json(output_dir)
 
     return rec_info
 
@@ -118,10 +119,11 @@ def checkRecording(inputDir: str|pathlib.Path, recInfo: Recording):
     return True
 
 
-def copySeeTrueRecording(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path, recInfo: Recording):
+def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInfo: Recording):
     """
     Copy the relevant files from the specified input dir to the specified output dirs
     """
+
     # get scene video dimensions by interrogating a frame in sceneVidDir
     sceneVidDir = inputDir / ('ScenePics_' + recInfo.name)
     frame = next(sceneVidDir.glob('*.jpeg'))
@@ -186,8 +188,13 @@ def copySeeTrueRecording(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path
 
     # 3. make into video
     framerate = "{:.4f}".format(1000./ifi)
-    cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'image2', '-framerate', framerate, '-start_number', str(frames[0]), '-i', '"'+str(sceneVidDir / 'frame_%d.jpeg')+'"', '"'+str(outputDir / 'worldCamera.mp4')+'"'])
+    outFile = outputDir / 'worldCamera.mp4'
+    cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'image2', '-framerate', framerate, '-start_number', str(frames[0]), '-i', '"'+str(sceneVidDir / 'frame_%d.jpeg')+'"', '"'+str(outFile)+'"'])
     os.system(cmd_str)
+    if outFile.is_file():
+        recInfo.scene_video_file = outFile.name
+    else:
+        raise RuntimeError('Error making a scene video out of the SeeTrue''s frames')
 
     # attempt 2 that should allow correct VFR video files, but doesn't work with current MediaWriter
     # due to what i think is a bug: https://github.com/matham/ffpyplayer/issues/129.
@@ -227,7 +234,7 @@ def copySeeTrueRecording(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path
     # instead now, get actual ts for each frame in written video as that is what we
     # have to work with. Note that these do not match gaze data ts, but code nowhere
     # assumes they do
-    frameTimestamps = video_utils.getFrameTimestampsFromVideo(outputDir / 'worldCamera.mp4')
+    frameTimestamps = video_utils.getFrameTimestampsFromVideo(recInfo.get_scene_video_path())
 
     return gazeDf, frameTimestamps
 

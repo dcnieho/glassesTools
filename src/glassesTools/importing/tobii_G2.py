@@ -27,7 +27,7 @@ from ..eyetracker import EyeTracker
 from .. import timestamps, video_utils
 
 
-def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None) -> Recording:
+def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True) -> Recording:
     from . import check_folders
     """
     Run all preprocessing steps on tobii data and store in output_dir
@@ -50,24 +50,28 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
     if not output_dir.is_dir():
         output_dir.mkdir()
 
-    # store rec info
-    rec_info.store_as_json(output_dir)
-
 
     ### copy the raw data to the output directory
-    copyTobiiRecording(source_dir, output_dir)
+    srcVid, destVid = copyTobiiRecording(source_dir, output_dir, copy_scene_video)
+    if destVid:
+        rec_info.scene_video_file = destVid.name
+    else:
+        rec_info.scene_video_file =  srcVid.parent.parent.name + '/' + srcVid.parent.name + '/' + srcVid.name
 
     #### prep the copied data...
     print('  Getting camera calibration...')
     sceneVideoDimensions = getCameraFromTSLV(output_dir)
     print('  Prepping gaze data...')
-    gazeDf, frameTimestamps = formatGazeData(output_dir, sceneVideoDimensions)
+    gazeDf, frameTimestamps = formatGazeData(output_dir, sceneVideoDimensions, rec_info)
 
     # write the gaze data to a csv file
     gazeDf.to_csv(str(output_dir / 'gazeData.tsv'), sep='\t', na_rep='nan', float_format="%.8f")
 
     # also store frame timestamps
     frameTimestamps.to_csv(str(output_dir / 'frameTimestamps.tsv'), sep='\t')
+
+    # store rec info
+    rec_info.store_as_json(output_dir)
 
     return rec_info
 
@@ -134,19 +138,26 @@ def checkRecording(inputDir: str|pathlib.Path, recInfo: Recording):
         raise ValueError(f"A recording with the recording_unit_serial \"{recInfo.recording_unit_serial}\" was not found in the folder {inputDir}.")
 
 
-def copyTobiiRecording(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path):
+def copyTobiiRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, copy_scene_video: bool):
     """
     Copy the relevant files from the specified input dir to the specified output dir
     """
     # Copy relevent files to new directory
     inputDir = inputDir / 'segments' / '1'
-    shutil.copyfile(str(inputDir / 'fullstream.mp4'), str(outputDir / 'worldCamera.mp4'))
+    srcFile  = inputDir / 'fullstream.mp4'
+    if copy_scene_video:
+        destFile = outputDir / 'worldCamera.mp4'
+        shutil.copy2(str(srcFile), str(destFile))
+    else:
+        destFile = None
 
     # Unzip the gaze data and tslv files
     for f in ['livedata.json.gz', 'et.tslv.gz']:
         with gzip.open(str(inputDir / f)) as zipFile:
             with open(outputDir / pathlib.Path(f).stem, 'wb') as unzippedFile:
                 shutil.copyfileobj(zipFile, unzippedFile)
+
+    return srcFile, destFile
 
 def getCameraFromTSLV(inputDir: str|pathlib.Path):
     """
@@ -205,7 +216,7 @@ def getCameraFromTSLV(inputDir: str|pathlib.Path):
     return camera['resolution']
 
 
-def formatGazeData(inputDir: str|pathlib.Path, sceneVideoDimensions: list[int]):
+def formatGazeData(inputDir: str|pathlib.Path, sceneVideoDimensions: list[int], recInfo: Recording):
     """
     load livedata.json
     format to get the gaze coordinates w/r/t world camera, and timestamps for every frame of video
@@ -219,7 +230,7 @@ def formatGazeData(inputDir: str|pathlib.Path, sceneVideoDimensions: list[int]):
     df,scene_video_ts_offset = json2df(inputDir / 'livedata.json', sceneVideoDimensions)
 
     # read video file, create array of frame timestamps
-    frameTimestamps = video_utils.getFrameTimestampsFromVideo(inputDir / 'worldCamera.mp4')
+    frameTimestamps = video_utils.getFrameTimestampsFromVideo(recInfo.get_scene_video_path())
     frameTimestamps['timestamp'] += scene_video_ts_offset
 
     # use the frame timestamps to assign a frame number to each data point

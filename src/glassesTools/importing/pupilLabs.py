@@ -26,7 +26,7 @@ from ..eyetracker import EyeTracker
 from .. import timestamps, video_utils
 
 
-def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None) -> Recording:
+def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True) -> Recording:
     from . import check_folders, check_device
     """
     Run all preprocessing steps on pupil data and store in output_dir
@@ -53,32 +53,35 @@ def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, so
     if not output_dir.is_dir():
         output_dir.mkdir()
 
-    # store rec info
-    rec_info.store_as_json(output_dir)
 
-
-    # copy world video
+    # find world video and copy if wanted
     if is_cloud_export:
         scene_vid = list(source_dir.glob('*.mp4'))
         if len(scene_vid)!=1:
             raise RuntimeError(f'Scene video missing or more than one found for Pupil Cloud export in folder {source_dir}')
-        shutil.copyfile(str(scene_vid[0]), str(output_dir / 'worldCamera.mp4'))
+        srcVid = scene_vid[0]
     else:
-        shutil.copyfile(str(source_dir / 'world.mp4'), str(output_dir / 'worldCamera.mp4'))
+        srcVid = source_dir / 'world.mp4'
+    if copy_scene_video:
+        destVid = output_dir / 'worldCamera.mp4'
+        shutil.copy2(str(srcVid), str(destVid))
+        rec_info.scene_video_file = destVid.name
+    else:
+        rec_info.scene_video_file =  srcVid.name
     print(f'  Input data copied to: {output_dir}')
 
 
     ### get camera cal
     print('  Getting camera calibration...')
     if is_cloud_export:
-        sceneVideoDimensions = getCameraCalFromCloudExport(source_dir, output_dir)
+        sceneVideoDimensions = getCameraCalFromCloudExport(source_dir, output_dir, rec_info)
     else:
         match rec_info.eye_tracker:
             case EyeTracker.Pupil_Core:
                 sceneVideoDimensions = getCameraFromMsgPack(source_dir, output_dir)
             case EyeTracker.Pupil_Invisible:
                 if (source_dir/'calibration.bin').is_file():
-                    sceneVideoDimensions = getCameraCalFromBinFile(source_dir, output_dir)
+                    sceneVideoDimensions = getCameraCalFromBinFile(source_dir, output_dir, rec_info)
                 else:
                     sceneVideoDimensions = getCameraCalFromOnline(source_dir, output_dir, rec_info)
 
@@ -95,6 +98,9 @@ def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, so
 
     # also store frame timestamps
     frameTimestamps.to_csv(str(output_dir / 'frameTimestamps.tsv'), sep='\t')
+
+    # store rec info
+    rec_info.store_as_json(output_dir)
 
     return rec_info
 
@@ -273,7 +279,7 @@ def getCameraFromMsgPack(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path
 
     return camInfo['resolution']
 
-def getCameraCalFromBinFile(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path) -> list[int]:
+def getCameraCalFromBinFile(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path, recInfo: Recording) -> list[int]:
     # provided by pupil-labs
     cal = np.fromfile(
         inputDir / 'calibration.bin',
@@ -293,7 +299,7 @@ def getCameraCalFromBinFile(inputDir: str|pathlib.Path, outputDir: str|pathlib.P
     camInfo['extrinsic']    = cal["scene_extrinsics_affine_matrix"].reshape((3,3))
 
     # get resolution from the local intrinsics file or scene video
-    camInfo['resolution']   = getSceneCameraResolution(inputDir, outputDir)
+    camInfo['resolution']   = getSceneCameraResolution(inputDir, recInfo)
 
     # store to xml file
     storeCameraCalibration(camInfo, outputDir)
@@ -319,14 +325,14 @@ def getCameraCalFromOnline(inputDir: str|pathlib.Path, outputDir: str|pathlib.Pa
     camInfo['rotation']     = np.reshape(np.array(camInfo.pop('rotation_matrix')),(3,3))
 
     # get resolution from the local intrinsics file or scene video
-    camInfo['resolution']   = getSceneCameraResolution(inputDir, outputDir)
+    camInfo['resolution']   = getSceneCameraResolution(inputDir, recInfo)
 
     # store to xml file
     storeCameraCalibration(camInfo, outputDir)
 
     return camInfo['resolution']
 
-def getCameraCalFromCloudExport(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path) -> list[int]:
+def getCameraCalFromCloudExport(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path, recInfo: Recording) -> list[int]:
     file = inputDir / 'scene_camera.json'
     if not file.is_file():
         return None
@@ -340,7 +346,7 @@ def getCameraCalFromCloudExport(inputDir: str|pathlib.Path, outputDir: str|pathl
         camInfo['distCoeff']    = np.array(camInfo.pop('distortion_coefficients')).flatten()
 
     # get resolution from the scene video
-    camInfo['resolution']   = getSceneCameraResolution(inputDir, outputDir)
+    camInfo['resolution']   = getSceneCameraResolution(inputDir, recInfo)
 
     # store to xml file
     storeCameraCalibration(camInfo, outputDir)
@@ -365,12 +371,12 @@ def getCamInfo(camInfoFile: str|pathlib.Path):
         raise RuntimeError('No camera intrinsics or intrinsics for more than one camera found')
     return camInfo[keys[0]]
 
-def getSceneCameraResolution(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path):
+def getSceneCameraResolution(inputDir: str|pathlib.Path, recInfo: Recording):
     if (inputDir / 'world.intrinsics').is_file():
         return np.array(getCamInfo(inputDir / 'world.intrinsics')['resolution'])
     else:
         import cv2
-        cap = cv2.VideoCapture(str(outputDir / 'worldCamera.mp4'))
+        cap = cv2.VideoCapture(str(recInfo.get_scene_video_path()))
         if cap.isOpened():
             width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
@@ -383,7 +389,7 @@ def formatGazeDataPupilPlayer(inputDir: str|pathlib.Path, exportFile: str|pathli
     df = readGazeDataPupilPlayer(exportFile, sceneVideoDimensions, recInfo)
 
     # get timestamps for the scene video
-    frameTs = video_utils.getFrameTimestampsFromVideo(inputDir / 'world.mp4')
+    frameTs = video_utils.getFrameTimestampsFromVideo(recInfo.get_scene_video_path())
 
     # check pupil-labs' frame timestamps because we may need to correct
     # frame indices in case of holes in the video

@@ -24,6 +24,8 @@ class Recording:
     recording_unit_serial       : str           = ""
     recording_software_version  : str           = ""
     scene_camera_serial         : str           = ""
+    scene_video_file            : str           = ""
+
 
     def store_as_json(self, path: str | pathlib.Path):
         path = pathlib.Path(path)
@@ -43,3 +45,10 @@ class Recording:
             path /= Recording.default_json_file_name
         with open(path, 'r') as f:
             return Recording(**json.load(f, object_hook=utils.json_reconstitute))
+
+
+    def get_scene_video_path(self):
+        vid = self.working_directory / self.scene_video_file
+        if not vid.is_file():
+            vid = self.source_directory / self.scene_video_file
+        return vid

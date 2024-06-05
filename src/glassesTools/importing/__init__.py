@@ -12,17 +12,17 @@ from .SMI_ETG import preprocessData as SMI_ETG
 from .tobii_G2 import preprocessData as tobii_G2
 from .tobii_G3 import preprocessData as tobii_G3
 
-def pupil_core(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None) -> Recording:
+def pupil_core(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True) -> Recording:
     from .pupilLabs import preprocessData
-    return preprocessData(output_dir, 'Pupil Core', source_dir, rec_info)
+    return preprocessData(output_dir, 'Pupil Core', source_dir, rec_info, copy_scene_video)
 
-def pupil_invisible(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None) -> Recording:
+def pupil_invisible(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True) -> Recording:
     from .pupilLabs import preprocessData
-    return preprocessData(output_dir, 'Pupil Invisible', source_dir, rec_info)
+    return preprocessData(output_dir, 'Pupil Invisible', source_dir, rec_info, copy_scene_video)
 
-def pupil_neon(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None) -> Recording:
+def pupil_neon(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True) -> Recording:
     from .pupilLabs import preprocessData
-    return preprocessData(output_dir, 'Pupil Neon', source_dir, rec_info)
+    return preprocessData(output_dir, 'Pupil Neon', source_dir, rec_info, copy_scene_video)
 
 
 def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker) -> list[Recording]:
@@ -62,7 +62,7 @@ def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker)
 
 
 # single front end to the various device import functions for convenience
-def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.Path = None, device: str | EyeTracker = None, rec_info: Recording = None) -> Recording:
+def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.Path = None, device: str | EyeTracker = None, rec_info: Recording = None, copy_scene_video = True) -> Recording:
     # output_dir is the working directory folder where the export of this recording will be placed
     # should match rec_info.working_directory if both are provided (is checked below)
     if rec_info is not None:
@@ -75,21 +75,21 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
     # do the actual import/pre-process
     match device:
         case EyeTracker.AdHawk_MindLink:
-            rec_info = adhawk_mindlink(output_dir, source_dir, rec_info)
+            rec_info = adhawk_mindlink(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
         case EyeTracker.Pupil_Core:
-            rec_info = pupil_core(output_dir, source_dir, rec_info)
+            rec_info = pupil_core(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
         case EyeTracker.Pupil_Invisible:
-            rec_info = pupil_invisible(output_dir, source_dir, rec_info)
+            rec_info = pupil_invisible(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
         case EyeTracker.Pupil_Neon:
-            rec_info = pupil_neon(output_dir, source_dir, rec_info)
+            rec_info = pupil_neon(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
         case EyeTracker.SeeTrue_STONE:
-            rec_info = SeeTrue_STONE(output_dir, source_dir, rec_info)
+            rec_info = SeeTrue_STONE(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
         case EyeTracker.SMI_ETG:
-            rec_info = SMI_ETG(output_dir, source_dir, rec_info)
+            rec_info = SMI_ETG(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
         case EyeTracker.Tobii_Glasses_2:
-            rec_info = tobii_G2(output_dir, source_dir, rec_info)
+            rec_info = tobii_G2(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
         case EyeTracker.Tobii_Glasses_3:
-            rec_info = tobii_G3(output_dir, source_dir, rec_info)
+            rec_info = tobii_G3(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
 
     return rec_info
 

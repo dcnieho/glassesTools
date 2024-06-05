@@ -27,11 +27,12 @@ from ..eyetracker import EyeTracker
 from .. import video_utils
 
 
-def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None) -> Recording:
+def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True) -> Recording:
     from . import check_folders
     """
     Run all preprocessing steps on SMI data and store in output_dir
     """
+    # NB: copy_scene_video input argument might be ignored. If ffmpeg is present, it will be used to transcode the scene camera video
     output_dir, source_dir, rec_info = check_folders(output_dir, source_dir, rec_info, EyeTracker.SMI_ETG)
     print(f'processing: {source_dir.name} -> {output_dir}')
 
@@ -51,25 +52,25 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
     if not output_dir.is_dir():
         output_dir.mkdir()
 
-    # store rec info
-    rec_info.store_as_json(output_dir)
-
 
     ### copy the raw data to the output directory
     checkRecording(source_dir, rec_info)
-    copySMIRecordings(source_dir, output_dir, rec_info)
+    copySMIRecordings(source_dir, output_dir, rec_info, copy_scene_video)
 
     #### prep the data
     print('  Getting camera calibration...')
     sceneVideoDimensions = getCameraFromFile(source_dir, output_dir)
     print('  Prepping gaze data...')
-    gazeDf, frameTimestamps = formatGazeData(source_dir, output_dir, rec_info, sceneVideoDimensions)
+    gazeDf, frameTimestamps = formatGazeData(source_dir, rec_info, sceneVideoDimensions)
 
     # write the gaze data to a csv file
     gazeDf.to_csv(str(output_dir / 'gazeData.tsv'), sep='\t', na_rep='nan', float_format="%.8f")
 
     # also store frame timestamps
     frameTimestamps.to_csv(str(output_dir / 'frameTimestamps.tsv'), sep='\t')
+
+    # store rec info
+    rec_info.store_as_json(output_dir)
 
     return rec_info
 
@@ -123,22 +124,33 @@ def checkRecording(inputDir: str|pathlib.Path, recInfo: str|pathlib.Path, use_re
     return True
 
 
-def copySMIRecordings(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path, recInfo: Recording):
+def copySMIRecordings(inputDir: pathlib.Path, outputDir: pathlib.Path, recInfo: Recording, copy_scene_video: bool):
     """
     Copy the relevant files from the specified input dir to the specified output dirs
     """
 
     # Copy relevent files to new directory
-    file = recInfo.name + '-export.avi'
+    file    = recInfo.name + '-export.avi'
+    srcFile = inputDir / file
 
     # if ffmpeg is on path, remux avi to mp4 (reencode audio from flac to aac as flac is not supported in mp4)
-    # else just copy
+    # else just copy. Ignore copy_scene_video in this case
     if shutil.which('ffmpeg') is not None:
         # make mp4
-        cmd_str = ' '.join(['ffmpeg', '-y', '-i', '"'+str(inputDir / file)+'"', '-vcodec', 'copy', '-acodec', 'aac', '"'+str(outputDir / 'worldCamera.mp4')+'"'])
+        destFile = outputDir / 'worldCamera.mp4'
+        cmd_str = ' '.join(['ffmpeg', '-y', '-i', '"'+str(srcFile)+'"', '-vcodec', 'copy', '-acodec', 'aac', '"'+str(destFile)+'"'])
         os.system(cmd_str)
     else:
-        shutil.copyfile(str(inputDir / file), str(outputDir / 'worldCamera.avi'))
+        if copy_scene_video:
+            destFile = outputDir / 'worldCamera.avi'
+            shutil.copy2(str(srcFile), str(destFile))
+        else:
+            destFile = None
+
+    if destFile:
+        recInfo.scene_video_file = destFile.name
+    else:
+        recInfo.scene_video_file =  srcFile.name
 
 
 def readSMICamInfoFile(inputDir: str|pathlib.Path):
@@ -199,7 +211,7 @@ def getCameraFromFile(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path):
     return camera['resolution']
 
 
-def formatGazeData(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path, recInfo: Recording, sceneVideoDimensions: list[int]):
+def formatGazeData(inputDir: str|pathlib.Path, recInfo: Recording, sceneVideoDimensions: list[int]):
     """
     load gazedata file
     format to get the gaze coordinates w.r.t. world camera, and timestamps for
@@ -215,10 +227,7 @@ def formatGazeData(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path, recI
     df = gazedata2df(inputDir / file, sceneVideoDimensions)
 
     # read video file, create array of frame timestamps
-    if (outputDir / 'worldCamera.mp4').is_file():
-        frameTimestamps = video_utils.getFrameTimestampsFromVideo(outputDir / 'worldCamera.mp4')
-    else:
-        frameTimestamps = video_utils.getFrameTimestampsFromVideo(outputDir / 'worldCamera.avi')
+    frameTimestamps = video_utils.getFrameTimestampsFromVideo(recInfo.get_scene_video_path())
 
     # SMI frame counter seems to be of the format HH:MM:SS:FR, where HH:MM:SS is a normal
     # hour, minute, second timecode, and FR is a frame number for within that second. The
