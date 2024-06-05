@@ -37,7 +37,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
 
 
     ### check and copy needed files to the output directory
-    print('Check and copy raw data...')
+    print('  Check and copy raw data...')
     ### check tobii recording and get export directory
     if rec_info is not None:
         checkRecording(source_dir, rec_info)
@@ -56,12 +56,11 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
 
     ### copy the raw data to the output directory
     copyTobiiRecording(source_dir, output_dir)
-    print(f'Input data copied to: {output_dir}')
 
     #### prep the copied data...
-    print('Getting camera calibration...')
+    print('  Getting camera calibration...')
     sceneVideoDimensions = getCameraFromTSLV(output_dir)
-    print('Prepping gaze data...')
+    print('  Prepping gaze data...')
     gazeDf, frameTimestamps = formatGazeData(output_dir, sceneVideoDimensions)
 
     # write the gaze data to a csv file

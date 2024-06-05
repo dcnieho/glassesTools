@@ -39,7 +39,7 @@ def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, so
 
 
     ### check and copy needed files to the output directory
-    print('Check and copy raw data...')
+    print('  Check and copy raw data...')
     ### check pupil recording and get export directory
     exportFile, is_cloud_export = checkPupilRecording(source_dir)
     if rec_info is not None:
@@ -65,11 +65,11 @@ def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, so
         shutil.copyfile(str(scene_vid[0]), str(output_dir / 'worldCamera.mp4'))
     else:
         shutil.copyfile(str(source_dir / 'world.mp4'), str(output_dir / 'worldCamera.mp4'))
-    print(f'Input data copied to: {output_dir}')
+    print(f'  Input data copied to: {output_dir}')
 
 
     ### get camera cal
-    print('Getting camera calibration...')
+    print('  Getting camera calibration...')
     if is_cloud_export:
         sceneVideoDimensions = getCameraCalFromCloudExport(source_dir, output_dir)
     else:
@@ -84,7 +84,7 @@ def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, so
 
 
     ### get gaze data and video frame timestamps
-    print('Prepping gaze data...')
+    print('  Prepping gaze data...')
     if is_cloud_export:
         gazeDf, frameTimestamps = formatGazeDataCloudExport(source_dir, exportFile)
     else:

@@ -37,7 +37,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
 
 
     ### check and copy needed files to the output directory
-    print('Check and copy raw data...')
+    print('  Check and copy raw data...')
     if rec_info is not None:
         if not checkRecording(source_dir, rec_info, use_return=True):
             raise ValueError(f"A recording with the name \"{rec_info.name}\" was not found in the folder {source_dir}. Check that the name is correct and make sure that you export the scene video and gaze data using BeGaze as described in the glassesValidator manual.")
@@ -58,7 +58,6 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
     ### copy the raw data to the output directory
     checkRecording(source_dir, rec_info)
     copySMIRecordings(source_dir, output_dir, rec_info)
-    print(f'Input data copied to: {output_dir}')
 
     #### prep the data
     print('  Getting camera calibration...')

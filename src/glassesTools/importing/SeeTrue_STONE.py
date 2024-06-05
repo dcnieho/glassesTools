@@ -32,7 +32,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
 
 
     ### check and copy needed files to the output directory
-    print('Check and copy raw data...')
+    print('  Check and copy raw data...')
     if rec_info is not None:
         if not checkRecording(source_dir, rec_info):
             raise ValueError(f"A recording with the name \"{rec_info.name}\" was not found in the folder {source_dir}.")
@@ -51,6 +51,9 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
 
 
     #### prep the data
+    # NB: gaze data and scene video prep are intertwined, status messages are output inside this function
+    gazeDf, frameTimestamps = copySeeTrueRecording(source_dir, output_dir, rec_info)
+
     print('  Getting camera calibration...')
     if cam_cal_file is not None:
         shutil.copyfile(str(cam_cal_file), str(output_dir / 'calibration.xml'))
@@ -58,8 +61,6 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
         print('    !! No camera calibration provided! Defaulting to hardcoded')
         getCameraHardcoded(output_dir)
 
-    # NB: gaze data and scene video prep are intertwined, status messages are output inside this function
-    gazeDf, frameTimestamps = copySeeTrueRecording(source_dir, output_dir, rec_info)
 
     # write the gaze data to a csv file
     gazeDf.to_csv(str(output_dir / 'gazeData.tsv'), sep='\t', na_rep='nan', float_format="%.8f")
