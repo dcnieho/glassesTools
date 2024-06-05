@@ -56,6 +56,8 @@ def read_file(fileName          : str|pathlib.Path,
         if len(ac)==1:
             continue    # nothing to do, would just copy column to itself
         elif ac:
+            if not any([a in df.columns for a in ac]):
+                continue
             if none_if_any_nan:
                 df[c] = [noneIfAnyNan(x) for x in df[ac].values]  # make list of numpy arrays, or None if there are any NaNs in the array
             else:
@@ -64,7 +66,7 @@ def read_file(fileName          : str|pathlib.Path,
             df[c] = None
 
     # keep only the columns we want (this also puts them in the right order even if that doesn't matter since we use kwargs to construct objects)
-    df = df[cols_compressed.keys()]
+    df = df[[c for c in cols_compressed.keys() if c in df.columns]]
 
     if as_list_dict:
         obj_list = [object(**kwargs) for kwargs in df.to_dict(orient='records')]
