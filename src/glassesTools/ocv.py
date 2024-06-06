@@ -22,6 +22,10 @@ class CameraParams:
 
     @staticmethod
     def readFromFile(fileName: str|pathlib.Path) -> 'CameraParams':
+        fileName = pathlib.Path(fileName)
+        if not fileName.is_file():
+            return CameraParams(None,None)
+
         fs = cv2.FileStorage(str(fileName), cv2.FILE_STORAGE_READ)
         resolution      = fs.getNode("resolution").mat()
         cameraMatrix    = fs.getNode("cameraMatrix").mat()
