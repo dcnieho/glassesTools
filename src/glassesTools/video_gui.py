@@ -21,8 +21,8 @@ class GUI:
         self._frame_pts = {}
         self._current_frame = {}
 
-        self._next_window_id = 0
-        self._windows = {}
+        self._next_window_id: int = 0
+        self._windows: dict[int,str] = {}
         self._window_flags = int(
                                     imgui.WindowFlags_.no_title_bar |
                                     imgui.WindowFlags_.no_collapse |
@@ -40,7 +40,7 @@ class GUI:
     def __del__(self):
         self.stop()
 
-    def add_window(self,name):
+    def add_window(self,name: str) -> int:
         id = self._next_window_id
         self._windows[id] = name
         self._texID[id] = None
@@ -82,13 +82,13 @@ class GUI:
 
         self._new_frame[window_id] = (frame, pts, frame_nr) # just copy ref to frame is enough
 
-    def register_draw_callback(self, type, callback):
+    def register_draw_callback(self, type: str, callback):
         # e.g. for drawing overlays
         if type not in self._draw_callback:
             raise RuntimeError('Draw callback type unknown')
         self._draw_callback[type] = callback
 
-    def set_interesting_keys(self, keys):
+    def set_interesting_keys(self, keys: list[str]):
         if isinstance(keys,str):
             keys = [x for x in keys]
 
@@ -100,7 +100,7 @@ class GUI:
             # storage for presses
             self._pressed_keys[k] = [-1, False]
 
-    def get_key_presses(self):
+    def get_key_presses(self) -> dict[str,float]:
         out = {}
         thisT = time.perf_counter()
         for k in self._pressed_keys:
@@ -250,7 +250,7 @@ class GUI:
         if need_begin_end:
             imgui.end()
 
-def generic_tooltip(info_dict):
+def generic_tooltip_drawer(info_dict: dict[str,str]):
     ws = imgui.get_window_size()
     ts = imgui.calc_text_size('(?)')
     imgui.same_line(ws.x-ts.x)
@@ -267,7 +267,7 @@ def generic_tooltip(info_dict):
         imgui.pop_text_wrap_pos()
         imgui.end_tooltip()
 
-def qns_tooltip():
+def qns_tooltip() -> dict[str,str]:
     return {
         'q': 'Quit',
         'n': 'Next',
