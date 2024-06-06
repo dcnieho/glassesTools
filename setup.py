@@ -41,5 +41,8 @@ setuptools.setup(
     packages=setuptools.find_packages(where="src"),
     include_package_data=True,
     python_requires=">=3.10",
-    install_requires=required
+    install_requires=required,
+    extras_require = {
+        'GUI':  ["imgui_bundle==1.3.0"]
+    }
 )
