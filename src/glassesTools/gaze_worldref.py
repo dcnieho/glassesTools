@@ -3,7 +3,7 @@ import math
 import cv2
 import pathlib
 
-from . import data_files, drawing, gaze_headref, ocv, plane, transforms
+from . import data_files, drawing, gaze_headref, ocv, plane
 
 class Gaze:
     # description of tsv file used for storage
@@ -109,6 +109,7 @@ class Gaze:
 
 
 def gazes_head_to_world(poses: list[plane.Pose], gazes_head: dict[int,list[gaze_headref.Gaze]], cameraParams: ocv.CameraParams) -> dict[int,list[Gaze]]:
+    from . import transforms
     planeGazes = {}
     for frame_idx in poses:
         if frame_idx in gazes_head:
