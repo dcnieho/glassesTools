@@ -34,9 +34,9 @@ class Recording:
         with open(path, 'w') as f:
             # remove any crap potentially added by subclasses
             to_dump = dataclasses.asdict(self)
-            to_dump = {k:to_dump[k] for k in to_dump if k in Recording.__annotations__}
+            to_dump = {k:to_dump[k] for k in to_dump if k in Recording.__annotations__ and k not in ['working_directory']}      # working_directory will be loaded as the provided path, and shouldn't be stored
             # dump to file
-            json.dump(to_dump, f, cls=utils.CustomTypeEncoder)
+            json.dump(to_dump, f, cls=utils.CustomTypeEncoder, indent=2)
 
     @staticmethod
     def load_from_json(path: str | pathlib.Path):
@@ -44,7 +44,7 @@ class Recording:
         if path.is_dir():
             path /= Recording.default_json_file_name
         with open(path, 'r') as f:
-            return Recording(**json.load(f, object_hook=utils.json_reconstitute))
+            return Recording(**json.load(f, object_hook=utils.json_reconstitute), working_directory=path.parent)
 
 
     def get_scene_video_path(self):
