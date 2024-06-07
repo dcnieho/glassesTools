@@ -42,12 +42,13 @@ class Plane:
             ref_image_store_path = pathlib.Path(ref_image_store_path)
 
         # get image
-        if ref_image_store_path is None or not ref_image_store_path.is_file():
-            # if doesn't exist, create
-            img = self._store_reference_image(ref_image_store_path, ref_image_width)
-        else:
-            # read image
+        img = None
+        # read from file if image exists
+        if ref_image_store_path is not None and ref_image_store_path.is_file():
             img = cv2.imread(str(ref_image_store_path), cv2.IMREAD_COLOR)
+        # if image doesn't exist or is the wrong size, create
+        if img is None or img.shape[1]!=ref_image_width:
+            img = self._store_reference_image(ref_image_store_path, ref_image_width)
 
         self._ref_image_width                               = ref_image_width
         self._ref_image_cache   : dict[int, np.ndarray]     = {ref_image_width: img}
