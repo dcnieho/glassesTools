@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import pathlib
+import importlib
 from typing import Any, Optional
 from collections import defaultdict
 
@@ -24,6 +25,22 @@ def allNanIfNone(vals, numel):
         return np.full((numel,), np.nan)
     else:
         return vals
+
+
+# read coordinate files (e.g. marker files, which have the colums ID, x, y, rotation_angle)
+def _read_coord_file_impl(file):
+    return pd.read_csv(str(file), index_col='ID')
+
+def read_coord_file(file, package_to_read_from=None):
+    # if directory is not provided, try to read the file from the package resources instead
+    if package_to_read_from:
+        with importlib.resources.path(package_to_read_from, file) as p:
+            return _read_coord_file_impl(p)
+    else:
+        if file.is_file():
+            return _read_coord_file_impl(file)
+        else:
+            return None
 
 
 def read_file(fileName          : str|pathlib.Path,
