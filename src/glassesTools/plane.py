@@ -30,7 +30,7 @@ class Plane:
         self.bbox               : list[float]               = []
 
         # marker specs
-        self.aruco_dict                                     = aruco_dict
+        self.aruco_dict                                     = cv2.aruco.getPredefinedDictionary(aruco_dict)
         self.marker_border_bits                             = marker_border_bits
         self.unit                                           = unit
 
