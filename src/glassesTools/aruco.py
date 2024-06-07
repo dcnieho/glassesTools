@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 from typing import Any
 
-from . import drawing, intervals, ocv, plane, timestamps, transforms
+from . import drawing, intervals, ocv, plane, timestamps
 
 
 class ArUcoDetector():
@@ -75,6 +75,7 @@ class ArUcoDetector():
         return self._estimate_homography_impl(objP, imgP)
 
     def _estimate_homography_impl(self, objP, imgP):
+        from . import transforms
         N_markers, H = 0, None
         if objP is None:
             return N_markers, H

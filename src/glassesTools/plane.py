@@ -4,7 +4,7 @@ import cv2
 import pathlib
 import math
 
-from . import aruco, data_files, drawing, marker, ocv
+from . import data_files, drawing, marker, ocv
 
 
 class Plane:
@@ -117,6 +117,7 @@ class Plane:
         self.bbox.append(marker_pos.y.max()+markerHalfSizeMm)
 
     def get_aruco_board(self, unrotate_markers=False):
+        from . import aruco
         board_corner_points = []
         ids = []
         for key in self.markers:
