@@ -12,6 +12,12 @@ class Marker:
         ret = '[%d]: center @ (%.2f, %.2f), rot %.0f deg' % (self.key, self.center[0], self.center[1], self.rot)
         return ret
 
+    def shift(self, offset=np.ndarray):
+        self.center += offset
+        if self.corners:
+            for c in self.corners:
+                c += offset
+
 def corners_intersection(corners):
     line1 = ( corners[0], corners[2] )
     line2 = ( corners[1], corners[3] )
