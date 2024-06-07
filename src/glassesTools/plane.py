@@ -19,7 +19,6 @@ class Plane:
                  marker_pos_scale_fac                                   = 1.,                       # scale factor for marker positions in the markers input argument
                  unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
                  package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources
-                 plane_center           : np.ndarray                    = None,                     # center coordinate of plane, in scaled marker coordinates
                  ref_image_store_path   : str|pathlib.Path              = None,
                  ref_image_width                                        = 1920
                  ):
@@ -35,7 +34,7 @@ class Plane:
         self.unit                                           = unit
 
         # prep markers
-        self._get_markers(markers, marker_pos_scale_fac, package_to_read_from, plane_center)
+        self._get_markers(markers, marker_pos_scale_fac, package_to_read_from)
 
         # get reference image of plane
         if ref_image_store_path:
@@ -52,6 +51,17 @@ class Plane:
 
         self._ref_image_width                               = ref_image_width
         self._ref_image_cache   : dict[int, np.ndarray]     = {ref_image_width: img}
+
+    def set_center(self, center: np.ndarray):
+        # set center of plane. Center coordinate is on current (not original) plane
+        # so set_center([5., 0.]) three times in a row shift the center rightward by 15 units
+        for i in self.markers:
+            self.markers[i].shift(-center)
+
+        self.bbox[0] -= center[0]
+        self.bbox[2] -= center[0]
+        self.bbox[1] -= center[1]
+        self.bbox[3] -= center[1]
 
     def get_ref_image(self, width: int=None, asRGB=False):
         if width is None:
@@ -78,7 +88,7 @@ class Plane:
                 color = (0,0,0)
             drawing.openCVCircle(img, xy, size, color, -1, subPixelFac)
 
-    def _get_markers(self, markers: str|pathlib.Path|pd.DataFrame, marker_pos_scale_fac: float, package_to_read_from: str|None, plane_center: np.ndarray|None):
+    def _get_markers(self, markers: str|pathlib.Path|pd.DataFrame, marker_pos_scale_fac: float, package_to_read_from: str|None):
         # read in aruco marker positions
         markerHalfSizeMm  = self.marker_size/2.
 
@@ -92,9 +102,6 @@ class Plane:
         # turn into marker objects
         marker_pos.x = marker_pos.x.astype('float32')*marker_pos_scale_fac
         marker_pos.y = marker_pos.y.astype('float32')*marker_pos_scale_fac
-        if plane_center is not None:
-            marker_pos.x -= plane_center[0]
-            marker_pos.y -= plane_center[1]
 
         for idx, row in marker_pos.iterrows():
             c   = row[['x','y']].values
