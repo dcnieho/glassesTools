@@ -2,7 +2,7 @@
 [![PyPI Latest Release](https://img.shields.io/pypi/v/glassesTools.svg)](https://pypi.org/project/glassesTools/)
 [![image](https://img.shields.io/pypi/pyversions/glassesTools.svg)](https://pypi.org/project/glassesTools/)
 
-# GlassesTools v1.3.0
+# GlassesTools v1.3.1
 Tools for processing wearable eye tracker recordings.
 
 If you use this package or any of the code in this repository, please cite:<br>
