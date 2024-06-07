@@ -12,11 +12,12 @@ class Plane:
 
     def __init__(self,
                  markers                : str|pathlib.Path|pd.DataFrame,                            # if str or Path: file from which to read markers. Else direction N_markerx4 array. Should contain centers of markers
-                 marker_size            : float,                                                    # mm
+                 marker_size            : float,                                                    # in "unit" units
 
                  aruco_dict                                             = cv2.aruco.DICT_4X4_250,
                  marker_border_bits                                     = 1,
                  marker_pos_scale_fac                                   = 1.,                       # scale factor for marker positions in the markers input argument
+                 unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
                  package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources
                  plane_center           : np.ndarray                    = None,                     # center coordinate of plane, in scaled marker coordinates
                  ref_image_store_path   : str|pathlib.Path              = None,
@@ -31,6 +32,7 @@ class Plane:
         # marker specs
         self.aruco_dict                                     = aruco_dict
         self.marker_border_bits                             = marker_border_bits
+        self.unit                                           = unit
 
         # prep markers
         self._get_markers(markers, marker_pos_scale_fac, package_to_read_from, plane_center)
