@@ -120,11 +120,12 @@ class Plane:
             self.markers[idx] = marker.Marker(idx, c, corners=[tl, tr, br, bl], rot=rot)
 
         # determine bounding box of markers ([left, top, right, bottom])
-        # NB: this assumes markers are rotated by multiples of 90 degrees
-        self.bbox.append(marker_pos.x.min()-markerHalfSizeMm)
-        self.bbox.append(marker_pos.y.min()-markerHalfSizeMm)
-        self.bbox.append(marker_pos.x.max()+markerHalfSizeMm)
-        self.bbox.append(marker_pos.y.max()+markerHalfSizeMm)
+        all_x = [c[0] for idx in self.markers for c in self.markers[idx].corners]
+        all_y = [c[1] for idx in self.markers for c in self.markers[idx].corners]
+        self.bbox.append(min(all_x))
+        self.bbox.append(min(all_y))
+        self.bbox.append(max(all_x))
+        self.bbox.append(max(all_y))
 
     def get_aruco_board(self, unrotate_markers=False):
         from . import aruco
