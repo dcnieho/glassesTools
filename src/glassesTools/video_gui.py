@@ -7,6 +7,7 @@ except ImportError:
 
 import time
 import threading
+import numpy as np
 
 
 # simple GUI provider for viewer and coder windows in glassesValidator.process
@@ -31,6 +32,7 @@ class GUI:
                                     imgui.WindowFlags_.always_auto_resize
                                 )
         self._window_visible = {}
+        self._window_frame   = {}
 
         self._interesting_keys = {}
         self._pressed_keys = {}
@@ -47,6 +49,7 @@ class GUI:
         self._new_frame[id] = (None, None, -1)
         self._current_frame[id] = (None, None, -1)
         self._window_visible[id] = False
+        self._window_frame[id]   = -1
 
         self._next_window_id += 1
         return id
@@ -219,6 +222,8 @@ class GUI:
             return
 
         if need_begin_end:
+            if isinstance(self._window_size[w][0], np.ndarray):
+                imgui.set_next_window_size()
             opened, self._window_visible[w] = imgui.begin(self._windows[w], self._window_visible[w], self._window_flags)
             if not opened:
                 imgui.end()
@@ -226,15 +231,20 @@ class GUI:
 
         imgui.set_cursor_pos((0,0))
         # draw image
-        imgui.image(self._texID[w], imgui.ImVec2(self._current_frame[w][0].shape[1]*self._dpi_fac, self._current_frame[w][0].shape[0]*self._dpi_fac))
+        self._window_frame[w] += 1
+        win_sz = np.array([*imgui.get_window_size()])
+        img_sz = np.array([self._current_frame[w][0].shape[1]*self._dpi_fac, self._current_frame[w][0].shape[0]*self._dpi_fac])
+        if self._window_frame[w]>2: # it takes two frames for autosize to take effect
+            sfac = min([np.min(win_sz/img_sz), 1.]) # clamp to 1: don't scale up
+            img_sz = (img_sz * sfac).astype('int')
+        imgui.image(self._texID[w], img_sz)
 
         # draw bottom status overlay
-        ws = imgui.get_window_size()
-        ts = imgui.calc_text_size('')
-        win_bottom = min(self._current_frame[w][0].shape[0]*self._dpi_fac, ws.y+imgui.get_scroll_y())
-        imgui.set_cursor_pos_y(win_bottom-ts.y)
+        txt_sz = imgui.calc_text_size('')
+        win_bottom = min(self._current_frame[w][0].shape[0]*self._dpi_fac, win_sz[1]+imgui.get_scroll_y())
+        imgui.set_cursor_pos_y(win_bottom-txt_sz.y)
         imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
-        imgui.begin_child("##status_overlay", size=(-imgui.FLT_MIN,ts.y))
+        imgui.begin_child("##status_overlay", size=(-imgui.FLT_MIN,txt_sz.y))
         if (self._current_frame[w][1]):
             imgui.text(" %8.3f [%d]" % (self._current_frame[w][1], self._current_frame[w][2]))
         else:
