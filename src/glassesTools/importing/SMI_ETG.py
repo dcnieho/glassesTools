@@ -20,7 +20,7 @@ import numpy as np
 import math
 import configparser
 from io import StringIO
-from scipy.spatial.transform import Rotation
+import eulerangles
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
@@ -187,7 +187,8 @@ def getCameraFromFile(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path):
     # 2. sensor offsets seem to be relative to center of sensor
     camera['principalPoint'] = camera['resolution']/2.+camera['sensorOffsets']
     # 3. turn euler angles into rotation matrix (180-Rz because poster space has positive X rightward and positive Y downward)
-    camera['rotation'] = Rotation.from_euler('XYZ', [camera['eulerAngles'][0], camera['eulerAngles'][1], 180-camera['eulerAngles'][2]], degrees=True).as_matrix()
+    eulers = [camera['eulerAngles'][0], camera['eulerAngles'][1], 180-camera['eulerAngles'][2]]
+    camera['rotation'] = eulerangles.euler2matrix(eulers, 'xyz', intrinsic=True, right_handed_rotation=True)
 
     # turn into camera matrix and distortion coefficients as used by OpenCV
     camera['cameraMatrix'] = np.identity(3)
