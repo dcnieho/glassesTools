@@ -168,7 +168,7 @@ def getCameraHardcoded(outputDir: str|pathlib.Path):
     camera['rotation'] = cv2.Rodrigues(np.radians(np.array([12.000000000000043, 0.0, 0.0])))[0]
 
     # store to file
-    fs = cv2.FileStorage(str(outputDir / 'calibration.xml'), cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(outputDir / 'calibration.xml', cv2.FILE_STORAGE_WRITE)
     for key,value in camera.items():
         fs.write(name=key,val=value)
     fs.release()

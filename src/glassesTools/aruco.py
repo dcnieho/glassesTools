@@ -193,7 +193,7 @@ def run_pose_estimation(in_video, frame_timestamp_file, camera_calibration_file,
             # keys is populated above
             if 's' in keys:
                 # screenshot
-                cv2.imwrite(str(output_dir / ('detect_frame_%d.png' % frame_idx)), frame)
+                cv2.imwrite(output_dir / f'detect_frame_{frame_idx}.png', frame)
             gui.update_image(frame, frame_ts/1000., frame_idx)
             closed, = gui.get_state()
             if closed:

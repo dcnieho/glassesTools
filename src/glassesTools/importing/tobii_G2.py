@@ -205,7 +205,7 @@ def getCameraFromTSLV(inputDir: str|pathlib.Path):
 
 
     # store to file
-    fs = cv2.FileStorage(str(inputDir / 'calibration.xml'), cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(inputDir / 'calibration.xml', cv2.FILE_STORAGE_WRITE)
     for key,value in camera.items():
         fs.write(name=key,val=value)
     fs.release()

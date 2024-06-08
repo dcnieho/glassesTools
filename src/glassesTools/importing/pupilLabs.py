@@ -354,7 +354,7 @@ def getCameraCalFromCloudExport(inputDir: str|pathlib.Path, outputDir: str|pathl
     return camInfo['resolution']
 
 def storeCameraCalibration(camInfo: dict[str, typing.Any], outputDir: str|pathlib.Path):
-    fs = cv2.FileStorage(str(outputDir / 'calibration.xml'), cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(outputDir / 'calibration.xml', cv2.FILE_STORAGE_WRITE)
     for key,value in camInfo.items():
         fs.write(name=key,val=value)
     fs.release()
@@ -376,7 +376,7 @@ def getSceneCameraResolution(inputDir: str|pathlib.Path, recInfo: Recording):
         return np.array(getCamInfo(inputDir / 'world.intrinsics')['resolution'])
     else:
         import cv2
-        cap = cv2.VideoCapture(str(recInfo.get_scene_video_path()))
+        cap = cv2.VideoCapture(recInfo.get_scene_video_path())
         if cap.isOpened():
             width  = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
             height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))

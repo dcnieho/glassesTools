@@ -26,7 +26,7 @@ class CameraParams:
         if not fileName.is_file():
             return CameraParams(None,None)
 
-        fs = cv2.FileStorage(str(fileName), cv2.FILE_STORAGE_READ)
+        fs = cv2.FileStorage(fileName, cv2.FILE_STORAGE_READ)
         resolution      = fs.getNode("resolution").mat()
         cameraMatrix    = fs.getNode("cameraMatrix").mat()
         distCoeff       = fs.getNode("distCoeff").mat()
@@ -53,7 +53,7 @@ class CV2VideoReader:
         else:
             self.ts = timestamps
 
-        self.cap = cv2.VideoCapture(str(self.file))
+        self.cap = cv2.VideoCapture(self.file)
         if not self.cap.isOpened():
             raise RuntimeError('the file "{}" could not be opened'.format(str(self.file)))
         self.nframes= float(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))

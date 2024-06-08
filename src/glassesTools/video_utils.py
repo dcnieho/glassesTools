@@ -118,7 +118,7 @@ def getFrameTimestampsFromVideo(vid_file):
         frameTs = (dts+empty_duration)/media_time_scale*1000
     else:
         # open file with opencv and get timestamps of each frame
-        vid = cv2.VideoCapture(str(vid_file))
+        vid = cv2.VideoCapture(vid_file)
         nframes = float(vid.get(cv2.CAP_PROP_FRAME_COUNT))
         frameTs = []
         frame_idx = 0

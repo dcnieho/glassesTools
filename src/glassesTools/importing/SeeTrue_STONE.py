@@ -127,7 +127,7 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
     # get scene video dimensions by interrogating a frame in sceneVidDir
     sceneVidDir = inputDir / ('ScenePics_' + recInfo.name)
     frame = next(sceneVidDir.glob('*.jpeg'))
-    h,w,_ = cv2.imread(str(frame)).shape
+    h,w,_ = cv2.imread(frame).shape
 
     # prep gaze data and get video frame timestamps from it
     print('  Prepping gaze data...')
@@ -182,7 +182,7 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
         blackIm = np.zeros((h,w,3), np.uint8)   # black image
         for f in blackFrames:
             # store black frame to file
-            cv2.imwrite(str(sceneVidDir / 'frame_{:d}.jpeg'.format(f)),blackIm)
+            cv2.imwrite(sceneVidDir / f'frame_{f:d}.jpeg',blackIm)
             frames.append(f)
         frames = sorted(frames)
 
@@ -253,7 +253,7 @@ def getCameraHardcoded(outputDir: str|pathlib.Path):
     camera['resolution'] = np.array([640, 480])
 
     # store to file
-    fs = cv2.FileStorage(str(outputDir / 'calibration.xml'), cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(outputDir / 'calibration.xml', cv2.FILE_STORAGE_WRITE)
     for key,value in camera.items():
         fs.write(name=key,val=value)
     fs.release()

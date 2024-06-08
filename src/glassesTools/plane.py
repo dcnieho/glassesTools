@@ -44,7 +44,7 @@ class Plane:
         img = None
         # read from file if image exists
         if ref_image_store_path is not None and ref_image_store_path.is_file():
-            img = cv2.imread(str(ref_image_store_path), cv2.IMREAD_COLOR)
+            img = cv2.imread(ref_image_store_path, cv2.IMREAD_COLOR)
         # if image doesn't exist or is the wrong size, create
         if img is None or img.shape[1]!=ref_image_width:
             img = self._store_reference_image(ref_image_store_path, ref_image_width)
@@ -209,7 +209,7 @@ class Plane:
                     img[idxs[0]:idxs[1], idxs[2]:idxs[3]] = mark
 
         if path:
-            cv2.imwrite(str(path), img)
+            cv2.imwrite(path, img)
 
         return img
 
