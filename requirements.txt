@@ -1,6 +1,7 @@
 numpy
 pandas
 msgpack
-opencv-python-headless==4.9.0.80
+imgui_bundle==1.3.0
+opencv-python-headless==4.10.0.82
 ffpyplayer      # comes with ffmpeg binaries we need
 scipy==1.11.3
