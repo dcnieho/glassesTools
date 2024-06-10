@@ -50,18 +50,6 @@ class Gaze:
         self.gazePosPlane2DLeft                 = gazePosPlane2DLeft                # lGaze3D in poster space
         self.gazePosPlane2DRight                = gazePosPlane2DRight               # rGaze3D in poster space
 
-    @staticmethod
-    def readFromFile(fileName:str|pathlib.Path, start:int=None, end:int=None) -> dict[int,list['Gaze']]:
-        return data_files.read_file(fileName,
-                                    Gaze, False, False, True,
-                                    start=start,end=end)[0]
-
-    @staticmethod
-    def writeToFile(gazes: list['Gaze'] | dict[int,list['Gaze']], fileName:str|pathlib.Path, skip_missing=False):
-        data_files.write_array_to_file(gazes, fileName,
-                                       Gaze._columns_compressed,
-                                       skip_all_nan=skip_missing)
-
     def drawOnWorldVideo(self, img, cameraParams: ocv.CameraParams, subPixelFac=1):
         # project to camera, display
         def project_and_draw(img,pos,sz,clr):
@@ -107,14 +95,23 @@ class Gaze:
         if self.gazePosPlane2D_vidPos_ray is not None:
             reference.draw(img, *self.gazePosPlane2D_vidPos_ray, subPixelFac, (255,255,0), 3)
 
+def read_dict_from_file(fileName:str|pathlib.Path, start:int=None, end:int=None) -> dict[int,list[Gaze]]:
+    return data_files.read_file(fileName,
+                                Gaze, False, False, True,
+                                start=start,end=end)[0]
+
+def write_dict_to_file(gazes: list[Gaze] | dict[int,list[Gaze]], fileName:str|pathlib.Path, skip_missing=False):
+    data_files.write_array_to_file(gazes, fileName,
+                                   Gaze._columns_compressed,
+                                   skip_all_nan=skip_missing)
 
 def gazes_head_to_world(poses: list[plane.Pose], gazes_head: dict[int,list[gaze_headref.Gaze]], cameraParams: ocv.CameraParams) -> dict[int,list[Gaze]]:
     from . import transforms
-    planeGazes = {}
+    plane_gazes = {}
     for frame_idx in poses:
         if frame_idx in gazes_head:
-            planeGazes[frame_idx] = []
+            plane_gazes[frame_idx] = []
             for gaze in gazes_head[frame_idx]:
                 gazePoster = transforms.gazeToPlane(gaze, poses[frame_idx], cameraParams)
-                planeGazes[frame_idx].append(gazePoster)
-    return planeGazes
+                plane_gazes[frame_idx].append(gazePoster)
+    return plane_gazes

@@ -246,18 +246,6 @@ class Pose:
         self._RtMatInv    = None
         self._iH          = None
 
-    @staticmethod
-    def readFromFile(fileName:str|pathlib.Path, start:int=None, end:int=None) -> dict[int,'Pose']:
-        return data_files.read_file(fileName,
-                                    Pose, True, True, False,
-                                    start=start, end=end)[0]
-
-    @staticmethod
-    def writeToFile(poses: list['Pose'], fileName:str|pathlib.Path, skip_failed=False):
-        data_files.write_array_to_file(poses, fileName,
-                                       Pose._columns_compressed,
-                                       skip_all_nan=skip_failed)
-
     def camToWorld(self, point: np.ndarray):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
             return np.full((3,), np.nan)
@@ -336,3 +324,14 @@ class Pose:
 
         # find intersection of 3D gaze with poster
         return transforms.intersect_plane_ray(self._planeNormal, self._planePoint, vector.flatten(), origin.flatten())
+
+
+def read_dict_from_file(fileName:str|pathlib.Path, start:int=None, end:int=None) -> dict[int,Pose]:
+    return data_files.read_file(fileName,
+                                Pose, True, True, False,
+                                start=start, end=end)[0]
+
+def write_list_to_file(poses: list[Pose], fileName:str|pathlib.Path, skip_failed=False):
+    data_files.write_array_to_file(poses, fileName,
+                                    Pose._columns_compressed,
+                                    skip_all_nan=skip_failed)

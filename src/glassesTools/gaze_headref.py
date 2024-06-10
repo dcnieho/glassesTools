@@ -30,11 +30,6 @@ class Gaze:
         self.gaze_dir_r  : np.ndarray   = gaze_dir_r
         self.gaze_ori_r  : np.ndarray   = gaze_ori_r
 
-    @staticmethod
-    def readFromFile(fileName:str|pathlib.Path) -> tuple[dict[int,list['Gaze']], int]:
-        return data_files.read_file(fileName,
-                                    Gaze, False, False, True)
-
     def draw(self, img:np.ndarray, cameraParams:ocv.CameraParams=None, subPixelFac=1):
         drawing.openCVCircle(img, self.gaze_pos_vid, 8, (0,255,0), 2, subPixelFac)
         # draw 3D gaze point as well, usually coincides with 2D gaze point, but not always. E.g. the Adhawk MindLink may
@@ -44,3 +39,8 @@ class Gaze:
             camPos = np.zeros((1,3)) if cameraParams.position     is None else cameraParams.position
             a = cv2.projectPoints(np.array(self.gaze_pos_3d).reshape(1,3),camRot,camPos,cameraParams.camera_mtx,cameraParams.distort_coeffs)[0][0][0]
             drawing.openCVCircle(img, a, 5, (0,255,255), -1, subPixelFac)
+
+
+def read_dict_from_file(fileName:str|pathlib.Path) -> tuple[dict[int,list[Gaze]], int]:
+    return data_files.read_file(fileName,
+                                Gaze, False, False, True)
