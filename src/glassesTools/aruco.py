@@ -136,10 +136,10 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
 
 def run_pose_estimation(in_video, frame_timestamp_file, camera_calibration_file,
-                        output_dir, out_file,
+                        output_dir,
                         processing_intervals,
                         ArUco_board, aruco_params, min_num_markers,
-                        gui, arm_length, sub_pixel_fac = 8, show_rejected_markers = False):
+                        gui, arm_length, sub_pixel_fac = 8, show_rejected_markers = False) -> tuple[bool, list[plane.Pose]]:
     show_visualization = gui is not None
 
     # open video
@@ -200,9 +200,7 @@ def run_pose_estimation(in_video, frame_timestamp_file, camera_calibration_file,
                 stop_all_processing = True
                 break
 
-    plane.Pose.writeToFile(poses, output_dir / out_file, skip_failed=True)
-
     if show_visualization:
         gui.stop()
 
-    return stop_all_processing
+    return stop_all_processing, poses
