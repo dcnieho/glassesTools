@@ -270,6 +270,26 @@ class Pose:
 
         return np.matmul(self._RtMat,np.append(np.array(point),1.).reshape((4,1))).flatten()
 
+    def planeToCamPose(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
+        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)) or not camera_params.has_intrinsics():
+            return np.full((2,), np.nan)
+        return cv2.projectPoints(point, self.pose_R_vec, self.pose_T_vec, camera_params.camera_mtx, camera_params.distort_coeffs)[0].flatten()
+
+    def camToPlanePose(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
+        # NB: also returns intermediate result (intersection with poster in camera space)
+        from . import transforms
+        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)) or not camera_params.has_intrinsics():
+            return np.full((2,), np.nan), np.full((3,), np.nan)
+
+        g3D = transforms.unprojectPoint(*point, camera_params.camera_mtx, camera_params.distort_coeffs)
+
+        # find intersection of 3D gaze with poster
+        pos_cam = self.vectorIntersect(g3D)  # default vec origin (0,0,0) because we use g3D from camera's view point
+
+        # above intersection is in camera space, turn into poster space to get position on poster
+        (x,y,z) = self.camToWorld(pos_cam) # z should be very close to zero
+        return np.asarray([x, y]), pos_cam
+
     def planeToCamHomography(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
         # from location on plane (2D) to location on camera image (2D)
         from . import transforms
