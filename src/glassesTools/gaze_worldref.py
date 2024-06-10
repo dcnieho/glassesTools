@@ -95,10 +95,10 @@ class Gaze:
         if self.gazePosPlane2D_vidPos_ray is not None:
             reference.draw(img, *self.gazePosPlane2D_vidPos_ray, subPixelFac, (255,255,0), 3)
 
-def read_dict_from_file(fileName:str|pathlib.Path, start:int=None, end:int=None) -> dict[int,list[Gaze]]:
+def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,list[Gaze]]:
     return data_files.read_file(fileName,
                                 Gaze, False, False, True,
-                                start=start,end=end)[0]
+                                episodes=episodes)[0]
 
 def write_dict_to_file(gazes: list[Gaze] | dict[int,list[Gaze]], fileName:str|pathlib.Path, skip_missing=False):
     data_files.write_array_to_file(gazes, fileName,

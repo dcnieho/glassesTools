@@ -48,9 +48,8 @@ def read_file(fileName          : str|pathlib.Path,
               drop_if_all_nan   : bool,
               none_if_any_nan   : bool,
               as_list_dict      : bool,
-              start             : Optional[int]     = None,
-              end               : Optional[int]     = None,
-              subset_var                            = 'frame_idx'):
+              episodes          : Optional[list[list[int]]] = None,
+              subset_var                                    = 'frame_idx'):
 
     # interrogate destination object
     cols_compressed: dict[str, int] = object._columns_compressed
@@ -58,8 +57,11 @@ def read_file(fileName          : str|pathlib.Path,
 
     # read file and select, if wanted
     df          = pd.read_csv(str(fileName), delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **defaultdict(lambda: float, **dtypes)))
-    if start is not None and end is not None:
-        df = df[(df[subset_var] >= start) & (df[subset_var] <= end)]
+    if episodes:
+        sel = (df[subset_var] >= episodes[0][0]) & (df[subset_var] <= episodes[0][1])
+        for e in episodes[1:]:
+            sel |= (df[subset_var] >= e[0]) & (df[subset_var] <= e[1])
+        df = df[sel]
 
     # figure out what the data columns are
     cols_uncompressed = [getColumnLabels(c,N) if (N:=cols_compressed[c])>1 else [c] for c in cols_compressed]

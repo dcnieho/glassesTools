@@ -326,10 +326,10 @@ class Pose:
         return transforms.intersect_plane_ray(self._planeNormal, self._planePoint, vector.flatten(), origin.flatten())
 
 
-def read_dict_from_file(fileName:str|pathlib.Path, start:int=None, end:int=None) -> dict[int,Pose]:
+def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,Pose]:
     return data_files.read_file(fileName,
                                 Pose, True, True, False,
-                                start=start, end=end)[0]
+                                episodes=episodes)[0]
 
 def write_list_to_file(poses: list[Pose], fileName:str|pathlib.Path, skip_failed=False):
     data_files.write_array_to_file(poses, fileName,
