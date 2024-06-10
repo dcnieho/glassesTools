@@ -41,6 +41,7 @@ class Gaze:
             drawing.openCVCircle(img, a, 5, (0,255,255), -1, subPixelFac)
 
 
-def read_dict_from_file(fileName:str|pathlib.Path) -> tuple[dict[int,list[Gaze]], int]:
+def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> tuple[dict[int,list[Gaze]], int]:
     return data_files.read_file(fileName,
-                                Gaze, False, False, True)
+                                Gaze, False, False, True,
+                                episodes=episodes)
