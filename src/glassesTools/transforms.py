@@ -129,15 +129,8 @@ def gazeToPlane(gaze: gaze_headref.Gaze, pose: plane.Pose, cameraParams: ocv.Cam
         RtCam = np.hstack((RCam, cameraPosition))
 
         # project gaze on video to reference poster using camera pose
-        # turn observed gaze position on video into position on tangent plane
-        g3D = unprojectPoint(*gaze.gaze_pos_vid, cameraParams.camera_mtx, cameraParams.distort_coeffs)
-
-        # find intersection of 3D gaze with poster
-        gazeWorld.gazePosCam_vidPos_ray = pose.vectorIntersect(g3D)  # default vec origin (0,0,0) because we use g3D from camera's view point
-
-        # above intersection is in camera space, turn into poster space to get position on poster
-        (x,y,z) = pose.camToWorld(gazeWorld.gazePosCam_vidPos_ray) # z should be very close to zero
-        gazeWorld.gazePosPlane2D_vidPos_ray = np.asarray([x, y])
+        gazeWorld.gazePosPlane2D_vidPos_ray, gazeWorld.gazePosCam_vidPos_ray = \
+            pose.camToPlanePose(gaze.gaze_pos_vid, cameraParams)
 
         # project world-space gaze point (often binocular gaze point) to plane
         if gaze.gaze_pos_3d is not None:
