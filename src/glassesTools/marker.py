@@ -1,4 +1,8 @@
 import numpy as np
+import pathlib
+
+from . import data_files, drawing
+
 
 class Marker:
     def __init__(self, key, center, corners=None, color=None, rot=0):
@@ -49,3 +53,30 @@ def getUnrotated(cornerPoints, rot):
         cornerPoints = np.vstack((cornerPoints[2:,:], cornerPoints[0:2,:]))
 
     return cornerPoints
+
+class Pose:
+    # description of tsv file used for storage
+    _columns_compressed = {'frame_idx': 1, 'R_vec': 3, 'T_vec': 3}
+    _non_float          = {'frame_idx': int}
+
+    def __init__(self,
+                 frame_idx  : int,
+                 R_vec      : np.ndarray= None,
+                 T_vec      : np.ndarray= None):
+        self.frame_idx  : int         = frame_idx
+        self.R_vec      : np.ndarray  = R_vec
+        self.T_vec      : np.ndarray  = T_vec
+
+    def draw_origin_on_frame(self, frame, camera_matrix, dist_coeffs, arm_length, sub_pixel_fac = 8):
+        drawing.openCVFrameAxis(frame, camera_matrix, dist_coeffs, self.R_vec, self.T_vec, arm_length, 3, sub_pixel_fac)
+
+
+def read_dict_from_file(fileName:str|pathlib.Path, start:int=None, end:int=None) -> dict[int,Pose]:
+    return data_files.read_file(fileName,
+                                Pose, True, True, False,
+                                start=start, end=end)[0]
+
+def write_list_to_file(poses: list[Pose], fileName:str|pathlib.Path, skip_failed=False):
+    data_files.write_array_to_file(poses, fileName,
+                                    Pose._columns_compressed,
+                                    skip_all_nan=skip_failed)
