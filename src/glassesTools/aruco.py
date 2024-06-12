@@ -162,7 +162,7 @@ def run_pose_estimation(in_video, frame_timestamp_file, camera_calibration_file,
     show_visualization = gui is not None
 
     # open video
-    cap = ocv.CV2VideoReader(in_video, timestamps.from_file(frame_timestamp_file))
+    cap = ocv.CV2VideoReader(in_video, timestamps.VideoTimestamps(frame_timestamp_file).timestamps)
 
     # setup aruco marker detection
     aruco_boards = {p: planes[p]['plane'].get_aruco_board() for p in planes}
