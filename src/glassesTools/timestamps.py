@@ -1,6 +1,6 @@
 import numpy as np
+import pandas as pd
 import datetime
-import csv
 import warnings
 import bisect
 
@@ -23,40 +23,31 @@ class Timestamp:
 utils.register_type(utils.CustomTypeEntry(Timestamp,'__Timestamp__',lambda x: x.value, lambda x: Timestamp(x)))
 
 
-# for reading frame timestamp files
-def from_file(file) -> np.ndarray:
-    return np.genfromtxt(file, dtype=None, delimiter='\t', skip_header=1, usecols=1)
-
-class Idx2Timestamp:
+# for reading video timestamp files
+class VideoTimestamps:
     def __init__(self, fileName):
-        self.timestamps = {}
-        with open(str(fileName), 'r' ) as f:
-            reader = csv.DictReader(f, delimiter='\t')
-            for entry in reader:
-                frame_idx = int(float(entry['frame_idx']))
-                if frame_idx!=-1:
-                    self.timestamps[frame_idx] = float(entry['timestamp'])
+        self.timestamp_dict : dict[int,float] = {}
+        self.indices        : list[int] = []
+        self.timestamps     : list[float] = []
+        self._ifi           : float = None
 
-    def get(self, idx):
-        if idx in self.timestamps:
-            return self.timestamps[int(idx)]
+        df = pd.read_csv(fileName, delimiter='\t', index_col='frame_idx')
+        self.timestamp_dict = df.to_dict()['timestamp']
+
+        df = df.reset_index()
+        df = df[df['frame_idx']!=-1]
+        self.indices    = df['frame_idx'].to_list()
+        self.timestamps = df['timestamp'].to_list()
+
+    def get_timestamp(self, idx) -> float:
+        idx = int(idx)
+        if idx in self.timestamp_dict:
+            return self.timestamp_dict[idx]
         else:
             warnings.warn('frame_idx %d is not in set\n' % ( idx ), RuntimeWarning )
             return -1.
 
-class Timestamp2Index:
-    def __init__(self, fileName):
-        self.indices = []
-        self.timestamps = []
-        with open(str(fileName), 'r' ) as f:
-            reader = csv.DictReader(f, delimiter='\t')
-            for entry in reader:
-                frame_idx = int(float(entry['frame_idx']))
-                if frame_idx!=-1:
-                    self.indices   .append(int(float(entry['frame_idx'])))
-                    self.timestamps.append(    float(entry['timestamp']))
-
-    def find(self, ts):
+    def find_frame(self, ts) -> int:
         idx = bisect.bisect(self.timestamps, ts)
         # return nearest
         if idx>=len(self.timestamps):
@@ -66,8 +57,10 @@ class Timestamp2Index:
         else:
             return self.indices[idx]
 
-    def getLast(self):
+    def get_last(self) -> tuple[int,float]:
         return self.indices[-1], self.timestamps[-1]
 
-    def getIFI(self):
-        return np.mean(np.diff(self.timestamps))
+    def get_IFI(self) -> float:
+        if self._ifi is None:
+            self._ifi = np.mean(np.diff(self.timestamps))
+        return self._ifi
