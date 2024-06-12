@@ -246,7 +246,7 @@ class GUI:
         imgui.set_cursor_pos_y(win_bottom-txt_sz.y)
         imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
         imgui.begin_child("##status_overlay", size=(-imgui.FLT_MIN,txt_sz.y))
-        if (self._current_frame[w][1]):
+        if self._current_frame[w][1] is not None:
             imgui.text(" %8.3f [%d]" % (self._current_frame[w][1], self._current_frame[w][2]))
         else:
             imgui.text(" %d" % (self._current_frame[w][2],))
