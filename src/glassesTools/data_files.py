@@ -56,7 +56,7 @@ def read_file(fileName          : str|pathlib.Path,
     dtypes         : dict[str, Any] = object._non_float
 
     # read file and select, if wanted
-    df          = pd.read_csv(str(fileName), delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **defaultdict(lambda: float, **dtypes)))
+    df          = pd.read_csv(fileName, delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **defaultdict(lambda: float, **dtypes)))
     if episodes:
         sel = (df[subset_var] >= episodes[0][0]) & (df[subset_var] <= episodes[0][1])
         for e in episodes[1:]:
@@ -125,4 +125,4 @@ def write_array_to_file(objects         : list[Any] | dict[int,list[Any]],
     if skip_all_nan:
         df = df.dropna(how='all',subset=[c for cs in cols_uncompressed if len(cs)>1 for c in cs])
 
-    df.to_csv(str(fileName), index=False, sep='\t', na_rep='nan', float_format="%.8f")
+    df.to_csv(fileName, index=False, sep='\t', na_rep='nan', float_format="%.8f")
