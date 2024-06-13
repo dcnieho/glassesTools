@@ -43,20 +43,22 @@ def read_coord_file(file, package_to_read_from=None):
             return None
 
 
-def read_file(fileName          : str|pathlib.Path,
-              object            : Any,
-              drop_if_all_nan   : bool,
-              none_if_any_nan   : bool,
-              as_list_dict      : bool,
-              episodes          : Optional[list[list[int]]] = None,
-              subset_var                                    = 'frame_idx'):
+def read_file(fileName               : str|pathlib.Path,
+              object                 : Any,
+              drop_if_all_nan        : bool,
+              none_if_any_nan        : bool,
+              as_list_dict           : bool,
+              make_ori_ts_fridx      : bool,
+              episodes               : Optional[list[list[int]]] = None,
+              ts_fridx_field_suffixes: list[str]                 = None,
+              subset_var                                         = 'frame_idx'):
 
     # interrogate destination object
     cols_compressed: dict[str, int] = object._columns_compressed
     dtypes         : dict[str, Any] = object._non_float
 
     # read file and select, if wanted
-    df          = pd.read_csv(fileName, delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **defaultdict(lambda: float, **dtypes)))
+    df          = pd.read_csv(fileName, delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **dtypes))
     if episodes:
         sel = (df[subset_var] >= episodes[0][0]) & (df[subset_var] <= episodes[0][1])
         for e in episodes[1:]:
@@ -87,6 +89,26 @@ def read_file(fileName          : str|pathlib.Path,
     # keep only the columns we want (this also puts them in the right order even if that doesn't matter since we use kwargs to construct objects)
     df = df[[c for c in cols_compressed.keys() if c in df.columns]]
 
+    # if we have multiple timestamps of frame_idxs, make sure we keep a copy of the original one
+    if make_ori_ts_fridx:
+        # make copies of original
+        df['frame_idx_ori'] = df['frame_idx']
+        if 'timestamp' in df.columns:
+            df['timestamp_ori'] = df['timestamp']
+    # now put requested into normal timestamp column, if wanted
+    if make_ori_ts_fridx and ts_fridx_field_suffixes:
+        copied = False
+        for suf in ts_fridx_field_suffixes: # these are in order of preference
+            field = f'frame_idx_{suf}'
+            if field not in df.columns:
+                continue
+            df['frame_idx'] = df[f'frame_idx_{suf}']
+            if 'timestamp' in df.columns:
+                df['timestamp'] = df[f'timestamp_{suf}']
+            copied = True
+            break
+        assert copied, "None of the specified suffixes were found, can't continue"
+
     if as_list_dict:
         obj_list = [object(**kwargs) for kwargs in df.to_dict(orient='records')]
 
@@ -98,12 +120,16 @@ def read_file(fileName          : str|pathlib.Path,
         objs = {idx:object(**kwargs) for idx,kwargs in zip(df[subset_var].values,df.to_dict(orient='records'))}
     return objs, df[subset_var].max()
 
-def write_array_to_file(objects         : list[Any] | dict[int,list[Any]],
-                        fileName        : str|pathlib.Path,
-                        cols_compressed : dict[str, int],
-                        skip_all_nan    : bool              = False):
+def write_array_to_file(objects             : list[Any] | dict[int,list[Any]],
+                        fileName            : str|pathlib.Path,
+                        cols_compressed     : dict[str, int],
+                        drop_all_nan_cols   : list[str]         = None,
+                        skip_all_nan        : bool              = False):
     if not objects:
         return
+
+    if drop_all_nan_cols is None:
+        drop_all_nan_cols = []
 
     if isinstance(objects, dict):
         # flatten
@@ -118,11 +144,23 @@ def write_array_to_file(objects         : list[Any] | dict[int,list[Any]],
         if len(ac)>1:
             df[ac] = np.vstack([allNanIfNone(v,len(ac)).flatten() for v in df[c].values])
 
+    # if wanted, drop specific columns for which all rows are nan
+    if drop_all_nan_cols:
+        df = df.drop([c for c in drop_all_nan_cols if c in df and df[c].isnull().all()], axis='columns')
+
+    # if we have filled _ori timestamp and frame_idx columns, copy them back into plain timestamp
+    # and frame_idx columns. NB: the _ori columns will be removed because they're not listed in
+    # the possible file columns
+    if 'timestamp_ori' in df.columns and not df['timestamp_ori'].isnull().all():
+        df['timestamp'] = df['timestamp_ori']
+    if 'frame_idx_ori' in df.columns and not df['frame_idx_ori'].isnull().all():
+        df['frame_idx'] = df['frame_idx_ori']
+
     # keep only columns to be written out and order them correctly
-    df = df[[c for cs in cols_uncompressed for c in cs]]
+    df = df[[c for cs in cols_uncompressed for c in cs if c in df.columns]]
 
     # drop rows where are all data columns are nan
     if skip_all_nan:
-        df = df.dropna(how='all',subset=[c for cs in cols_uncompressed if len(cs)>1 for c in cs])
+        df = df.dropna(how='all', subset=[c for cs in cols_uncompressed if len(cs)>1 for c in cs])
 
     df.to_csv(fileName, index=False, sep='\t', na_rep='nan', float_format="%.8f")
