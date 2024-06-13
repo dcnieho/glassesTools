@@ -7,14 +7,22 @@ from . import data_files, drawing, gaze_headref, ocv, plane
 
 class Gaze:
     # description of tsv file used for storage
-    _columns_compressed = {'timestamp': 1, 'frame_idx':1,
+    _columns_compressed = {'timestamp': 1, 'timestamp_VOR': 1, 'timestamp_ref': 1, 'frame_idx':1, 'frame_idx_VOR':1, 'frame_idx_ref':1,
                            'gazePosCam_vidPos_ray':3,'gazePosCam_vidPos_homography':3,'gazePosCamWorld':3,'gazeOriCamLeft':3,'gazePosCamLeft':3,'gazeOriCamRight':3,'gazePosCamRight':3,
                            'gazePosPlane2D_vidPos_ray':2,'gazePosPlane2D_vidPos_homography':2,'gazePosPlane2DWorld':2,'gazePosPlane2DLeft':2,'gazePosPlane2DRight':2}
-    _non_float          = {'frame_idx': int}
+    _non_float          = {'frame_idx': int, 'frame_idx_VOR': int, 'frame_idx_ref': int}
+    _columns_optional   = ['timestamp_VOR', 'frame_idx_VOR', 'timestamp_ref', 'frame_idx_ref']
 
     def __init__(self,
                  timestamp                          : float,
                  frame_idx                          : int,
+
+                 timestamp_ori                      : float      = None,
+                 frame_idx_ori                      : int        = None,
+                 timestamp_VOR                      : float      = None,
+                 frame_idx_VOR                      : int        = None,
+                 timestamp_ref                      : float      = None,
+                 frame_idx_ref                      : int        = None,
 
                  gazePosCam_vidPos_ray              : np.ndarray = None,
                  gazePosCam_vidPos_homography       : np.ndarray = None,
@@ -33,6 +41,14 @@ class Gaze:
         # 2D gaze is on the poster
         self.timestamp                          = timestamp
         self.frame_idx                          = frame_idx
+
+        # optional timestamps and frame_idxs
+        self.timestamp_ori                      = timestamp_ori                     # timestamp field can be set to any of these three. Keep here a copy of the original timestamp
+        self.frame_idx_ori                      = frame_idx_ori
+        self.timestamp_VOR                      = timestamp_VOR
+        self.frame_idx_VOR                      = frame_idx_VOR
+        self.timestamp_ref                      = timestamp_ref
+        self.frame_idx_ref                      = frame_idx_ref                     # frameidx _in reference video_ not in this eye tracker's video (unless this is the reference)
 
         # in camera space (3D coordinates)
         self.gazePosCam_vidPos_ray              = gazePosCam_vidPos_ray             # video gaze position on plane (camera ray intersected with plane)
@@ -95,14 +111,15 @@ class Gaze:
         if self.gazePosPlane2D_vidPos_ray is not None:
             reference.draw(img, *self.gazePosPlane2D_vidPos_ray, subPixelFac, (255,255,0), 3)
 
-def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,list[Gaze]]:
+def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None, ts_column_suffixes: list[str] = None) -> dict[int,list[Gaze]]:
     return data_files.read_file(fileName,
-                                Gaze, False, False, True,
-                                episodes=episodes)[0]
+                                Gaze, False, False, True, True,
+                                episodes=episodes, ts_fridx_field_suffixes=ts_column_suffixes)[0]
 
 def write_dict_to_file(gazes: list[Gaze] | dict[int,list[Gaze]], fileName:str|pathlib.Path, skip_missing=False):
     data_files.write_array_to_file(gazes, fileName,
                                    Gaze._columns_compressed,
+                                   Gaze._columns_optional,
                                    skip_all_nan=skip_missing)
 
 def gazes_head_to_world(poses: list[plane.Pose], gazes_head: dict[int,list[gaze_headref.Gaze]], cameraParams: ocv.CameraParams) -> dict[int,list[Gaze]]:
