@@ -155,7 +155,7 @@ def getFrameTimestampsFromVideo(vid_file):
     return frameTsDf
 
 
-def tssToFrameNumber(ts,frameTimestamps,mode='nearest'):
+def tssToFrameNumber(ts,frameTimestamps,mode='nearest',trim=False):
     df = pd.DataFrame(index=ts)
     df.insert(0,'frame_idx',np.int64(0))
     if isinstance(frameTimestamps, list):
@@ -176,6 +176,13 @@ def tssToFrameNumber(ts,frameTimestamps,mode='nearest'):
         left = frameTimestamps[idxs-1]
         right = frameTimestamps[idxs]
         idxs -= ts - left < right - ts
+
+    if trim:
+        # set any timestamps before to -1
+        idxs[df.index<0] = -1
+        # get average frame interval, and set data beyond framets+1 extra frame to -1 as well
+        avIFI = np.mean(np.diff(df.index.to_numpy()))
+        idxs[df.index>frameTimestamps[-1]+avIFI] = -1
 
     df=df.assign(frame_idx=idxs)
     if mode=='after':
