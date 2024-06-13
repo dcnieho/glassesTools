@@ -7,7 +7,7 @@ from . import data_files, drawing, ocv
 
 class Gaze:
     # description of tsv file used for storage
-    _columns_compressed = {'timestamp': 1, 'timestamp_VOR': 1, 'frame_idx':1, 'frame_idx_VOR':1,
+    _columns_compressed = {'timestamp': 1, 'timestamp_VOR': 1, 'timestamp_ref': 1, 'frame_idx':1, 'frame_idx_VOR':1, 'frame_idx_ref':1,
                            'gaze_pos_vid': 2, 'gaze_pos_3d': 3, 'gaze_dir_l': 3, 'gaze_ori_l': 3, 'gaze_dir_r': 3, 'gaze_ori_r': 3}
     _non_float          = {'frame_idx': int, 'frame_idx_VOR': int, 'frame_idx_ref': int}
 
