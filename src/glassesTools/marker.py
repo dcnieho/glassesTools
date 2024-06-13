@@ -71,10 +71,10 @@ class Pose:
         drawing.openCVFrameAxis(frame, camera_matrix, dist_coeffs, self.R_vec, self.T_vec, arm_length, 3, sub_pixel_fac)
 
 
-def read_dict_from_file(fileName:str|pathlib.Path, start:int=None, end:int=None) -> dict[int,Pose]:
+def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,Pose]:
     return data_files.read_file(fileName,
                                 Pose, True, True, False,
-                                start=start, end=end)[0]
+                                episodes=episodes)[0]
 
 def write_list_to_file(poses: list[Pose], fileName:str|pathlib.Path, skip_failed=False):
     data_files.write_array_to_file(poses, fileName,
