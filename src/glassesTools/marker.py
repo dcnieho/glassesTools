@@ -73,7 +73,7 @@ class Pose:
 
 def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,Pose]:
     return data_files.read_file(fileName,
-                                Pose, True, True, False,
+                                Pose, True, True, False, False,
                                 episodes=episodes)[0]
 
 def write_list_to_file(poses: list[Pose], fileName:str|pathlib.Path, skip_failed=False):
