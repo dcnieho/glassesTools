@@ -43,6 +43,9 @@ def read_coord_file(file, package_to_read_from=None):
             return None
 
 
+def uncompress_columns(cols_compressed: dict[str, int]):
+    return [getColumnLabels(c,N) if (N:=cols_compressed[c])>1 else [c] for c in cols_compressed]
+
 def read_file(fileName               : str|pathlib.Path,
               object                 : Any,
               drop_if_all_nan        : bool,
@@ -66,7 +69,7 @@ def read_file(fileName               : str|pathlib.Path,
         df = df[sel]
 
     # figure out what the data columns are
-    cols_uncompressed = [getColumnLabels(c,N) if (N:=cols_compressed[c])>1 else [c] for c in cols_compressed]
+    cols_uncompressed = uncompress_columns(cols_compressed)
 
     # drop rows where are all data columns are nan
     if drop_if_all_nan:
@@ -139,7 +142,7 @@ def write_array_to_file(objects             : list[Any] | dict[int,list[Any]],
     df = pd.DataFrame.from_records(records)
 
     # unpack array columns
-    cols_uncompressed = [getColumnLabels(c,N) if (N:=cols_compressed[c])>1 else [c] for c in cols_compressed]
+    cols_uncompressed = uncompress_columns(cols_compressed)
     for c,ac in zip(cols_compressed,cols_uncompressed):
         if len(ac)>1:
             df[ac] = np.vstack([allNanIfNone(v,len(ac)).flatten() for v in df[c].values])
