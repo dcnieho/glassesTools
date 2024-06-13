@@ -158,6 +158,8 @@ def getFrameTimestampsFromVideo(vid_file):
 def tssToFrameNumber(ts,frameTimestamps,mode='nearest'):
     df = pd.DataFrame(index=ts)
     df.insert(0,'frame_idx',np.int64(0))
+    if isinstance(frameTimestamps, list):
+        frameTimestamps = np.array(frameTimestamps)
 
     # get index where this ts would be inserted into the frame_timestamp array
     idxs = np.searchsorted(frameTimestamps, ts)
