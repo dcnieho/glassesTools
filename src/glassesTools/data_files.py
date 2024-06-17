@@ -46,6 +46,11 @@ def read_coord_file(file, package_to_read_from=None):
 def uncompress_columns(cols_compressed: dict[str, int]):
     return [getColumnLabels(c,N) if (N:=cols_compressed[c])>1 else [c] for c in cols_compressed]
 
+def _get_col_name_with_suffix(base:str, suf:str):
+    if not suf:
+        return base
+    return base + '_' + suf
+
 def read_file(fileName               : str|pathlib.Path,
               object                 : Any,
               drop_if_all_nan        : bool,
@@ -102,12 +107,12 @@ def read_file(fileName               : str|pathlib.Path,
     if make_ori_ts_fridx and ts_fridx_field_suffixes:
         copied = False
         for suf in ts_fridx_field_suffixes: # these are in order of preference
-            field = f'frame_idx_{suf}'
+            field = _get_col_name_with_suffix('frame_idx',suf)
             if field not in df.columns:
                 continue
-            df['frame_idx'] = df[f'frame_idx_{suf}']
+            df['frame_idx'] = df[field]
             if 'timestamp' in df.columns:
-                df['timestamp'] = df[f'timestamp_{suf}']
+                df['timestamp'] = df[_get_col_name_with_suffix('timestamp',suf)]
             copied = True
             break
         assert copied, "None of the specified suffixes were found, can't continue"
