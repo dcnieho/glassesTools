@@ -238,17 +238,17 @@ def run_pose_estimation(in_video, frame_timestamp_file, camera_calibration_file,
                 detectors[p].visualize(frame, pose, detect_dicts[p], planes[p]['plane'].marker_size/2, sub_pixel_fac, show_rejected_markers)
 
         # deal with individual markers, if any
-        if cam_params.has_intrinsics() and has_individual_markers and ids is not None:
+        if has_individual_markers and ids is not None:
             found_markers = np.where([x[0] in individual_markers for x in ids])[0]
             if found_markers.size>0:
                 for idx in found_markers:
                     m_id = ids[idx][0]
                     pose = marker.Pose(frame_idx)
-                    ret, pose.R_vec, pose.T_vec = cv2.solvePnP(object_points[m_id], corners[idx], cam_params.camera_mtx, cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                    if not ret:
-                        continue
+                    if cam_params.has_intrinsics():
+                        # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
+                        _, pose.R_vec, pose.T_vec = cv2.solvePnP(object_points[m_id], corners[idx], cam_params.camera_mtx, cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
                     individual_markers_out[m_id].append(pose)
-                    if show_visualization:
+                    if show_visualization and cam_params.has_intrinsics():
                         pose.draw_origin_on_frame(frame, cam_params.camera_mtx, cam_params.distort_coeffs, individual_markers[m_id]['marker_size']/2, sub_pixel_fac)
 
         if show_visualization:
