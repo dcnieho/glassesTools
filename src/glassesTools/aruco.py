@@ -78,7 +78,7 @@ class ArUcoDetector():
         return N_markers, H
 
     # higher level functions for detecting + pose estimation, and for results visualization
-    def estimate_pose_homography(self, frame_idx, min_num_markers, corners, ids) -> tuple[plane.Pose, dict[str,Any]]:
+    def estimate_pose_and_homography(self, frame_idx, min_num_markers, corners, ids) -> tuple[plane.Pose, dict[str,Any]]:
         pose = plane.Pose(frame_idx)
         if ids is not None and len(ids) >= min_num_markers:
             # get matching image and board points
@@ -95,7 +95,7 @@ class ArUcoDetector():
 
     def detect_and_estimate(self, frame, frame_idx, min_num_markers) -> tuple[plane.Pose, dict[str,Any]]:
         corners, ids, rejectedImgPoints, recoveredIds = self.detect_markers(frame, min_nmarker_refine=min_num_markers)
-        pose = self.estimate_pose_homography(frame_idx, min_num_markers, corners, ids)
+        pose = self.estimate_pose_and_homography(frame_idx, min_num_markers, corners, ids)
         return pose, {'corners': corners, 'ids': ids, 'rejectedImgPoints': rejectedImgPoints, 'recoveredIds': recoveredIds}
 
     def visualize(self, frame, pose: plane.Pose, detect_dict, arm_length, sub_pixel_fac = 8, show_rejected_markers = False):
@@ -231,14 +231,14 @@ def run_pose_estimation(in_video, frame_timestamp_file, camera_calibration_file,
                 detect_dicts[p] = dict(zip(['corners', 'ids', 'rejectedImgPoints', 'recoveredIds'], detectors[p].detect_markers(frame, planes[p]['min_num_markers'])))
         # determine pose
         for p in planes_for_this_frame:
-            pose = detectors[p].estimate_pose_homography(frame_idx, planes[p]['min_num_markers'], detect_dicts[p]['corners'], detect_dicts[p]['ids'])
+            pose = detectors[p].estimate_pose_and_homography(frame_idx, planes[p]['min_num_markers'], detect_dicts[p]['corners'], detect_dicts[p]['ids'])
             poses[p].append(pose)
             # draw detection and pose, if wanted
             if show_visualization:
                 detectors[p].visualize(frame, pose, detect_dicts[p], planes[p]['plane'].marker_size/2, sub_pixel_fac, show_rejected_markers)
 
         # deal with individual markers, if any
-        if has_individual_markers and ids is not None:
+        if cam_params.has_intrinsics() and has_individual_markers and ids is not None:
             found_markers = np.where([x[0] in individual_markers for x in ids])[0]
             if found_markers.size>0:
                 for idx in found_markers:
