@@ -49,6 +49,7 @@ class ArUcoDetector():
         return self._estimate_pose_impl(objP, imgP)
 
     def _estimate_pose_impl(self, objP, imgP):
+        # NB: N_markers also flags success of the pose estimation. Also 0 if not successful or not possible (missing intrinsics)
         N_markers, R_vec, T_vec = 0, None, None
         if objP is None or not self._camera_params.has_intrinsics():
             return N_markers, R_vec, T_vec
@@ -63,6 +64,7 @@ class ArUcoDetector():
         return self._estimate_homography_impl(objP, imgP)
 
     def _estimate_homography_impl(self, objP, imgP):
+        # NB: N_markers also flags success of the pose estimation. Also 0 if not successful or not possible (missing intrinsics)
         from . import transforms
         N_markers, H = 0, None
         if objP is None:
