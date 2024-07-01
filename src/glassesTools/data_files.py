@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import polars as pl
 import pathlib
 import importlib
 from typing import Any, Optional
@@ -171,4 +172,6 @@ def write_array_to_file(objects             : list[Any] | dict[int,list[Any]],
     if skip_all_nan:
         df = df.dropna(how='all', subset=[c for cs in cols_uncompressed if len(cs)>1 for c in cs])
 
-    df.to_csv(fileName, index=False, sep='\t', na_rep='nan', float_format="%.8f")
+    # convert to polars as that library saves to file waaay faster
+    df = pl.from_pandas(df)
+    df.write_csv(fileName, separator='\t', null_value='nan', float_precision=8)
