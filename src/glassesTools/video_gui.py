@@ -25,6 +25,7 @@ class GUI:
         self._current_frame = {}
 
         self._next_window_id: int = 0
+        self._windows_lock: threading.Lock = threading.Lock()
         self._windows: dict[int,str] = {}
         self._window_flags = int(
                                     imgui.WindowFlags_.no_title_bar |
@@ -44,17 +45,18 @@ class GUI:
         self.stop()
 
     def add_window(self,name: str) -> int:
-        id = self._next_window_id
-        self._windows[id] = name
-        self._texID[id] = None
-        self._new_frame[id] = (None, None, -1)
-        self._current_frame[id] = (None, None, -1)
-        self._window_visible[id] = False
-        self._window_determine_size[id] = False
-        self._window_sfac[id]    = 1.
+        with self._windows_lock:
+            id = self._next_window_id
+            self._windows[id] = name
+            self._texID[id] = None
+            self._new_frame[id] = (None, None, -1)
+            self._current_frame[id] = (None, None, -1)
+            self._window_visible[id] = False
+            self._window_determine_size[id] = False
+            self._window_sfac[id]    = 1.
 
-        self._next_window_id += 1
-        return id
+            self._next_window_id += 1
+            return id
 
     def start(self):
         if not self._windows:
@@ -121,7 +123,8 @@ class GUI:
         return out
 
     def _get_main_window_id(self):
-        return next(iter(self._windows))
+        with self._windows_lock:
+            return next(iter(self._windows))
 
     def _thread_start_fun(self):
         self._lastT=0.
@@ -184,41 +187,42 @@ class GUI:
                 self._pressed_keys[k] = [thisT, imgui.is_key_down(imgui.Key.im_gui_mod_shift)]
 
         # upload texture if needed
-        for w in self._windows:
-            if self._new_frame[w][0] is not None:
-                if self._texID[w] is None:
-                    self._texID[w] = gl.glGenTextures(1)
-                # upload texture
-                gl.glBindTexture(gl.GL_TEXTURE_2D, self._texID[w])
-                gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
-                gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-                gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_BORDER)
-                gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_BORDER)
-                gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
-                gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGB, self._new_frame[w][0].shape[1], self._new_frame[w][0].shape[0], 0, gl.GL_BGR, gl.GL_UNSIGNED_BYTE, self._new_frame[w][0])
+        with self._windows_lock:
+            for w in self._windows:
+                if self._new_frame[w][0] is not None:
+                    if self._texID[w] is None:
+                        self._texID[w] = gl.glGenTextures(1)
+                    # upload texture
+                    gl.glBindTexture(gl.GL_TEXTURE_2D, self._texID[w])
+                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
+                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_BORDER)
+                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_BORDER)
+                    gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
+                    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGB, self._new_frame[w][0].shape[1], self._new_frame[w][0].shape[0], 0, gl.GL_BGR, gl.GL_UNSIGNED_BYTE, self._new_frame[w][0])
 
-                # if first time we're showing something (we have a new frame but not yet a current frame)
-                if self._current_frame[w][0] is None:
-                    if w==0:
-                        # tell window to resize
-                        self._window_determine_size[w] = True
-                        # and show window if needed
-                        if not self._window_visible[w]:
-                            hello_imgui.get_runner_params().app_window_params.hidden = False
-                    # mark window as shown
-                    self._window_visible[w] = True
-                else:
-                    # detect when frame changed size
-                    self._window_determine_size[w] = any([x!=y for x,y in zip(self._current_frame[w][0].shape,self._new_frame[w][0].shape)])
+                    # if first time we're showing something (we have a new frame but not yet a current frame)
+                    if self._current_frame[w][0] is None:
+                        if w==0:
+                            # tell window to resize
+                            self._window_determine_size[w] = True
+                            # and show window if needed
+                            if not self._window_visible[w]:
+                                hello_imgui.get_runner_params().app_window_params.hidden = False
+                        # mark window as shown
+                        self._window_visible[w] = True
+                    else:
+                        # detect when frame changed size
+                        self._window_determine_size[w] = any([x!=y for x,y in zip(self._current_frame[w][0].shape,self._new_frame[w][0].shape)])
 
-                # keep record of what we're showing
-                self._current_frame[w]  = self._new_frame[w]
-                self._new_frame[w]      = (None, None, -1)
+                    # keep record of what we're showing
+                    self._current_frame[w]  = self._new_frame[w]
+                    self._new_frame[w]      = (None, None, -1)
 
-        # show windows
-        for w in self._windows.keys():
-            if self._window_visible[w]:
-                self._draw_gui(w, w>0)
+            # show windows
+            for w in self._windows.keys():
+                if self._window_visible[w]:
+                    self._draw_gui(w, w>0)
 
     def _draw_gui(self, w, need_begin_end):
         if self._current_frame[w] is None or self._texID[w] is None:
