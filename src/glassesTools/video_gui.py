@@ -9,6 +9,8 @@ import time
 import threading
 import numpy as np
 
+from . import platform
+
 
 # simple GUI provider for viewer and coder windows in glassesValidator.process
 class GUI:
@@ -27,12 +29,11 @@ class GUI:
         self._window_flags = int(
                                     imgui.WindowFlags_.no_title_bar |
                                     imgui.WindowFlags_.no_collapse |
-                                    imgui.WindowFlags_.no_scrollbar |
-                                    imgui.WindowFlags_.no_scroll_with_mouse |
-                                    imgui.WindowFlags_.always_auto_resize
+                                    imgui.WindowFlags_.no_scrollbar
                                 )
         self._window_visible = {}
-        self._window_frame   = {}
+        self._window_determine_size = {}
+        self._window_sfac    = {}
 
         self._interesting_keys = {}
         self._pressed_keys = {}
@@ -49,7 +50,8 @@ class GUI:
         self._new_frame[id] = (None, None, -1)
         self._current_frame[id] = (None, None, -1)
         self._window_visible[id] = False
-        self._window_frame[id]   = -1
+        self._window_determine_size[id] = False
+        self._window_sfac[id]    = 1.
 
         self._next_window_id += 1
         return id
@@ -140,7 +142,6 @@ class GUI:
             glfw.set_window_close_callback(glfw_utils.glfw_window_hello_imgui(), close_callback)
 
         params = hello_imgui.RunnerParams()
-        params.app_window_params.window_geometry.size_auto = True
         params.app_window_params.restore_previous_geometry = False
         params.ini_folder_type = hello_imgui.IniFolderType.temp_folder  # so we don't have endless ini files in the app folder, since we don't use them anyway (see previous line, restore_previous_geometry = False)
         params.app_window_params.window_title = self._windows[self._get_main_window_id()]
@@ -198,16 +199,19 @@ class GUI:
                 gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
                 gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGB, self._new_frame[w][0].shape[1], self._new_frame[w][0].shape[0], 0, gl.GL_BGR, gl.GL_UNSIGNED_BYTE, self._new_frame[w][0])
 
-                # if first time we're showing something
+                # if first time we're showing something (we have a new frame but not yet a current frame)
                 if self._current_frame[w][0] is None:
                     if w==0:
                         # tell window to resize
-                        hello_imgui.get_runner_params().app_window_params.window_geometry.resize_app_window_at_next_frame = True
+                        self._window_determine_size[w] = True
                         # and show window if needed
                         if not self._window_visible[w]:
                             hello_imgui.get_runner_params().app_window_params.hidden = False
                     # mark window as shown
                     self._window_visible[w] = True
+                else:
+                    # detect when frame changed size
+                    self._window_determine_size[w] = any([x!=y for x,y in zip(self._current_frame[w][0].shape,self._new_frame[w][0].shape)])
 
                 # keep record of what we're showing
                 self._current_frame[w]  = self._new_frame[w]
@@ -222,27 +226,36 @@ class GUI:
         if self._current_frame[w] is None or self._texID[w] is None:
             return
 
+        # determine window size if needed
+        img_sz = np.array([self._current_frame[w][0].shape[1]*self._dpi_fac, self._current_frame[w][0].shape[0]*self._dpi_fac])
+        if self._window_determine_size[w]:
+            win     = glfw_utils.glfw_window_hello_imgui()
+            w_bounds= get_current_monitor(*glfw.get_window_pos(win))[1]
+            w_bounds= adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
+            img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz]))
+            self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz)])
+            if not need_begin_end:
+                glfw.set_window_pos (win, *img_fit.position)
+                glfw.set_window_size(win, *img_fit.size)
+
         if need_begin_end:
-            if isinstance(self._window_size[w][0], np.ndarray):
-                imgui.set_next_window_size()
+            if self._window_determine_size[w]:
+                imgui.set_next_window_pos(img_fit.position)
+                imgui.set_next_window_size(img_fit.size)
             opened, self._window_visible[w] = imgui.begin(self._windows[w], self._window_visible[w], self._window_flags)
             if not opened:
                 imgui.end()
                 return
+        self._window_determine_size[w] = False
 
         imgui.set_cursor_pos((0,0))
         # draw image
-        self._window_frame[w] += 1
-        win_sz = np.array([*imgui.get_window_size()])
-        img_sz = np.array([self._current_frame[w][0].shape[1]*self._dpi_fac, self._current_frame[w][0].shape[0]*self._dpi_fac])
-        if self._window_frame[w]>2: # it takes two frames for autosize to take effect
-            sfac = min([np.min(win_sz/img_sz), 1.]) # clamp to 1: don't scale up
-            img_sz = (img_sz * sfac).astype('int')
+        img_sz = (img_sz * self._window_sfac[w]).astype('int')
         imgui.image(self._texID[w], img_sz)
 
         # draw bottom status overlay
         txt_sz = imgui.calc_text_size('')
-        win_bottom = min(self._current_frame[w][0].shape[0]*self._dpi_fac, win_sz[1]+imgui.get_scroll_y())
+        win_bottom = min(self._current_frame[w][0].shape[0]*self._dpi_fac, imgui.get_window_size().y+imgui.get_scroll_y())
         imgui.set_cursor_pos_y(win_bottom-txt_sz.y)
         imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
         imgui.begin_child("##status_overlay", size=(-imgui.FLT_MIN,txt_sz.y))
@@ -284,3 +297,58 @@ def qns_tooltip() -> dict[str,str]:
         'n': 'Next',
         's': 'Screenshot'
     }
+
+def get_current_monitor(wx, wy, ww=None, wh=None):
+    # so we always return something sensible
+    monitor = glfw.get_primary_monitor()
+    bounds  = get_monitor_work_area(monitor)
+    bestoverlap = 0
+    for mon in glfw.get_monitors():
+        m_bounds = get_monitor_work_area(mon)
+
+        if ww is None or wh is None:
+            # check if monitor contains (wx,wy)
+            if m_bounds.contains([wx, wy]):
+                return mon, m_bounds
+        else:
+            # check overlap of window with monitor
+            mx = m_bounds.position[0]
+            my = m_bounds.position[0]
+            mw = m_bounds.size[0]
+            mh = m_bounds.size[1]
+            overlap = \
+                max(0, min(wx + ww, mx + mw) - max(wx, mx)) * \
+                max(0, min(wy + wh, my + mh) - max(wy, my))
+
+            if bestoverlap < overlap:
+                bestoverlap = overlap
+                monitor = mon
+                bounds = m_bounds
+
+    return monitor, bounds
+
+def get_monitor_work_area(monitor):
+    monitor_area = glfw.get_monitor_workarea(monitor)
+    return hello_imgui.ScreenBounds(monitor_area[:2], monitor_area[2:])
+
+def adjust_bounds_for_framesize(w_bounds, frame_size):
+    if platform.os==platform.Os.Windows:
+        pos = [
+            w_bounds.position[0],
+            w_bounds.position[1] + frame_size[1]
+        ]
+        size = [
+            w_bounds.size[0],
+            w_bounds.size[1] - frame_size[1]
+        ]
+    else:
+        pos = [
+            w_bounds.position[0] + frame_size[0],
+            w_bounds.position[1] + frame_size[1],
+        ]
+        size = [
+            w_bounds.size[0] - (frame_size[0]+frame_size[2]),
+            w_bounds.size[1] - (frame_size[1]+frame_size[3])
+        ]
+
+    return hello_imgui.ScreenBounds(pos, size)
