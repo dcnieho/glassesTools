@@ -133,7 +133,7 @@ class GUI:
             toff += self._temp_off[0]
             xoff += self._temp_off[1]
             yoff += self._temp_off[2]
-        if implot.begin_subplots('##xy_plots',2,1,(-1,-1),implot.SubplotFlags_.link_all_x)[0]:
+        if implot.begin_subplots('##xy_plots',2,1,(-1,-1),implot.SubplotFlags_.link_all_x):
             if self._should_rescale:
                 implot.set_next_axes_to_fit()
             if implot.begin_plot('##X',flags=implot.Flags_.no_mouse_text):
@@ -144,7 +144,7 @@ class GUI:
                 self._do_drag(0)
                 # position annotation outside axes, clamping will put it in the corner
                 ax_lims = implot.get_plot_limits()
-                implot.annotation(ax_lims.x.max,ax_lims.y.min,(0,0,0,0),(0,0),True,f'offset: {toff*1000:.1f}ms')
+                implot.annotation(ax_lims.x.max,ax_lims.y.min,implot.get_style().color_(implot.Col_.inlay_text),(0,0),True,f'offset: {toff*1000:.1f}ms')
                 implot.end_plot()
 
             if self._should_rescale:
