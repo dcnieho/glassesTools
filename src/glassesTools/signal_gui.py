@@ -24,6 +24,7 @@ class GUI:
 
         self.title      = ''
         self.ival       = -1
+        self._data_lock : threading.Lock = threading.Lock()
         self.gaze_data  : dict[str, np.ndarray] = {}    # ['ts', 'x', 'y']
         self.target_data: dict[str, np.ndarray] = {}
         self.offset_t   : float = 0.
@@ -93,23 +94,24 @@ class GUI:
         win = glfw_utils.glfw_window_hello_imgui()
         glfw.set_window_title(win, new_title)
         hello_imgui.get_runner_params().app_window_params.hidden = False
-        self.offset_t   = offset_t
-        self._offset_xy = [0., 0.]
-        self.is_done    = False
-        self._should_rescale = True
+        with self._data_lock:
+            self.offset_t   = offset_t
+            self._offset_xy = [0., 0.]
+            self.is_done    = False
+            self._should_rescale = True
 
-        self.gaze_data['ts']= np.array([s.timestamp       for fr in gazes for s in gazes[fr]])/1000 # ms -> s
-        self.gaze_data['x'] = np.array([s.gaze_pos_vid[0] for fr in gazes for s in gazes[fr]])
-        self.gaze_data['y'] = np.array([s.gaze_pos_vid[1] for fr in gazes for s in gazes[fr]])
+            self.gaze_data['ts']= np.array([s.timestamp       for fr in gazes for s in gazes[fr]])/1000 # ms -> s
+            self.gaze_data['x'] = np.array([s.gaze_pos_vid[0] for fr in gazes for s in gazes[fr]])
+            self.gaze_data['y'] = np.array([s.gaze_pos_vid[1] for fr in gazes for s in gazes[fr]])
 
-        self.target_data['ts']  = np.array([target_positions[fr].timestamp  for fr in target_positions])/1000 # ms -> s
-        self.target_data['x']   = np.array([target_positions[fr].cam_pos[0] for fr in target_positions])
-        self.target_data['y']   = np.array([target_positions[fr].cam_pos[1] for fr in target_positions])
+            self.target_data['ts']  = np.array([target_positions[fr].timestamp  for fr in target_positions])/1000 # ms -> s
+            self.target_data['x']   = np.array([target_positions[fr].cam_pos[0] for fr in target_positions])
+            self.target_data['y']   = np.array([target_positions[fr].cam_pos[1] for fr in target_positions])
 
-        # set begin to 0
-        t0 = min([self.gaze_data['ts'][0] , self.target_data['ts'][0] ])
-        self.gaze_data  ['ts'] -= t0
-        self.target_data['ts'] -= t0
+            # set begin to 0
+            t0 = min([self.gaze_data['ts'][0] , self.target_data['ts'][0] ])
+            self.gaze_data  ['ts'] -= t0
+            self.target_data['ts'] -= t0
 
     def _gui_func(self):
         # check if we should exit
@@ -126,39 +128,40 @@ class GUI:
         if imgui.button('Done', (-1,0)):
             self.is_done = True
 
-        toff = self.offset_t
-        xoff = self._offset_xy[0]
-        yoff = self._offset_xy[1]
-        if any(self._dragging):
-            toff += self._temp_off[0]
-            xoff += self._temp_off[1]
-            yoff += self._temp_off[2]
-        if implot.begin_subplots('##xy_plots',2,1,(-1,-1),implot.SubplotFlags_.link_all_x):
-            if self._should_rescale:
-                implot.set_next_axes_to_fit()
-            if implot.begin_plot('##X',flags=implot.Flags_.no_mouse_text):
-                implot.setup_axis(implot.ImAxis_.x1, None)
-                implot.setup_axis(implot.ImAxis_.y1, 'horizontal coordinate (pix)')
-                implot.plot_line("gaze", self.gaze_data['ts']+toff, self.gaze_data['x']+xoff)
-                implot.plot_line("target", self.target_data['ts'], self.target_data['x'])
-                self._do_drag(0)
-                # position annotation outside axes, clamping will put it in the corner
-                ax_lims = implot.get_plot_limits()
-                implot.annotation(ax_lims.x.max,ax_lims.y.min,implot.get_style().color_(implot.Col_.inlay_text),(0,0),True,f'offset: {toff*1000:.1f}ms')
-                implot.end_plot()
+        with self._data_lock:
+            toff = self.offset_t
+            xoff = self._offset_xy[0]
+            yoff = self._offset_xy[1]
+            if any(self._dragging):
+                toff += self._temp_off[0]
+                xoff += self._temp_off[1]
+                yoff += self._temp_off[2]
+            if implot.begin_subplots('##xy_plots',2,1,(-1,-1),implot.SubplotFlags_.link_all_x):
+                if self._should_rescale:
+                    implot.set_next_axes_to_fit()
+                if implot.begin_plot('##X',flags=implot.Flags_.no_mouse_text):
+                    implot.setup_axis(implot.ImAxis_.x1, None)
+                    implot.setup_axis(implot.ImAxis_.y1, 'horizontal coordinate (pix)')
+                    implot.plot_line("gaze", self.gaze_data['ts']+toff, self.gaze_data['x']+xoff)
+                    implot.plot_line("target", self.target_data['ts'], self.target_data['x'])
+                    self._do_drag(0)
+                    # position annotation outside axes, clamping will put it in the corner
+                    ax_lims = implot.get_plot_limits()
+                    implot.annotation(ax_lims.x.max,ax_lims.y.min,implot.get_style().color_(implot.Col_.inlay_text),(0,0),True,f'offset: {toff*1000:.1f}ms')
+                    implot.end_plot()
 
-            if self._should_rescale:
-                implot.set_next_axes_to_fit()
-                self._should_rescale = False
-            if implot.begin_plot('##Y',flags=implot.Flags_.no_mouse_text):
-                implot.setup_axis(implot.ImAxis_.x1, 'time (s)')
-                implot.setup_axis(implot.ImAxis_.y1, 'vertical coordinate (pix)')
-                implot.plot_line("gaze", self.gaze_data['ts']+toff, self.gaze_data['y']+yoff)
-                implot.plot_line("target", self.target_data['ts'], self.target_data['y'])
-                self._do_drag(1)
-                implot.end_plot()
+                if self._should_rescale:
+                    implot.set_next_axes_to_fit()
+                    self._should_rescale = False
+                if implot.begin_plot('##Y',flags=implot.Flags_.no_mouse_text):
+                    implot.setup_axis(implot.ImAxis_.x1, 'time (s)')
+                    implot.setup_axis(implot.ImAxis_.y1, 'vertical coordinate (pix)')
+                    implot.plot_line("gaze", self.gaze_data['ts']+toff, self.gaze_data['y']+yoff)
+                    implot.plot_line("target", self.target_data['ts'], self.target_data['y'])
+                    self._do_drag(1)
+                    implot.end_plot()
 
-            implot.end_subplots()
+                implot.end_subplots()
 
     def _do_drag(self, ax_idx):
         ax_lims = implot.get_plot_limits()
