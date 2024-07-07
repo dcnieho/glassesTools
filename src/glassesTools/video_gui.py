@@ -23,6 +23,7 @@ class GUI:
         self._frame_nr = {}
         self._frame_pts = {}
         self._current_frame = {}
+        self._frame_rate = 60
 
         self._next_window_id: int = 0
         self._windows_lock: threading.Lock = threading.Lock()
@@ -94,6 +95,9 @@ class GUI:
         if type not in self._draw_callback:
             raise RuntimeError('Draw callback type unknown')
         self._draw_callback[type] = callback
+
+    def set_framerate(self, framerate):
+        self._frame_rate = int(framerate)
 
     def set_interesting_keys(self, keys: list[str]):
         if isinstance(keys,str):
@@ -178,8 +182,8 @@ class GUI:
         elapsedT = thisT-self._lastT
         self._lastT = thisT
 
-        if elapsedT < 1/60:
-            time.sleep(1/60-elapsedT)
+        if elapsedT < 1/self._frame_rate:
+            time.sleep(1/self._frame_rate-elapsedT)
 
         # if user wants to know about keypresses, keep record of them
         for k in self._interesting_keys:

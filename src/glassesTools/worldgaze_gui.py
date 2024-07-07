@@ -22,6 +22,7 @@ def show_visualization(
     cap             = ocv.CV2VideoReader(in_video, timestamps.VideoTimestamps(frame_timestamp_file).timestamps)
     width           = cap.get_prop(cv2.CAP_PROP_FRAME_WIDTH)
     height          = cap.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)
+    gui.set_framerate(cap.get_prop(cv2.CAP_PROP_FPS))
     cam_params      = ocv.CameraParams.readFromFile(camera_calibration_file)
 
     # add windows for planes, if wanted
