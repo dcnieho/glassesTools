@@ -74,10 +74,6 @@ class GUI:
         params.callbacks.show_gui  = self._gui_func
         params.callbacks.post_init = post_init
 
-        # multiple window support
-        params.imgui_window_params.config_windows_move_from_title_bar_only = True
-        params.imgui_window_params.enable_viewports = True
-
         addons = immapp.AddOnsParams()
         addons.with_implot = True
         immapp.run(params, addons)
@@ -96,7 +92,6 @@ class GUI:
         # actually update window title
         win = glfw_utils.glfw_window_hello_imgui()
         glfw.set_window_title(win, new_title)
-        hello_imgui.get_runner_params().app_window_params.window_geometry.resize_app_window_at_next_frame = True
         hello_imgui.get_runner_params().app_window_params.hidden = False
         self.offset_t   = offset_t
         self._offset_xy = [0., 0.]
