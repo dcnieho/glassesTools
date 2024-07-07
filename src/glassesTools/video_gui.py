@@ -127,7 +127,6 @@ class GUI:
         self._lastT=0.
         self._should_exit = False
         self._user_closed_window = False
-        self._dpi_fac = 1
 
         def close_callback(window: glfw._GLFWwindow):
             self._user_closed_window = True
@@ -137,7 +136,6 @@ class GUI:
             imgui.get_io().config_viewports_no_auto_merge = True
 
             glfw.swap_interval(0)
-            self._dpi_fac = hello_imgui.dpi_window_size_factor()
             self._window_visible[self._get_main_window_id()] = False
             glfw.set_window_close_callback(glfw_utils.glfw_window_hello_imgui(), close_callback)
 
@@ -227,7 +225,8 @@ class GUI:
             return
 
         # determine window size if needed
-        img_sz = np.array([self._current_frame[w][0].shape[1]*self._dpi_fac, self._current_frame[w][0].shape[0]*self._dpi_fac])
+        dpi_fac = hello_imgui.dpi_window_size_factor()
+        img_sz = np.array([self._current_frame[w][0].shape[1]*dpi_fac, self._current_frame[w][0].shape[0]*dpi_fac])
         if self._window_determine_size[w]:
             win     = glfw_utils.glfw_window_hello_imgui()
             w_bounds= get_current_monitor(*glfw.get_window_pos(win))[1]
@@ -255,7 +254,7 @@ class GUI:
 
         # draw bottom status overlay
         txt_sz = imgui.calc_text_size('')
-        win_bottom = min(self._current_frame[w][0].shape[0]*self._dpi_fac, imgui.get_window_size().y+imgui.get_scroll_y())
+        win_bottom = min(self._current_frame[w][0].shape[0]*dpi_fac, imgui.get_window_size().y+imgui.get_scroll_y())
         imgui.set_cursor_pos_y(win_bottom-txt_sz.y)
         imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
         imgui.begin_child("##status_overlay", size=(-imgui.FLT_MIN,txt_sz.y))
