@@ -157,55 +157,50 @@ class Plane:
         assert img.shape[1]==width +2*margin,"Output image width is not as expected"
         img  = img[1:-1,1:-1,:]
         # walk through all markers, if any are supposed to be rotated, do so
-        minX =  np.inf
-        maxX = -np.inf
-        minY =  np.inf
-        maxY = -np.inf
         rots = []
         corner_points_unrot = []
         for key in self.markers:
             corner_points = np.vstack(self.markers[key].corners).astype('float32')
-            corner_points_unrot.append(marker.getUnrotated(corner_points, self.markers[key].rot))
             rots.append(self.markers[key].rot)
-            minX = np.min(np.hstack((minX,corner_points[:,0])))
-            maxX = np.max(np.hstack((maxX,corner_points[:,0])))
-            minY = np.min(np.hstack((minY,corner_points[:,1])))
-            maxY = np.max(np.hstack((maxY,corner_points[:,1])))
+            corner_points_unrot.append(marker.getUnrotated(corner_points, self.markers[key].rot))
         if np.any(np.array(rots)!=0):
-            # determine where the markers are placed
+            # we need to manually rotate the markers to be correct
+            # so figure out where they are in the image, cut them out, and paste back a correctly rotated version
+            # get info about marker positions on the board
+            corner_points_all = np.dstack(corner_points_unrot)
+            minX,minY = np.min(corner_points_all,(0,2))
+            maxX,maxY = np.max(corner_points_all,(0,2))
+            corner_points_all = corner_points_all-np.expand_dims(np.array([[minX,minY]]),2).astype('float32')
+
+            # get position and size of marker in the generated image
             sizeX = maxX - minX
             sizeY = maxY - minY
-            xReduction = sizeX / float(img.shape[1])
-            yReduction = sizeY / float(img.shape[0])
-            if xReduction > yReduction:
-                nRows = int(sizeY / xReduction);
-                yMargin = (img.shape[0] - nRows) / 2;
-                xMargin = 0
-            else:
-                nCols = int(sizeX / yReduction);
-                xMargin = (img.shape[1] - nCols) / 2;
-                yMargin = 0
+            corner_points_all[:,0,:] = corner_points_all[:,0,:]/sizeX * float(img.shape[1])
+            corner_points_all[:,1,:] = corner_points_all[:,1,:]/sizeY * float(img.shape[0])
+            pix_sz = (corner_points_all[2,:,:]-corner_points_all[0,:,:]).T
 
-            for r,cpu in zip(rots,corner_points_unrot):
-                if r != 0:
-                    # figure out where marker is
-                    cpu -= np.array([[minX,minY]])
-                    cpu[:,0] =       cpu[:,0] / sizeX  * float(img.shape[1]) + xMargin
-                    cpu[:,1] = (1. - cpu[:,1] / sizeY) * float(img.shape[0]) + yMargin
-                    sz = np.min(cpu[2,:]-cpu[0,:])
-                    # get marker
-                    cpu = np.floor(cpu)
-                    idxs = np.floor([cpu[0,1], cpu[0,1]+sz, cpu[0,0], cpu[0,0]+sz]).astype('int')
-                    mark = img[idxs[0]:idxs[1], idxs[2]:idxs[3]]
-                    # rotate (opposite because coordinate system) and put back
-                    if r==-90:
-                        mark = cv2.rotate(mark, cv2.ROTATE_90_CLOCKWISE)
-                    elif r==90:
-                        mark = cv2.rotate(mark, cv2.ROTATE_90_COUNTERCLOCKWISE)
-                    elif r==180:
-                        mark = cv2.rotate(mark, cv2.ROTATE_180)
+            # marker should be square
+            pix_sz = np.min(pix_sz,1)
+            # marker pos
+            marker_pos = np.vstack((corner_points_all[0,0,:], corner_points_all[0,0,:]+pix_sz,
+                                    corner_points_all[0,1,:], corner_points_all[0,1,:]+pix_sz)).T
 
-                    img[idxs[0]:idxs[1], idxs[2]:idxs[3]] = mark
+            for r,mp in zip(rots,marker_pos):
+                if r==0:
+                    continue
+
+                # get marker from image
+                idxs = np.hstack((np.floor(mp[:2]),np.ceil(mp[2:]))).astype('int')
+                mark = img[idxs[2]:idxs[3], idxs[0]:idxs[1]]    # y, x
+                # rotate (opposite because coordinate system) and put back
+                if r==-90:
+                    mark = cv2.rotate(mark, cv2.ROTATE_90_COUNTERCLOCKWISE)
+                elif r==90:
+                    mark = cv2.rotate(mark, cv2.ROTATE_90_CLOCKWISE)
+                elif r==180:
+                    mark = cv2.rotate(mark, cv2.ROTATE_180)
+                # put back in the image
+                img[idxs[2]:idxs[3], idxs[0]:idxs[1]] = mark
 
         if path:
             cv2.imwrite(path, img)
