@@ -17,7 +17,7 @@ from .. import timestamps, video_utils
 
 
 def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, cam_cal_file: str|pathlib.Path=None, copy_scene_video = True) -> Recording:
-    from . import check_folders
+    from . import check_folders, _store_data
     """
     Run all preprocessing steps on AdHawk MindLink data and store in output_dir
     """
@@ -58,14 +58,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
     print('  Prepping gaze data...')
     gazeDf, frameTimestamps = formatGazeData(source_dir, sceneVideoDimensions, rec_info)
 
-    # write the gaze data to a csv file
-    gazeDf.to_csv(str(output_dir / 'gazeData.tsv'), sep='\t', na_rep='nan', float_format="%.8f")
-
-    # also store frame timestamps
-    frameTimestamps.to_csv(str(output_dir / 'frameTimestamps.tsv'), sep='\t', float_format="%.8f")
-
-    # store rec info
-    rec_info.store_as_json(output_dir)
+    _store_data(output_dir, gazeDf, frameTimestamps, rec_info)
 
     return rec_info
 

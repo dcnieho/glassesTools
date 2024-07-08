@@ -18,8 +18,9 @@ from ..recording import Recording
 from ..eyetracker import EyeTracker
 from .. import video_utils
 
+
 def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, cam_cal_file: str|pathlib.Path=None, copy_scene_video = True) -> Recording:
-    from . import check_folders
+    from . import check_folders, _store_data
     # NB: copy_scene_video input argument is ignored, SeeTrue recordings must be transcoded with ffmpeg to be useful
 
     if shutil.which('ffmpeg') is None:
@@ -60,14 +61,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
         getCameraHardcoded(output_dir)
 
 
-    # write the gaze data to a csv file
-    gazeDf.to_csv(str(output_dir / 'gazeData.tsv'), sep='\t', na_rep='nan', float_format="%.8f")
-
-    # also store frame timestamps
-    frameTimestamps.to_csv(str(output_dir / 'frameTimestamps.tsv'), sep='\t', float_format="%.8f")
-
-    # store rec info
-    rec_info.store_as_json(output_dir)
+    _store_data(output_dir, gazeDf, frameTimestamps, rec_info)
 
     return rec_info
 

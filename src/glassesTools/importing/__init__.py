@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import pathlib
 import os
+import pandas as pd
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
@@ -148,6 +149,16 @@ def check_device(device: str|EyeTracker, rec_info: Recording):
         else:
             device = eyetracker.string_to_enum(rec_info.eye_tracker)
     return device, rec_info
+
+def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame, frame_ts: pd.DataFrame, rec_info: Recording, gaze_fname = 'gazeData.tsv', frame_ts_fname = 'frameTimestamps.tsv', rec_info_fname = Recording.default_json_file_name):
+    # write the gaze data to a csv file
+    gaze.to_csv(output_dir / gaze_fname, sep='\t', na_rep='nan', float_format="%.8f")
+
+    # also store frame timestamps
+    frame_ts.to_csv(output_dir / frame_ts_fname, sep='\t', float_format="%.8f")
+
+    # store rec info
+    rec_info.store_as_json(output_dir / rec_info_fname)
 
 
 __all__ = ['pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3','adhawk_mindlink',
