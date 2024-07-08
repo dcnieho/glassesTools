@@ -4,4 +4,4 @@ polars[pandas]
 msgpack
 imgui_bundle==1.5.2
 opencv-python-headless==4.10.0.82
-ffpyplayer      # comes with ffmpeg binaries we need
+ffpyplayer      # bundles the ffmpeg binaries we need
