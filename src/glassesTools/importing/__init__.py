@@ -63,9 +63,10 @@ def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker)
 
 
 # single front end to the various device import functions for convenience
-def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.Path = None, device: str | EyeTracker = None, rec_info: Recording = None, copy_scene_video = True) -> Recording:
+def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.Path = None, device: str | EyeTracker = None, rec_info: Recording = None, copy_scene_video = True, cam_cal_file: str|pathlib.Path=None) -> Recording:
     # output_dir is the working directory folder where the export of this recording will be placed
     # should match rec_info.working_directory if both are provided (is checked below)
+    # NB: cam_cal_file input is only honored for AdHawk MindLink and SeeTrue STONE recordings
     if rec_info is not None:
         if isinstance(rec_info,list):
             raise ValueError('You should provide a single Recording to this function''s "rec_info" input argument, not a list of Recordings.')
@@ -76,7 +77,7 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
     # do the actual import/pre-process
     match device:
         case EyeTracker.AdHawk_MindLink:
-            rec_info = adhawk_mindlink(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
+            rec_info = adhawk_mindlink(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, cam_cal_file=cam_cal_file)
         case EyeTracker.Pupil_Core:
             rec_info = pupil_core(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
         case EyeTracker.Pupil_Invisible:
@@ -84,7 +85,7 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
         case EyeTracker.Pupil_Neon:
             rec_info = pupil_neon(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
         case EyeTracker.SeeTrue_STONE:
-            rec_info = SeeTrue_STONE(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
+            rec_info = SeeTrue_STONE(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, cam_cal_file=cam_cal_file)
         case EyeTracker.SMI_ETG:
             rec_info = SMI_ETG(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
         case EyeTracker.Tobii_Glasses_2:
