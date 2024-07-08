@@ -172,6 +172,23 @@ class GUI:
 
                 implot.end_subplots()
 
+                ws = imgui.get_window_size()
+                ts = imgui.calc_text_size('(?)')
+                fp = imgui.get_style().frame_padding
+                imgui.set_cursor_pos((ws.x-ts.x-fp.x, ws.y+imgui.get_scroll_y()-ts.y-fp.y))
+                imgui.text('(?)')
+                if imgui.is_item_hovered():
+                    imgui.begin_tooltip()
+                    imgui.push_text_wrap_pos(min(imgui.get_font_size() * 35, ws.x))
+                    imgui.text_unformatted(
+                        'To align the two signals in time with each other, drag the green dot in the middle of either plot. '
+                        'The horizontal offset is the applied time shift (indicated by the value in the lower-right '
+                        'corner of the upper plot). Any vertical shift is not stored, but can be useful when aligning the two signals. '
+                        'When done aligning the two signals, press done atop the window.'
+                        )
+                    imgui.pop_text_wrap_pos()
+                    imgui.end_tooltip()
+
     def _do_drag(self, ax_idx):
         ax_lims = implot.get_plot_limits()
         pos = ((ax_lims.x.min+ax_lims.x.max)/2., (ax_lims.y.min+ax_lims.y.max)/2.)
