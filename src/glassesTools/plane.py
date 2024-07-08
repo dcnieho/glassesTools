@@ -96,8 +96,7 @@ class Plane:
             marker_pos = markers
         else:
             marker_pos = data_files.read_coord_file(markers, package_to_read_from)
-        if marker_pos is None:
-            return
+        assert marker_pos is not None, f"No markers could be read from the file {markers}, check it exists and contains markers"
 
         # turn into marker objects
         marker_pos.x = marker_pos.x.astype('float32')*marker_pos_scale_fac
