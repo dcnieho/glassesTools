@@ -99,8 +99,8 @@ class Plane:
         assert marker_pos is not None, f"No markers could be read from the file {markers}, check it exists and contains markers"
 
         # turn into marker objects
-        marker_pos.x = marker_pos.x.astype('float32')*marker_pos_scale_fac
-        marker_pos.y = marker_pos.y.astype('float32')*marker_pos_scale_fac
+        marker_pos.x *= marker_pos_scale_fac
+        marker_pos.y *= marker_pos_scale_fac
 
         for idx, row in marker_pos.iterrows():
             c   = row[['x','y']].values
