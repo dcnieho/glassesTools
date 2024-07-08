@@ -141,7 +141,7 @@ class GUI:
                     implot.set_next_axes_to_fit()
                 if implot.begin_plot('##X',flags=implot.Flags_.no_mouse_text):
                     implot.setup_axis(implot.ImAxis_.x1, None)
-                    implot.setup_axis(implot.ImAxis_.y1, 'horizontal coordinate (pix)')
+                    implot.setup_axis(implot.ImAxis_.y1, 'horizontal coordinate (pix)', implot.AxisFlags_.auto_fit)
                     implot.plot_line("gaze", self.gaze_data['ts']+toff, self.gaze_data['x']+xoff)
                     implot.plot_line("target", self.target_data['ts'], self.target_data['x'])
                     self._do_drag(0)
@@ -155,7 +155,7 @@ class GUI:
                     self._should_rescale = False
                 if implot.begin_plot('##Y',flags=implot.Flags_.no_mouse_text):
                     implot.setup_axis(implot.ImAxis_.x1, 'time (s)')
-                    implot.setup_axis(implot.ImAxis_.y1, 'vertical coordinate (pix)')
+                    implot.setup_axis(implot.ImAxis_.y1, 'vertical coordinate (pix)', implot.AxisFlags_.auto_fit)
                     implot.plot_line("gaze", self.gaze_data['ts']+toff, self.gaze_data['y']+yoff)
                     implot.plot_line("target", self.target_data['ts'], self.target_data['y'])
                     self._do_drag(1)
