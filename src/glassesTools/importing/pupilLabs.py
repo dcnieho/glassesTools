@@ -97,7 +97,7 @@ def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, so
     gazeDf.to_csv(str(output_dir / 'gazeData.tsv'), sep='\t', na_rep='nan', float_format="%.8f")
 
     # also store frame timestamps
-    frameTimestamps.to_csv(str(output_dir / 'frameTimestamps.tsv'), sep='\t')
+    frameTimestamps.to_csv(str(output_dir / 'frameTimestamps.tsv'), sep='\t', float_format="%.8f")
 
     # store rec info
     rec_info.store_as_json(output_dir)
