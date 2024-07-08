@@ -40,20 +40,6 @@ def corners_intersection(corners):
     y = det(d, ydiff) / div
     return np.array( [x,y] ).astype('float32')
 
-def getUnrotated(cornerPoints, rot):
-    # markers are rotated in multiples of 90 only, so can easily unrotate
-    if rot == -90:
-        # -90 deg
-        cornerPoints = np.vstack((cornerPoints[-1,:], cornerPoints[0:3,:]))
-    elif rot == 90:
-        # 90 deg
-        cornerPoints = np.vstack((cornerPoints[1:,:], cornerPoints[0,:]))
-    elif rot == 180:
-        # 180 deg
-        cornerPoints = np.vstack((cornerPoints[2:,:], cornerPoints[0:2,:]))
-
-    return cornerPoints
-
 class Pose:
     # description of tsv file used for storage
     _columns_compressed = {'frame_idx': 1, 'R_vec': 3, 'T_vec': 3}

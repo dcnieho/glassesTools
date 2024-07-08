@@ -124,16 +124,13 @@ class Plane:
         self.bbox.append(max(all_x))
         self.bbox.append(max(all_y))
 
-    def get_aruco_board(self, unrotate_markers=False):
+    def get_aruco_board(self):
         from . import aruco
         board_corner_points = []
         ids = []
         for key in self.markers:
             ids.append(key)
             marker_corner_points = np.vstack(self.markers[key].corners).astype('float32')
-            if unrotate_markers:
-                marker_corner_points = marker.getUnrotated(marker_corner_points, self.markers[key].rot)
-
             board_corner_points.append(marker_corner_points)
         return aruco.create_board(board_corner_points, ids, self.aruco_dict)
 
