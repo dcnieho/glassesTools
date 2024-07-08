@@ -181,13 +181,13 @@ class Plane:
                 img[ori[1]:ori[1]+sz, ori[0]:ori[0]+sz] = marker_image
                 continue
 
-            # interpolate tiny marker to marker position in markerZone
+            # set up affine transformation for placing marker in image
             in_corners = np.array([[-.5, -.5],
                                    [marker_image.shape[1]-.5, -.5],
                                    [marker_image.shape[1]-.5, marker_image.shape[0]-.5]]).astype('float32')
-
-            # remove perspective
             transformation = cv2.getAffineTransform(in_corners, pos[:3,:])
+
+            # perform affine transformation (i.e. rotate marker)
             img = cv2.warpAffine(marker_image, transformation, (img.shape[1], img.shape[0]), img, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT)
 
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
