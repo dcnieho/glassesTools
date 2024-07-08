@@ -106,8 +106,6 @@ class Plane:
             c   = row[['x','y']].values
             # rotate markers (negative because plane coordinate system)
             rot = row[['rotation_angle']].values[0]
-            if rot%90 != 0:
-                raise ValueError("Rotation of a marker must be a multiple of 90 degrees")
             rotr= -math.radians(rot)
             R   = np.array([[math.cos(rotr), math.sin(rotr)], [-math.sin(rotr), math.cos(rotr)]])
             # top left first, and clockwise: same order as detected ArUco marker corners
@@ -140,68 +138,62 @@ class Plane:
         return aruco.create_board(board_corner_points, ids, self.aruco_dict)
 
     def _store_reference_image(self, path: pathlib.Path, width: int) -> np.ndarray:
-        referenceBoard = self.get_aruco_board(unrotate_markers = True)
         # get image with markers
         bboxExtents = [self.bbox[2]-self.bbox[0], math.fabs(self.bbox[3]-self.bbox[1])]  # math.fabs to deal with bboxes where (-,-) is bottom left
         aspectRatio = bboxExtents[0]/bboxExtents[1]
         height      = math.ceil(width/aspectRatio)
-        margin      = 1  # always 1 pixel, anything else behaves strangely (markers are drawn over margin as well)
 
-        img  = cv2.cvtColor(
-            referenceBoard.generateImage(
-                (width+2*margin,height+2*margin),margin,self.marker_border_bits),
-            cv2.COLOR_GRAY2RGB
-        )
-        # cut off this 1-pix margin
-        assert img.shape[0]==height+2*margin,"Output image height is not as expected"
-        assert img.shape[1]==width +2*margin,"Output image width is not as expected"
-        img  = img[1:-1,1:-1,:]
-        # walk through all markers, if any are supposed to be rotated, do so
-        rots = []
-        corner_points_unrot = []
+        img = np.zeros((height, width), np.uint8)
+        img[:] = 255
+        # collect all markers
+        corner_points = []
+        ids = []
         for key in self.markers:
-            corner_points = np.vstack(self.markers[key].corners).astype('float32')
-            rots.append(self.markers[key].rot)
-            corner_points_unrot.append(marker.getUnrotated(corner_points, self.markers[key].rot))
-        if np.any(np.array(rots)!=0):
-            # we need to manually rotate the markers to be correct
-            # so figure out where they are in the image, cut them out, and paste back a correctly rotated version
-            # get info about marker positions on the board
-            corner_points_all = np.dstack(corner_points_unrot)
-            minX,minY = np.min(corner_points_all,(0,2))
-            maxX,maxY = np.max(corner_points_all,(0,2))
-            corner_points_all = corner_points_all-np.expand_dims(np.array([[minX,minY]]),2).astype('float32')
+            ids.append(key)
+            corner_points.append(np.vstack(self.markers[key].corners).astype('float32'))
 
-            # get position and size of marker in the generated image
-            sizeX = maxX - minX
-            sizeY = maxY - minY
-            corner_points_all[:,0,:] = corner_points_all[:,0,:]/sizeX * float(img.shape[1])
-            corner_points_all[:,1,:] = corner_points_all[:,1,:]/sizeY * float(img.shape[0])
-            pix_sz = (corner_points_all[2,:,:]-corner_points_all[0,:,:]).T
+        # manually place the markers on the board
+        # get info about marker positions on the board
+        corner_points = np.dstack(corner_points)
+        minX,minY = np.min(corner_points,(0,2))
+        maxX,maxY = np.max(corner_points,(0,2))
+        corner_points = corner_points-np.expand_dims(np.array([[minX,minY]]),2).astype('float32')
 
-            # marker should be square
-            pix_sz = np.min(pix_sz,1)
-            # marker pos
-            marker_pos = np.vstack((corner_points_all[0,0,:], corner_points_all[0,0,:]+pix_sz,
-                                    corner_points_all[0,1,:], corner_points_all[0,1,:]+pix_sz)).T
+        # get position and size of marker in the generated image
+        sizeX = maxX - minX
+        sizeY = maxY - minY
+        corner_points[:,0,:] = corner_points[:,0,:]/sizeX * float(img.shape[1])
+        corner_points[:,1,:] = corner_points[:,1,:]/sizeY * float(img.shape[0])
 
-            for r,mp in zip(rots,marker_pos):
-                if r==0:
-                    continue
+        # get marker size
+        pix_sz = np.vstack((np.hypot(corner_points[0,0,:]-corner_points[1,0,:], corner_points[0,1,:]-corner_points[1,1,:]),
+                            np.hypot(corner_points[1,0,:]-corner_points[2,0,:], corner_points[1,1,:]-corner_points[2,1,:]))).T
+        # marker should be square
+        pix_sz = np.round(np.min(pix_sz,1)).astype('int')
 
-                # get marker from image
-                idxs = np.hstack((np.floor(mp[:2]),np.ceil(mp[2:]))).astype('int')
-                mark = img[idxs[2]:idxs[3], idxs[0]:idxs[1]]    # y, x
-                # rotate (opposite because coordinate system) and put back
-                if r==-90:
-                    mark = cv2.rotate(mark, cv2.ROTATE_90_COUNTERCLOCKWISE)
-                elif r==90:
-                    mark = cv2.rotate(mark, cv2.ROTATE_90_CLOCKWISE)
-                elif r==180:
-                    mark = cv2.rotate(mark, cv2.ROTATE_180)
-                # put back in the image
-                img[idxs[2]:idxs[3], idxs[0]:idxs[1]] = mark
+        # place markers
+        for i,sz,pos in zip(ids,pix_sz,np.moveaxis(corner_points, -1, 0)):
+            # make marker
+            marker_image = np.zeros((sz, sz), dtype=np.uint8)
+            marker_image = self.aruco_dict.generateImageMarker(i, sz, marker_image, self.marker_border_bits)
 
+            # put in image
+            if pos[0,1]==pos[1,1] and pos[1,0]==pos[2,0] and pos[0,0]<pos[1,0]:
+                # marker is aligned to image axes and not rotated, just blit
+                ori = np.round(pos[0,:]).astype('int')
+                img[ori[1]:ori[1]+sz, ori[0]:ori[0]+sz] = marker_image
+                continue
+
+            # interpolate tiny marker to marker position in markerZone
+            in_corners = np.array([[-.5, -.5],
+                                   [marker_image.shape[1]-.5, -.5],
+                                   [marker_image.shape[1]-.5, marker_image.shape[0]-.5]]).astype('float32')
+
+            # remove perspective
+            transformation = cv2.getAffineTransform(in_corners, pos[:3,:])
+            img = cv2.warpAffine(marker_image, transformation, (img.shape[1], img.shape[0]), img, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT)
+
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
         if path:
             cv2.imwrite(path, img)
 
