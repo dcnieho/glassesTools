@@ -7,7 +7,7 @@ except ImportError:
 import threading
 import numpy as np
 
-from . import gaze_headref
+from . import gaze_headref, video_gui
 
 class TargetPos:
     def __init__(self, timestamp: float, frame_idx: int, cam_pos: np.ndarray):
@@ -19,6 +19,7 @@ class TargetPos:
 class GUI:
     def __init__(self, use_thread=True):
         self._should_exit = False
+        self._should_init = True
         self._use_thread = use_thread # NB: on MacOSX the GUI needs to be on the main thread, see https://github.com/pthom/hello_imgui/issues/33
         self._thread = None
 
@@ -67,7 +68,6 @@ class GUI:
             glfw.set_window_close_callback(glfw_utils.glfw_window_hello_imgui(), close_callback)
 
         params = hello_imgui.RunnerParams()
-        params.app_window_params.window_geometry.full_screen_mode = hello_imgui.FullScreenMode.full_monitor_work_area
         params.app_window_params.restore_previous_geometry = False
         params.ini_folder_type = hello_imgui.IniFolderType.temp_folder  # so we don't have endless ini files in the app folder, since we don't use them anyway (see previous line, restore_previous_geometry = False)
         params.app_window_params.hidden = True
@@ -124,6 +124,15 @@ class GUI:
         # check we have data to plot
         if not self.gaze_data:
             return
+
+        # check we should do some initializing (do this now, can't be done in post_init during the first frame)
+        if self._should_init:
+            win     = glfw_utils.glfw_window_hello_imgui()
+            w_bounds= video_gui.get_current_monitor(*glfw.get_window_pos(win))[1]
+            w_bounds= video_gui.adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
+            glfw.set_window_pos (win, *w_bounds.position)
+            glfw.set_window_size(win, *w_bounds.size)
+            self._should_init = False
 
         if imgui.button('Done', (-1,0)):
             self.is_done = True
