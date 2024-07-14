@@ -30,7 +30,7 @@ def allNanIfNone(vals, numel):
 
 # read coordinate files (e.g. marker files, which have the colums ID, x, y, rotation_angle)
 def _read_coord_file_impl(file):
-    return pd.read_csv(file, dtype='float32').dropna(axis=0, how='all').astype({'ID': 'int32'}).set_index('ID')
+    return pd.read_csv(file, dtype=defaultdict(lambda: np.float32, ID='int32', color='str')).dropna(axis=0, how='all').set_index('ID')
 
 def read_coord_file(file, package_to_read_from=None):
     # if directory is not provided, try to read the file from the package resources instead
