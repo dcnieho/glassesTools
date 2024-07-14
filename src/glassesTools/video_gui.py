@@ -241,6 +241,7 @@ class GUI:
             w_bounds= adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
             img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz]))
             self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz)])
+            img_fit.size = [int(x*self._window_sfac[w]) for x in img_sz]
             if not need_begin_end:
                 glfw.set_window_pos (win, *img_fit.position)
                 glfw.set_window_size(win, *img_fit.size)
