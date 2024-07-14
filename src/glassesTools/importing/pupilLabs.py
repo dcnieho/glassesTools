@@ -490,10 +490,10 @@ def formatGazeDataCloudExport(inputDir: str|pathlib.Path, exportFile: str|pathli
 
     # set t=0 to video start time
     t0_ns = frameTimestamps['timestamp'].iloc[0]
-    df.loc[:,'timestamp']               -= t0_ns
-    frameTimestamps.loc[:,'timestamp']  -= t0_ns
-    df.loc[:,'timestamp']               /= 1000000.0    # convert timestamps from ns to ms
-    frameTimestamps.loc[:,'timestamp']  /= 1000000.0
+    df['timestamp']               -= t0_ns
+    frameTimestamps['timestamp']  -= t0_ns
+    df['timestamp']               /= 1000000.0    # convert timestamps from ns to ms
+    frameTimestamps['timestamp']  /= 1000000.0
 
     # set timestamps as index for gaze
     df = df.set_index('timestamp')
