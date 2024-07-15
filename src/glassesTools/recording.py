@@ -2,10 +2,11 @@ import dataclasses
 import typing
 import pathlib
 import json
+import natsort
 
 from .eyetracker import EyeTracker
 from .timestamps import Timestamp
-from. import utils
+from . import utils
 
 @dataclasses.dataclass
 class Recording:
@@ -52,3 +53,18 @@ class Recording:
         if not vid.is_file():
             vid = self.source_directory / self.scene_video_file
         return vid
+
+
+def find_recordings(paths: list[pathlib.Path], eye_tracker: EyeTracker):
+    from . import importing
+    all_recs = []
+    for p in paths:
+        all_dirs = utils.fast_scandir(p)
+        all_dirs.append(p)
+        for d in all_dirs:
+            # check if dir is a valid recording
+            if (recs:=importing.get_recording_info(d, eye_tracker)) is not None:
+                all_recs.extend(recs)
+
+    # sort in order natural for OS
+    return natsort.os_sorted(all_recs, lambda rec: rec.source_directory)

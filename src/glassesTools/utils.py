@@ -4,6 +4,7 @@ import pathlib
 import dataclasses
 import typing
 import numpy as np
+import os
 
 
 def hex_to_rgba_0_1(hex):
@@ -61,3 +62,12 @@ def json_reconstitute(d):
 def cartesian_product(*arrays):
     ndim = len(arrays)
     return (np.stack(np.meshgrid(*arrays), axis=-1).reshape(-1, ndim))
+
+
+def fast_scandir(dirname):
+    if not dirname.is_dir():
+        return []
+    subfolders= [pathlib.Path(f.path) for f in os.scandir(dirname) if f.is_dir()]
+    for dirname in list(subfolders):
+        subfolders.extend(fast_scandir(dirname))
+    return subfolders
