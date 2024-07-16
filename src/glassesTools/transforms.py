@@ -1,5 +1,4 @@
 import numpy as np
-import math
 import cv2
 
 from . import gaze_headref, gaze_worldref, marker, ocv, plane
@@ -57,7 +56,7 @@ def estimateHomography(objP, imgP):
     return h, True
 
 def applyHomography(H, x, y):
-    if math.isnan(x) or math.isnan(y):
+    if np.isnan(x) or np.isnan(y):
         return np.full((2,), np.nan)
 
     src = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
@@ -66,7 +65,7 @@ def applyHomography(H, x, y):
 
 
 def distortPoint(x, y, cameraMatrix, distCoeff):
-    if math.isnan(x) or math.isnan(y):
+    if np.isnan(x) or np.isnan(y):
         return np.full((2,), np.nan)
 
     # unproject, ignoring distortion as this is an undistored point
@@ -80,7 +79,7 @@ def distortPoint(x, y, cameraMatrix, distCoeff):
     return points_2d.flatten()
 
 def undistortPoint(x, y, cameraMatrix, distCoeff):
-    if math.isnan(x) or math.isnan(y):
+    if np.isnan(x) or np.isnan(y):
         return np.full((2,), np.nan)
 
     points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
@@ -88,7 +87,7 @@ def undistortPoint(x, y, cameraMatrix, distCoeff):
     return points_2d.flatten()
 
 def unprojectPoint(x, y, cameraMatrix, distCoeff):
-    if math.isnan(x) or math.isnan(y):
+    if np.isnan(x) or np.isnan(y):
         return np.full((3,), np.nan)
 
     points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
@@ -112,7 +111,7 @@ def intersect_plane_ray(planeNormal, planePoint, rayDirection, rayPoint, epsilon
 
 
 def angle_between(v1, v2):
-    return (180.0 / math.pi) * math.atan2(np.linalg.norm(np.cross(v1,v2)), np.dot(v1,v2))
+    return (180.0 / np.pi) * np.arctan2(np.linalg.norm(np.cross(v1,v2)), np.dot(v1,v2))
 
 
 def gazeToPlane(gaze: gaze_headref.Gaze, pose: plane.Pose, cameraParams: ocv.CameraParams) -> gaze_worldref.Gaze:
