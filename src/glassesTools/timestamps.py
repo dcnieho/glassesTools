@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import warnings
 import bisect
+import pathlib
 
 from . import utils
 
@@ -25,7 +26,7 @@ utils.register_type(utils.CustomTypeEntry(Timestamp,'__Timestamp__',lambda x: x.
 
 # for reading video timestamp files
 class VideoTimestamps:
-    def __init__(self, fileName):
+    def __init__(self, fileName: str|pathlib.Path):
         self.timestamp_dict : dict[int,float] = {}
         self.indices        : list[int] = []
         self.timestamps     : list[float] = []
