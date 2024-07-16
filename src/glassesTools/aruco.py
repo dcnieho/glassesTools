@@ -1,13 +1,13 @@
 import numpy as np
 import cv2
-from typing import Any
+import pathlib
 
-from . import drawing, intervals, marker, ocv, plane, timestamps
+from . import drawing, intervals, marker, ocv, plane, timestamps, video_gui
 
 
 
 class ArUcoDetector():
-    def __init__(self, ArUco_dict: cv2.aruco.Dictionary, params: dict[str, Any]):
+    def __init__(self, ArUco_dict: cv2.aruco.Dictionary, params: dict[str]):
         self._det_params                          = cv2.aruco.DetectorParameters()
         self._det_params.cornerRefinementMethod   = cv2.aruco.CORNER_REFINE_SUBPIX    # good default, user can override
         for p in params:
@@ -80,7 +80,7 @@ class ArUcoDetector():
         return N_markers, H
 
     # higher level functions for detecting + pose estimation, and for results visualization
-    def estimate_pose_and_homography(self, frame_idx, min_num_markers, corners, ids) -> tuple[plane.Pose, dict[str,Any]]:
+    def estimate_pose_and_homography(self, frame_idx, min_num_markers, corners, ids) -> tuple[plane.Pose, dict[str]]:
         pose = plane.Pose(frame_idx)
         if ids is not None and len(ids) >= min_num_markers:
             # get matching image and board points
@@ -95,7 +95,7 @@ class ArUcoDetector():
                 self._estimate_homography_impl(objP, imgP)
         return pose
 
-    def detect_and_estimate(self, frame, frame_idx, min_num_markers) -> tuple[plane.Pose, dict[str,Any]]:
+    def detect_and_estimate(self, frame, frame_idx, min_num_markers) -> tuple[plane.Pose, dict[str]]:
         corners, ids, rejectedImgPoints, recoveredIds = self.detect_markers(frame, min_nmarker_refine=min_num_markers)
         pose = self.estimate_pose_and_homography(frame_idx, min_num_markers, corners, ids)
         return pose, {'corners': corners, 'ids': ids, 'rejectedImgPoints': rejectedImgPoints, 'recoveredIds': recoveredIds}
@@ -156,11 +156,11 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     board_corner_points = np.pad(board_corner_points,((0,0),(0,0),(0,1)),'constant', constant_values=(0.,0.)) # Nx4x2 -> Nx4x3
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
 
-def run_pose_estimation(in_video, frame_timestamp_file, camera_calibration_file,
-                        output_dir,
-                        processing_intervals,
-                        planes, individual_markers,
-                        gui, sub_pixel_fac = 8, show_rejected_markers = False) -> tuple[bool, dict[str,list[plane.Pose]], dict[str,list[marker.Pose]]]:
+def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path, camera_calibration_file: str|pathlib.Path,
+                        output_dir: pathlib.Path,
+                        processing_intervals: dict[str, list[int]|list[list[int]]],
+                        planes: dict[str], individual_markers: dict[int, dict[str]]|None,
+                        gui: video_gui.GUI|None, sub_pixel_fac = 8, show_rejected_markers = False) -> tuple[bool, dict[str,list[plane.Pose]], dict[str,list[marker.Pose]]]:
     show_visualization = gui is not None
 
     # open video
