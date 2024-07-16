@@ -5,7 +5,7 @@ from . import data_files, drawing
 
 
 class Marker:
-    def __init__(self, key, center, corners=None, color=None, rot=0):
+    def __init__(self, key: int, center: np.ndarray, corners: list[np.ndarray]=None, color: str=None, rot: float=0.):
         self.key = key
         self.center = center
         self.corners = corners
