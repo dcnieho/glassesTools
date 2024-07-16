@@ -234,10 +234,10 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
         # with cap.set(cv2.CAP_PROP_POS_FRAMES) doesn't seem to work reliably
         # for VFR video files
         planes_for_this_frame = [p for p in planes if intervals.is_in_interval(frame_idx, processing_intervals[p])]
-        extra_processing_for_this_frame = None
+        extra_processing_for_this_frame = []
         if has_extra_processing:
             extra_processing_for_this_frame = [e for e in extra_processing if intervals.is_in_interval(frame_idx, extra_processing_intervals[e])]
-        if not planes_for_this_frame and not extra_processing_intervals:
+        if not planes_for_this_frame and not extra_processing_for_this_frame:
             continue
 
         if planes_for_this_frame:
