@@ -13,6 +13,7 @@ class Plane:
     def __init__(self,
                  markers                : str|pathlib.Path|pd.DataFrame,                            # if str or Path: file from which to read markers. Else direction N_markerx4 array. Should contain centers of markers
                  marker_size            : float,                                                    # in "unit" units
+                 plane_size             : tuple[float, float],                                      # in "unit" units
 
                  aruco_dict                                             = cv2.aruco.DICT_4X4_250,
                  marker_border_bits                                     = 1,
@@ -20,13 +21,14 @@ class Plane:
                  unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
                  package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources
                  ref_image_store_path   : str|pathlib.Path              = None,
-                 ref_image_width                                        = 1920
+                 ref_image_size                                         = 1920                      # largest dimension
                  ):
 
         self.marker_size                                    = marker_size
         # marker positions
         self.markers            : dict[int,marker.Marker]   = {}
-        self.bbox               : list[float]               = []
+        self.plane_size                                     = plane_size
+        self.bbox               : list[float]               = [0., 0., self.plane_size[0], self.plane_size[1]]
 
         # marker specs
         self.aruco_dict                                     = cv2.aruco.getPredefinedDictionary(aruco_dict)
@@ -46,38 +48,38 @@ class Plane:
         if ref_image_store_path is not None and ref_image_store_path.is_file():
             img = cv2.imread(ref_image_store_path, cv2.IMREAD_COLOR)
         # if image doesn't exist or is the wrong size, create
-        if img is None or img.shape[1]!=ref_image_width:
-            img = self._store_reference_image(ref_image_store_path, ref_image_width)
+        if img is None or img.shape[1]!=ref_image_size:
+            img = self._store_reference_image(ref_image_store_path, ref_image_size)
 
-        self._ref_image_width                               = ref_image_width
-        self._ref_image_cache   : dict[int, np.ndarray]     = {ref_image_width: img}
+        self._ref_image_size                                = ref_image_size
+        self._ref_image_cache   : dict[int, np.ndarray]     = {ref_image_size: img}
 
-    def set_center(self, center: np.ndarray):
-        # set center of plane. Center coordinate is on current (not original) plane
-        # so set_center([5., 0.]) three times in a row shift the center rightward by 15 units
+    def set_origin(self, origin: np.ndarray):
+        # set origin of plane. Origin location is on current (not original) plane
+        # so set_origin([5., 0.]) three times in a row shifts the origin rightward by 15 units
         for i in self.markers:
-            self.markers[i].shift(-center)
+            self.markers[i].shift(-origin)
 
-        self.bbox[0] -= center[0]
-        self.bbox[2] -= center[0]
-        self.bbox[1] -= center[1]
-        self.bbox[3] -= center[1]
+        self.bbox[0] -= origin[0]
+        self.bbox[2] -= origin[0]
+        self.bbox[1] -= origin[1]
+        self.bbox[3] -= origin[1]
 
-    def get_ref_image(self, width: int=None, asRGB=False):
-        if width is None:
-            width = self._ref_image_width
-        assert isinstance(width,int), f'width input should be an int, not {type(width)}'
+    def get_ref_image(self, im_size: int=None, asRGB=False):
+        if im_size is None:
+            im_size = self._ref_image_size
+        assert isinstance(im_size,int), f'width input should be an int, not {type(im_size)}'
         # check we have the image, if not, add to cache
-        if width not in self._ref_image_cache:
-            scale = float(width)/self._ref_image_width
-            self._ref_image_cache[width] = cv2.resize(self._ref_image_cache[self._ref_image_width], None, fx=scale, fy=scale, interpolation = cv2.INTER_AREA)
+        if im_size not in self._ref_image_cache:
+            scale = float(im_size)/self._ref_image_size
+            self._ref_image_cache[im_size] = cv2.resize(self._ref_image_cache[self._ref_image_size], None, fx=scale, fy=scale, interpolation = cv2.INTER_AREA)
 
         # return
         if asRGB:
-            return self._ref_image_cache[width][:,:,[2,1,0]]    # indexing returns a copy
+            return self._ref_image_cache[im_size][:,:,[2,1,0]]    # indexing returns a copy
         else:
             # OpenCV's BGR
-            return self._ref_image_cache[width].copy()
+            return self._ref_image_cache[im_size].copy()
 
     def draw(self, img, x, y, subPixelFac=1, color=None, size=6):
         from . import transforms
@@ -116,14 +118,6 @@ class Plane:
 
             self.markers[idx] = marker.Marker(idx, c, corners=[tl, tr, br, bl], rot=rot)
 
-        # determine bounding box of markers ([left, top, right, bottom])
-        all_x = [c[0] for idx in self.markers for c in self.markers[idx].corners]
-        all_y = [c[1] for idx in self.markers for c in self.markers[idx].corners]
-        self.bbox.append(min(all_x))
-        self.bbox.append(min(all_y))
-        self.bbox.append(max(all_x))
-        self.bbox.append(max(all_y))
-
     def get_aruco_board(self):
         from . import aruco
         board_corner_points = []
@@ -134,11 +128,16 @@ class Plane:
             board_corner_points.append(marker_corner_points)
         return aruco.create_board(board_corner_points, ids, self.aruco_dict)
 
-    def _store_reference_image(self, path: pathlib.Path, width: int) -> np.ndarray:
+    def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
         # get image with markers
         bboxExtents = [self.bbox[2]-self.bbox[0], math.fabs(self.bbox[3]-self.bbox[1])]  # math.fabs to deal with bboxes where (-,-) is bottom left
         aspectRatio = bboxExtents[0]/bboxExtents[1]
-        height      = math.ceil(width/aspectRatio)
+        if aspectRatio>1:
+            width       = im_size
+            height      = math.ceil(im_size/aspectRatio)
+        else:
+            width       = math.ceil(im_size*aspectRatio)
+            height      = im_size
 
         img = np.zeros((height, width), np.uint8)
         img[:] = 255
@@ -152,15 +151,11 @@ class Plane:
         # manually place the markers on the board
         # get info about marker positions on the board
         corner_points = np.dstack(corner_points)
-        minX,minY = np.min(corner_points,(0,2))
-        maxX,maxY = np.max(corner_points,(0,2))
-        corner_points = corner_points-np.expand_dims(np.array([[minX,minY]]),2).astype('float32')
+        corner_points = corner_points-np.expand_dims(np.array([self.bbox[:2]]),2).astype('float32')
 
         # get position and size of marker in the generated image
-        sizeX = maxX - minX
-        sizeY = maxY - minY
-        corner_points[:,0,:] = corner_points[:,0,:]/sizeX * float(img.shape[1])
-        corner_points[:,1,:] = corner_points[:,1,:]/sizeY * float(img.shape[0])
+        corner_points[:,0,:] = corner_points[:,0,:]/bboxExtents[0] * float(img.shape[1])
+        corner_points[:,1,:] = corner_points[:,1,:]/bboxExtents[1] * float(img.shape[0])
 
         # get marker size
         pix_sz = np.vstack((np.hypot(corner_points[0,0,:]-corner_points[1,0,:], corner_points[0,1,:]-corner_points[1,1,:]),
