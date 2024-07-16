@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import pathlib
+from typing import Callable
 
 from . import drawing, intervals, marker, ocv, plane, timestamps, video_gui
 
@@ -160,8 +161,14 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
                         output_dir: pathlib.Path,
                         processing_intervals: dict[str, list[int]|list[list[int]]],
                         planes: dict[str], individual_markers: dict[int, dict[str]]|None,
+                        extra_processing: dict[str,tuple[Callable[[np.ndarray,...],tuple[float,float]],list[list[int]],dict[str]]]|None,
                         gui: video_gui.GUI|None, sub_pixel_fac = 8, show_rejected_markers = False) -> tuple[bool, dict[str,list[plane.Pose]], dict[str,list[marker.Pose]]]:
     show_visualization = gui is not None
+
+    # deal with extra processing functions
+    has_extra_processing = extra_processing is not None
+    if has_extra_processing:
+        extra_processing_intervals = {e:extra_processing[e][1] for e in extra_processing}
 
     # open video
     cap = ocv.CV2VideoReader(in_video, timestamps.VideoTimestamps(frame_timestamp_file).timestamps)
@@ -193,11 +200,18 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
         individual_markers_out = None
 
     stop_all_processing = False
-    poses = {p:[] for p in planes}
+    poses_out = {p:[] for p in planes}
+    extra_processing_out = None
+    if has_extra_processing:
+        extra_processing_out = {e:[] for e in extra_processing}
     while True:
         # process frame-by-frame
         done, frame, frame_idx, frame_ts = cap.read_frame(report_gap=True)
-        if done or intervals.beyond_last_interval(frame_idx, processing_intervals):
+        if done or \
+            (
+                intervals.beyond_last_interval(frame_idx, processing_intervals) and \
+                (not has_extra_processing or intervals.beyond_last_interval(frame_idx, extra_processing_intervals))
+            ):
             break
         cap.report_frame()
 
@@ -220,38 +234,45 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
         # with cap.set(cv2.CAP_PROP_POS_FRAMES) doesn't seem to work reliably
         # for VFR video files
         planes_for_this_frame = [p for p in planes if intervals.is_in_interval(frame_idx, processing_intervals[p])]
-        if not planes_for_this_frame:
+        extra_processing_for_this_frame = None
+        if has_extra_processing:
+            extra_processing_for_this_frame = [e for e in extra_processing if intervals.is_in_interval(frame_idx, extra_processing_intervals[e])]
+        if not planes_for_this_frame and not extra_processing_intervals:
             continue
 
-        # detect markers
-        detect_dicts = {}
-        if all_same_dict_and_dect or has_individual_markers:
-            corners, ids, rejected_corners = _detect_markers(frame, detectors[plane_names[0]]._det)
-            detect_dicts = _refine_for_multiple_planes(frame, corners, ids, rejected_corners, {p:detectors[p] for p in planes_for_this_frame}, cam_params.camera_mtx, cam_params.distort_coeffs)
-        else:
+        if planes_for_this_frame:
+            # detect markers
+            detect_dicts = {}
+            if all_same_dict_and_dect or has_individual_markers:
+                corners, ids, rejected_corners = _detect_markers(frame, detectors[plane_names[0]]._det)
+                detect_dicts = _refine_for_multiple_planes(frame, corners, ids, rejected_corners, {p:detectors[p] for p in planes_for_this_frame}, cam_params.camera_mtx, cam_params.distort_coeffs)
+            else:
+                for p in planes_for_this_frame:
+                    detect_dicts[p] = dict(zip(['corners', 'ids', 'rejectedImgPoints', 'recoveredIds'], detectors[p].detect_markers(frame, planes[p]['min_num_markers'])))
+            # determine pose
             for p in planes_for_this_frame:
-                detect_dicts[p] = dict(zip(['corners', 'ids', 'rejectedImgPoints', 'recoveredIds'], detectors[p].detect_markers(frame, planes[p]['min_num_markers'])))
-        # determine pose
-        for p in planes_for_this_frame:
-            pose = detectors[p].estimate_pose_and_homography(frame_idx, planes[p]['min_num_markers'], detect_dicts[p]['corners'], detect_dicts[p]['ids'])
-            poses[p].append(pose)
-            # draw detection and pose, if wanted
-            if show_visualization:
-                detectors[p].visualize(frame, pose, detect_dicts[p], planes[p]['plane'].marker_size/2, sub_pixel_fac, show_rejected_markers)
+                pose = detectors[p].estimate_pose_and_homography(frame_idx, planes[p]['min_num_markers'], detect_dicts[p]['corners'], detect_dicts[p]['ids'])
+                poses_out[p].append(pose)
+                # draw detection and pose, if wanted
+                if show_visualization:
+                    detectors[p].visualize(frame, pose, detect_dicts[p], planes[p]['plane'].marker_size/2, sub_pixel_fac, show_rejected_markers)
 
-        # deal with individual markers, if any
-        if has_individual_markers and ids is not None:
-            found_markers = np.where([x[0] in individual_markers for x in ids])[0]
-            if found_markers.size>0:
-                for idx in found_markers:
-                    m_id = ids[idx][0]
-                    pose = marker.Pose(frame_idx)
-                    if cam_params.has_intrinsics():
-                        # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
-                        _, pose.R_vec, pose.T_vec = cv2.solvePnP(object_points[m_id], corners[idx], cam_params.camera_mtx, cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                    individual_markers_out[m_id].append(pose)
-                    if show_visualization and cam_params.has_intrinsics():
-                        pose.draw_origin_on_frame(frame, cam_params.camera_mtx, cam_params.distort_coeffs, individual_markers[m_id]['marker_size']/2, sub_pixel_fac)
+            # deal with individual markers, if any
+            if has_individual_markers and ids is not None:
+                found_markers = np.where([x[0] in individual_markers for x in ids])[0]
+                if found_markers.size>0:
+                    for idx in found_markers:
+                        m_id = ids[idx][0]
+                        pose = marker.Pose(frame_idx)
+                        if cam_params.has_intrinsics():
+                            # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
+                            _, pose.R_vec, pose.T_vec = cv2.solvePnP(object_points[m_id], corners[idx], cam_params.camera_mtx, cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                        individual_markers_out[m_id].append(pose)
+                        if show_visualization and cam_params.has_intrinsics():
+                            pose.draw_origin_on_frame(frame, cam_params.camera_mtx, cam_params.distort_coeffs, individual_markers[m_id]['marker_size']/2, sub_pixel_fac)
+
+        for e in extra_processing_for_this_frame:
+            extra_processing_out[e].append([frame_idx, *extra_processing[e][0](frame,**extra_processing[e][2])])
 
         if show_visualization:
             # keys is populated above
@@ -267,4 +288,4 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
     if show_visualization:
         gui.stop()
 
-    return stop_all_processing, poses, individual_markers_out
+    return stop_all_processing, poses_out, individual_markers_out, extra_processing_out
