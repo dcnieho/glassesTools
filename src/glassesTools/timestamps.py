@@ -1,7 +1,6 @@
 import numpy as np
 import pandas as pd
 import datetime
-import warnings
 import bisect
 import pathlib
 
@@ -40,15 +39,14 @@ class VideoTimestamps:
         self.indices    = df['frame_idx'].to_list()
         self.timestamps = df['timestamp'].to_list()
 
-    def get_timestamp(self, idx) -> float:
+    def get_timestamp(self, idx: int) -> float:
         idx = int(idx)
         if idx in self.timestamp_dict:
             return self.timestamp_dict[idx]
         else:
-            warnings.warn('frame_idx %d is not in set\n' % ( idx ), RuntimeWarning )
             return -1.
 
-    def find_frame(self, ts) -> int:
+    def find_frame(self, ts: float) -> int:
         idx = bisect.bisect(self.timestamps, ts)
         # return nearest
         if idx>=len(self.timestamps):
