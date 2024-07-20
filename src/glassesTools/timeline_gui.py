@@ -411,21 +411,29 @@ class Timeline:
                                    (end_screen_position, cursor_pos.y+size.y),
                                    border_color,
                                    thickness=dpi_fac)
+
                 x_pos, do_move, action = self._episode_interaction_logic(f'annotation_{name}_{m}', start_screen_position, end_screen_position, size.y)
                 if do_move:
                     self._request_time(self._pos_to_time(x_pos, True))
-                _, do_move, act = self._timepoint_interaction_logic(f'annotation_{name}_{m}', start_screen_position, size.y, draggable=False, has_context_menu=True, add_episode_action=True)
-                action = action or act
+                elif action=='delete_episode':
+                    self._request_delete(event, self._annotations_frame[event][m:m+2])
+
+                _, do_move, action = self._timepoint_interaction_logic(f'annotation_{name}_{m}', start_screen_position, size.y, draggable=False, has_context_menu=True, add_episode_action=True)
                 if do_move:
                     self._request_time(self._pos_to_time(start_screen_position, True))
-                _, do_move, act = self._timepoint_interaction_logic(f'annotation_{name}_{m+1}', end_screen_position, size.y, draggable=False, has_context_menu=True, add_episode_action=True)
-                action = action or act
-                if do_move:
-                    self._request_time(self._pos_to_time(end_screen_position, True))
-                if action=='delete_timepoint':
+                elif action=='delete_timepoint':
                     self._request_delete(event, self._annotations_frame[event][m])
                 elif action=='delete_episode':
                     self._request_delete(event, self._annotations_frame[event][m:m+2])
+
+                _, do_move, action = self._timepoint_interaction_logic(f'annotation_{name}_{m+1}', end_screen_position, size.y, draggable=False, has_context_menu=True, add_episode_action=True)
+                if do_move:
+                    self._request_time(self._pos_to_time(end_screen_position, True))
+                elif action=='delete_timepoint':
+                    self._request_delete(event, self._annotations_frame[event][m+1])
+                elif action=='delete_episode':
+                    self._request_delete(event, self._annotations_frame[event][m:m+2])
+
             if len(annotations)%2:
                 # loose line left over, draw it
                 action = self._draw_annotation_line(name, len(annotations)-1, annotations[-1], size.y, border_color)
