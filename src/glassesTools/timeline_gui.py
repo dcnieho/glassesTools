@@ -24,7 +24,7 @@ def _calc_contrast_ratio(a: imgui.ImColor, b: imgui.ImColor) -> float:
 
 
 class Timeline:
-    def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[annotation.Event, list[int]] = None):
+    def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[annotation.Event, list[int]|list[list[int]]] = None):
         self._video_ts = video_ts
         self._duration = self._video_ts.get_last()[1]/1000. # ms -> s
 
@@ -52,7 +52,11 @@ class Timeline:
         self._allow_timeline_zoom = False
 
         # tracks
-        self._annotations_frame = annotations
+        self._annotations_frame = annotations.copy()
+        # flatten if needed
+        for e in self._annotations_frame:
+            if self._annotations_frame[e] and isinstance(self._annotations_frame[e][0],list):
+                self._annotations_frame[e] = [i for iv in self._annotations_frame[e] for i in iv]
         self._annotations       = self._annotations_to_time()
         self._show_annotation_labels = True
         self._annotation_tooltips: dict[annotation.Event, str] = {}
