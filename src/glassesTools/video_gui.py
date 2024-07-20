@@ -12,7 +12,7 @@ import functools
 from enum import Enum, auto
 import dataclasses
 
-from . import annotation, platform, timeline_gui, timestamps, utils
+from . import annotation, intervals, platform, timeline_gui, timestamps, utils
 
 class Action(Enum):
     Back_Time       = auto()
@@ -21,33 +21,38 @@ class Action(Enum):
     Forward_Frame   = auto()
     Pause           = auto()
     Quit            = auto()
-    Annotate        = auto()
+    Annotate_Make   = auto()
+    Annotate_Delete = auto()
+
 
 shortcut_key_map = {
-    Action.Back_Time    : imgui.Key.left_arrow,
-    Action.Forward_Time : imgui.Key.right_arrow,
-    Action.Back_Frame   : imgui.Key.j,
-    Action.Forward_Frame: imgui.Key.k,
-    Action.Pause        : imgui.Key.space,
-    Action.Quit         : imgui.Key.enter,
+    Action.Back_Time        : imgui.Key.left_arrow,
+    Action.Forward_Time     : imgui.Key.right_arrow,
+    Action.Back_Frame       : imgui.Key.j,
+    Action.Forward_Frame    : imgui.Key.k,
+    Action.Pause            : imgui.Key.space,
+    Action.Quit             : imgui.Key.enter,
+    Action.Annotate_Delete  : imgui.Key.d
 }
 
 action_lbl_map: dict[Action, str|tuple[str,str]] = {
-    Action.Back_Time    : ifa6.ICON_FA_BACKWARD_FAST,
-    Action.Forward_Time : ifa6.ICON_FA_FORWARD_FAST,
-    Action.Back_Frame   : ifa6.ICON_FA_BACKWARD_STEP,
-    Action.Forward_Frame: ifa6.ICON_FA_FORWARD_STEP,
-    Action.Pause        : (ifa6.ICON_FA_PLAY, ifa6.ICON_FA_PAUSE),  # (no_playing, playing)
-    Action.Quit         : "Done",
+    Action.Back_Time        : ifa6.ICON_FA_BACKWARD_FAST,
+    Action.Forward_Time     : ifa6.ICON_FA_FORWARD_FAST,
+    Action.Back_Frame       : ifa6.ICON_FA_BACKWARD_STEP,
+    Action.Forward_Frame    : ifa6.ICON_FA_FORWARD_STEP,
+    Action.Pause            : (ifa6.ICON_FA_PLAY, ifa6.ICON_FA_PAUSE),  # (no_playing, playing)
+    Action.Quit             : "Done",
+    Action.Annotate_Delete  : ifa6.ICON_FA_TRASH_CAN
 }
 
 action_tooltip_map = {
-    Action.Back_Time    : "Back 1 s (with shift 10 s)",
-    Action.Forward_Time : "Forward 1 s (with shift 10 s)",
-    Action.Back_Frame   : "Back 1 frame (with shift 10 frames)",
-    Action.Forward_Frame: "Forward 1 frame (with shift 10 frames)",
-    Action.Pause        : "Pause or resume playback",
-    Action.Quit         : "Done",
+    Action.Back_Time        : "Back 1 s (with shift 10 s)",
+    Action.Forward_Time     : "Forward 1 s (with shift 10 s)",
+    Action.Back_Frame       : "Back 1 frame (with shift 10 frames)",
+    Action.Forward_Frame    : "Forward 1 frame (with shift 10 frames)",
+    Action.Pause            : "Pause or resume playback",
+    Action.Quit             : "Done",
+    Action.Annotate_Delete  : "Delete annotation"
 }
 
 @dataclasses.dataclass
@@ -77,7 +82,7 @@ class Button:
         self.full_tooltip = f'{self.tooltip} ({accelerator})'
 
 
-# simple GUI provider for viewer and coder windows in glassesValidator.process
+# GUI provider for viewer and coder windows in glassesValidator.process
 class GUI:
     def __init__(self, use_thread=True):
         self._should_exit = False
@@ -98,6 +103,7 @@ class GUI:
         self._shortcut_key_map  = shortcut_key_map.copy()
         self._annotate_shortcut_key_map: dict[annotation.Event, imgui.Key] = {}
         self._annotate_tooltips        : dict[annotation.Event, str] = {}
+        self._annotations_frame: dict[annotation.Event, list[int]] = None
 
         self._allow_pause = False
         self._allow_seek = False
@@ -161,7 +167,7 @@ class GUI:
         d_key = (action,event) if event else action
         self._buttons.pop(d_key, None)
         if add: # NB: nothing to do for remove, already removed
-            if action==Action.Annotate:
+            if action==Action.Annotate_Make:
                 assert event is not None, f'Cannot set an annotate action without a provided event'
                 lbl = event.value
                 tooltip = self._annotate_tooltips[event]
@@ -202,6 +208,8 @@ class GUI:
                 self.set_duration(duration, last_frame_idx)
         else:
             self._window_timeline[window_id] = None
+        if annotations is not None and self._any_has_timeline():
+            self._annotations_frame = annotations
         self._create_annotation_buttons()
 
     def set_allow_annotate(self, allow_annotate: bool, annotate_shortcut_key_map: dict[annotation.Event, imgui.Key]=None, annotate_tooltips: dict[annotation.Event, str] = None):
@@ -217,20 +225,22 @@ class GUI:
                 self._window_timeline[w].set_annotation_keys(self._annotate_shortcut_key_map, self._annotate_tooltips)
         self._create_annotation_buttons()
 
-    def _create_annotation_buttons(self):
-        any_timeline = False
+    def _any_has_timeline(self):
         for w in self._windows:
             if self._window_timeline[w] is not None and self._window_timeline[w].get_num_annotations():
-                any_timeline = True
-                break
+                return True
+        return False
+    def _create_annotation_buttons(self):
+        any_timeline = self._any_has_timeline()
         # for safety, remove all possible already registered events
         for e in annotation.Event:
-            self._buttons.pop((Action.Annotate, e), None)
+            self._buttons.pop((Action.Annotate_Make, e), None)
+        self._add_remove_button(any_timeline and self._allow_annotate, Action.Annotate_Delete)
         # and make buttons if we have a visible timeline
         if not any_timeline or not self._allow_annotate:
             return
         for e in self._annotate_shortcut_key_map:
-            self._add_remove_button(self._allow_annotate, Action.Annotate, e)
+            self._add_remove_button(self._allow_annotate, Action.Annotate_Make, e)
 
     def set_show_annotation_label(self, show_label: bool, window_id = None):
         if window_id is None:
@@ -462,10 +472,11 @@ class GUI:
         if self._allow_pause or self._allow_seek:
             buttons.extend([None, None])
         buttons.append(self._buttons[Action.Quit])
-        if self._allow_annotate and self._annotate_shortcut_key_map:
+        if self._allow_annotate and self._any_has_timeline() and self._annotate_shortcut_key_map:
             buttons.extend([None, None])
+            buttons.append(self._buttons[Action.Annotate_Delete])
             for e in self._annotate_shortcut_key_map:
-                buttons.append(self._buttons[(Action.Annotate, e)])
+                buttons.append(self._buttons[(Action.Annotate_Make, e)])
         # determine space they take up
         def _get_text_size(b: Button|None):
             if b is None:
@@ -514,6 +525,11 @@ class GUI:
             lbl = b.lbl
             if b.action==Action.Pause:
                 lbl = lbl[1] if self._is_playing else lbl[0]
+            disable = False
+            if b.action==Action.Annotate_Delete:
+                disable = not self._annotations_frame or not intervals.is_in_interval(self._current_frame[w][2],self._annotations_frame)
+            if disable:
+                imgui.begin_disabled()
             if self._window_show_controls[w]:
                 activated = imgui.button(lbl, size=sz)
             else:
@@ -532,10 +548,20 @@ class GUI:
                         self._requests.append(('delta_time',  10. if imgui.is_key_down(imgui.Key.im_gui_mod_shift) else  1.))
                     case Action.Quit:
                         self._requests.append(('exit',None))
-                    case Action.Annotate:
-                        self._requests.append(('add_coding',(b.event, [self._current_frame[0][2]])))
+                    case Action.Annotate_Make:
+                        self._requests.append(('add_coding',(b.event, [self._current_frame[w][2]])))
+                    case Action.Annotate_Delete:
+                        keys, ivals = intervals.which_interval(self._current_frame[w][2], self._annotations_frame)
+                        for k,iv in zip(keys,ivals):
+                            if len(iv)>1 and self._current_frame[w][2] in iv:
+                                # on the edge of an episode, return only the edge so we don't delete the whole episode
+                                self._requests.append(('delete_coding',(k,[self._current_frame[w][2]])))
+                            else:
+                                self._requests.append(('delete_coding',(k,iv)))
             if self._window_show_controls[w] and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
                 imgui.set_tooltip(b.full_tooltip)
+            if disable:
+                imgui.end_disabled()
             imgui.same_line()
         imgui.end_child()
         imgui.pop_style_color()
