@@ -263,6 +263,13 @@ class GUI:
             self._thread.join()
         self._thread = None
 
+    def set_frame_size(self, frame_size: tuple[int,int], window_id=None):
+        if window_id is None:
+            window_id = self._get_main_window_id()
+
+        self._window_determine_size[window_id] = any([x!=y for x,y in zip(self._frame_size[window_id],frame_size)])
+        self._frame_size[window_id] = frame_size
+
     def update_image(self, frame: np.ndarray, pts: float, frame_nr: int, window_id = None):
         # since this has an independently running loop,
         # need to update image whenever new one available
@@ -361,21 +368,22 @@ class GUI:
 
                     # if first time we're showing something (we have a new frame but not yet a current frame)
                     self._frame_size[w] = self._new_frame[w][0].shape
-                    if self._not_shown_yet[w]:
+
+                if self._new_frame[w][2]!=-1:
+                    if self._not_shown_yet[w] and self._frame_size[w][0]!=-1:   # need to have a known framesize to be able to start showing the window
+                        # tell window to resize
+                        self._window_determine_size[w] = True
                         if w==0:
-                            # tell window to resize
-                            self._window_determine_size[w] = True
                             # and show window if needed
                             if not self._window_visible[w]:
                                 hello_imgui.get_runner_params().app_window_params.hidden = False
                         # mark window as shown
                         self._window_visible[w] = True
                         self._not_shown_yet[w] = False
-                    else:
+                    elif self._new_frame[w][0] is not None:
                         # detect when frame changed size
                         self._window_determine_size[w] = any([x!=y for x,y in zip(self._frame_size[w],self._new_frame[w][0].shape)])
 
-                if self._new_frame[w][2]!=-1:
                     # keep record of what we're showing
                     self._current_frame[w]  = self._new_frame[w]
                     self._new_frame[w]      = (None, None, -1)
@@ -390,45 +398,39 @@ class GUI:
                     self._draw_gui(w, w>0)
 
     def _draw_gui(self, w, need_begin_end):
-        if self._current_frame[w][2]==-1 or self._texID[w] is None:
+        if self._current_frame[w][2]==-1 or self._frame_size[w]==-1:
             return
 
         # determine window size if needed
         dpi_fac = hello_imgui.dpi_window_size_factor()
         img_sz = np.array([self._frame_size[w][1]*dpi_fac, self._frame_size[w][0]*dpi_fac])
-        if self._current_frame[w][0] is not None:
-            if self._window_determine_size[w]:
-                win     = glfw_utils.glfw_window_hello_imgui()
-                w_bounds= get_current_monitor(*glfw.get_window_pos(win))[1]
-                w_bounds= adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
-                tl_height = 0
-                if (tl:=self._window_timeline[w]) is not None:
-                    # calc size of timeline and adjust
-                    timeline_fixed_elements_height = tl.get_fixed_elements_height()
-                    tracks_height = 25*tl.get_num_annotations()*dpi_fac  # 25 pixels per track
-                    tl_height = int(timeline_fixed_elements_height+tracks_height)
-                    w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_height]
-                img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz]))
-                self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz)])
-                img_fit.size = [int(x*self._window_sfac[w]) for x in img_sz]
-                if not need_begin_end:
-                    glfw.set_window_pos (win, *img_fit.position)
-                    glfw.set_window_size(win, img_fit.size[0], img_fit.size[1]+tl_height)
+        if self._window_determine_size[w]:
+            win     = glfw_utils.glfw_window_hello_imgui()
+            w_bounds= get_current_monitor(*glfw.get_window_pos(win))[1]
+            w_bounds= adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
+            tl_height = 0
+            if (tl:=self._window_timeline[w]) is not None:
+                # calc size of timeline and adjust
+                timeline_fixed_elements_height = tl.get_fixed_elements_height()
+                tracks_height = 25*tl.get_num_annotations()*dpi_fac  # 25 pixels per track
+                tl_height = int(timeline_fixed_elements_height+tracks_height)
+                w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_height]
+            img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz]))
+            self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz)])
+            img_fit.size = [int(x*self._window_sfac[w]) for x in img_sz]
+            if not need_begin_end:
+                glfw.set_window_pos (win, *img_fit.position)
+                glfw.set_window_size(win, img_fit.size[0], img_fit.size[1]+tl_height)
 
-            if need_begin_end:
-                if self._window_determine_size[w]:
-                    imgui.set_next_window_pos(img_fit.position)
-                    imgui.set_next_window_size(img_fit.size + imgui.ImVec2((0, tl_height)))
-                opened, self._window_visible[w] = imgui.begin(self._windows[w], self._window_visible[w], self._window_flags)
-                if not opened:
-                    imgui.end()
-                    return
-            self._window_determine_size[w] = False
-        elif need_begin_end:
+        if need_begin_end:
+            if self._window_determine_size[w]:
+                imgui.set_next_window_pos(img_fit.position)
+                imgui.set_next_window_size([x+y for x,y in zip(img_fit.size,(0, tl_height))])
             opened, self._window_visible[w] = imgui.begin(self._windows[w], self._window_visible[w], self._window_flags)
             if not opened:
                 imgui.end()
                 return
+        self._window_determine_size[w] = False
 
         # draw image
         img_sz = (img_sz * self._window_sfac[w]).astype('int')
