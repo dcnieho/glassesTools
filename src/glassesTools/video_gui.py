@@ -1,5 +1,5 @@
 try:
-    from imgui_bundle import imgui, immapp, hello_imgui, glfw_utils
+    from imgui_bundle import imgui, immapp, hello_imgui, glfw_utils, icons_fontawesome_6 as ifa6
     import glfw
     import OpenGL.GL as gl
 except ImportError:
@@ -8,8 +8,73 @@ except ImportError:
 import time
 import threading
 import numpy as np
+import functools
+from enum import Enum, auto
+import dataclasses
 
-from . import platform
+from . import annotation, platform, timeline_gui, timestamps, utils
+
+class Action(Enum):
+    Back_Time       = auto()
+    Forward_Time    = auto()
+    Back_Frame      = auto()
+    Forward_Frame   = auto()
+    Pause           = auto()
+    Quit            = auto()
+    Annotate        = auto()
+
+shortcut_key_map = {
+    Action.Back_Time    : imgui.Key.left_arrow,
+    Action.Forward_Time : imgui.Key.right_arrow,
+    Action.Back_Frame   : imgui.Key.j,
+    Action.Forward_Frame: imgui.Key.k,
+    Action.Pause        : imgui.Key.space,
+    Action.Quit         : imgui.Key.enter,
+}
+
+action_lbl_map: dict[Action, str|tuple[str,str]] = {
+    Action.Back_Time    : ifa6.ICON_FA_BACKWARD_FAST,
+    Action.Forward_Time : ifa6.ICON_FA_FORWARD_FAST,
+    Action.Back_Frame   : ifa6.ICON_FA_BACKWARD_STEP,
+    Action.Forward_Frame: ifa6.ICON_FA_FORWARD_STEP,
+    Action.Pause        : (ifa6.ICON_FA_PLAY, ifa6.ICON_FA_PAUSE),  # (no_playing, playing)
+    Action.Quit         : "Done",
+}
+
+action_tooltip_map = {
+    Action.Back_Time    : "Back 1 s (with shift 10 s)",
+    Action.Forward_Time : "Forward 1 s (with shift 10 s)",
+    Action.Back_Frame   : "Back 1 frame (with shift 10 frames)",
+    Action.Forward_Frame: "Forward 1 frame (with shift 10 frames)",
+    Action.Pause        : "Pause or resume playback",
+    Action.Quit         : "Done",
+}
+
+@dataclasses.dataclass
+class Button:
+    action: Action
+    lbl: str
+    tooltip: str
+    key: imgui.Key
+    event: annotation.Event = None
+
+    has_shift: bool = dataclasses.field(init=False, default=False)
+    repeats: bool =  dataclasses.field(init=False, default=False)
+    full_tooltip: str = dataclasses.field(init=False, default='')
+
+    def __post_init__(self):
+        self.has_shift = self.action in [Action.Back_Time, Action.Back_Frame, Action.Forward_Frame, Action.Forward_Time]
+        self.repeats = self.has_shift
+
+        accelerator = imgui.get_key_name(self.key)
+        if self.has_shift:
+            mod_lbl = imgui.get_key_name(imgui.Key.im_gui_mod_shift)
+            if mod_lbl.lower().startswith('mod'):
+                mod_lbl = mod_lbl[3:]
+            accelerator = f'{accelerator} or {mod_lbl}+{accelerator}'
+        if self.event is not None:
+            self.tooltip = f'Make {self.tooltip.lower()} annotation'
+        self.full_tooltip = f'{self.tooltip} ({accelerator})'
 
 
 # simple GUI provider for viewer and coder windows in glassesValidator.process
@@ -17,13 +82,23 @@ class GUI:
     def __init__(self, use_thread=True):
         self._should_exit = False
         self._use_thread = use_thread # NB: on MacOSX the GUI needs to be on the main thread, see https://github.com/pthom/hello_imgui/issues/33
-        self._thread = None
-        self._new_frame = {}
-        self._texID = {}
-        self._frame_nr = {}
-        self._frame_pts = {}
-        self._current_frame = {}
-        self._frame_rate = 60
+        self._thread: threading.Thread = None
+        self._new_frame: dict[int, tuple[np.ndarray, float, int]] = {}
+        self._current_frame: dict[int, tuple[np.ndarray, float, int]] = {}
+        self._texID: dict[int,int] = {}
+        self._frame_rate = None
+
+        self._action_tooltips   = action_tooltip_map.copy()
+        self._action_button_lbls= action_lbl_map.copy()
+        self._shortcut_key_map  = shortcut_key_map.copy()
+        self._annotate_shortcut_key_map: dict[annotation.Event, imgui.Key] = {}
+        self._annotate_tooltips        : dict[annotation.Event, str] = {}
+
+        self._allow_pause = False
+        self._allow_seek = False
+        self._allow_annotate = False
+        self._is_playing = False
+        self._requests: list[tuple[str,Any]] = []
 
         self._next_window_id: int = 0
         self._windows_lock: threading.Lock = threading.Lock()
@@ -33,31 +108,119 @@ class GUI:
                                     imgui.WindowFlags_.no_collapse |
                                     imgui.WindowFlags_.no_scrollbar
                                 )
-        self._window_visible = {}
-        self._window_determine_size = {}
-        self._window_sfac    = {}
+        self._window_visible: dict[int,bool] = {}
+        self._window_determine_size: dict[int,bool] = {}
+        self._window_show_controls: dict[int,bool] = {}
+        self._window_sfac: dict[int,float]    = {}
+        self._window_timeline: dict[int,timeline_gui.Timeline] = {}
 
-        self._interesting_keys = {}
-        self._pressed_keys = {}
-
-        self._draw_callback = {'main': None, 'status': None}
+        self._buttons: dict[Action|tuple[Action,annotation.Event], Button] = {}
+        self._add_remove_button(True, Action.Quit)
 
     def __del__(self):
         self.stop()
 
-    def add_window(self,name: str) -> int:
+    def add_window(self, name: str, show_timeline=False, video_ts: timestamps.VideoTimestamps = None, annotations: dict[annotation.Event, list[int]] = None) -> int:
         with self._windows_lock:
-            id = self._next_window_id
-            self._windows[id] = name
-            self._texID[id] = None
-            self._new_frame[id] = (None, None, -1)
-            self._current_frame[id] = (None, None, -1)
-            self._window_visible[id] = False
-            self._window_determine_size[id] = False
-            self._window_sfac[id]    = 1.
+            w_id = self._next_window_id
+            self._windows[w_id]                 = name
+            self._texID[w_id]                   = None
+            self._new_frame[w_id]               = (None, None, -1)
+            self._current_frame[w_id]           = (None, None, -1)
+            self._window_visible[w_id]          = False
+            self._window_determine_size[w_id]   = False
+            self._window_show_controls[w_id]    = False
+            self._window_sfac[w_id]             = 1.
+            self.set_show_timeline(show_timeline, video_ts, annotations, w_id)
 
             self._next_window_id += 1
-            return id
+            return w_id
+
+    def set_allow_pause(self, allow_pause: bool):
+        self._allow_pause = allow_pause
+        self._add_remove_button(self._allow_pause, Action.Pause)
+    def set_allow_seek(self, allow_seek: bool):
+        self._allow_seek = allow_seek
+        for w in self._windows:
+            if self._window_timeline[w] is not None:
+                self._window_timeline[w].set_allow_seek(allow_seek)
+        self._add_remove_button(self._allow_seek, Action.Back_Time)
+        self._add_remove_button(self._allow_seek, Action.Forward_Time)
+        self._add_remove_button(self._allow_seek, Action.Back_Frame)
+        self._add_remove_button(self._allow_seek, Action.Forward_Frame)
+    def _add_remove_button(self, add: bool, action: Action, event: annotation.Event=None):
+        d_key = (action,event) if event else action
+        self._buttons.pop(d_key, None)
+        if add: # NB: nothing to do for remove, already removed
+            if action==Action.Annotate:
+                assert event is not None, f'Cannot set an annotate action without a provided event'
+                lbl = event.value
+                tooltip = self._annotate_tooltips[event]
+                key = self._annotate_shortcut_key_map[event]
+            else:
+                lbl = self._action_button_lbls[action]
+                tooltip = self._action_tooltips[action]
+                key = self._shortcut_key_map[action]
+            self._buttons[d_key] = Button(action, lbl, tooltip, key, event)
+
+    def set_allow_timeline_zoom(self, allow_timeline_zoom: bool):
+        for w in self._windows:
+            if self._window_timeline[w] is not None:
+                self._window_timeline[w].set_allow_timeline_zoom(allow_timeline_zoom)
+    def set_show_controls(self, show_controls: bool, window_id = None):
+        if window_id is None:
+            window_id = self._get_main_window_id()
+        self._window_show_controls[window_id] = show_controls
+
+    def set_show_timeline(self, show_timeline: bool, video_ts: timestamps.VideoTimestamps = None, annotations: dict[annotation.Event, list[int]] = None, window_id = None):
+        if window_id is None:
+            window_id = self._get_main_window_id()
+
+        if show_timeline:
+            self._window_timeline[window_id] = timeline_gui.Timeline(video_ts, annotations)
+            self._window_timeline[window_id].set_allow_annotate(self._allow_annotate)
+            self._window_timeline[window_id].set_allow_seek(self._allow_seek)
+            self._window_timeline[window_id].set_annotation_keys(self._annotate_shortcut_key_map, self._annotate_tooltips)
+        else:
+            self._window_timeline[window_id] = None
+        self._create_annotation_buttons()
+
+    def set_allow_annotate(self, allow_annotate: bool, annotate_shortcut_key_map: dict[annotation.Event, imgui.Key]=None, annotate_tooltips: dict[annotation.Event, str] = None):
+        self._allow_annotate = allow_annotate
+        if annotate_shortcut_key_map is not None:
+            self._annotate_shortcut_key_map = annotate_shortcut_key_map
+        if annotate_tooltips is None:
+            annotate_tooltips = {e:annotation.tooltip_map[e] for e in self._annotate_shortcut_key_map}
+        self._annotate_tooltips = annotate_tooltips
+        for w in self._windows:
+            if self._window_timeline[w] is not None and self._window_timeline[w].get_num_annotations():
+                self._window_timeline[w].set_allow_annotate(allow_annotate)
+                self._window_timeline[w].set_annotation_keys(self._annotate_shortcut_key_map, self._annotate_tooltips)
+        self._create_annotation_buttons()
+
+    def _create_annotation_buttons(self):
+        any_timeline = False
+        for w in self._windows:
+            if self._window_timeline[w] is not None and self._window_timeline[w].get_num_annotations():
+                any_timeline = True
+                break
+        # for safety, remove all possible already registered events
+        for e in annotation.Event:
+            self._buttons.pop((Action.Annotate, e), None)
+        # and make buttons if we have a visible timeline
+        if not any_timeline or not self._allow_annotate:
+            return
+        for e in self._annotate_shortcut_key_map:
+            self._add_remove_button(self._allow_annotate, Action.Annotate, e)
+
+    def set_show_annotation_label(self, show_label: bool, window_id = None):
+        if window_id is None:
+            window_id = self._get_main_window_id()
+        if self._window_timeline[window_id] is not None:
+            self._window_timeline[window_id].set_show_annotation_labels(show_label)
+
+    def set_playing(self, is_playing: bool):
+        self._is_playing = is_playing
 
     def start(self):
         if not self._windows:
@@ -70,8 +233,10 @@ class GUI:
         else:
             self._thread_start_fun()
 
-    def get_state(self):
-        return (self._user_closed_window,)
+    def get_requests(self):
+        reqs = self._requests
+        self._requests = []
+        return reqs
 
     def stop(self):
         self._should_exit = True
@@ -79,7 +244,7 @@ class GUI:
             self._thread.join()
         self._thread = None
 
-    def update_image(self, frame, pts, frame_nr, window_id = None):
+    def update_image(self, frame: np.ndarray, pts: float, frame_nr: int, window_id = None):
         # since this has an independently running loop,
         # need to update image whenever new one available
         if window_id is None:
@@ -87,56 +252,33 @@ class GUI:
                 window_id = self._get_main_window_id()
             else:
                 raise RuntimeError("You have more than one window, you must indicate for which window you are providing an image")
-
         self._new_frame[window_id] = (frame, pts, frame_nr) # just copy ref to frame is enough
 
-    def register_draw_callback(self, type: str, callback):
-        # e.g. for drawing overlays
-        if type not in self._draw_callback:
-            raise RuntimeError('Draw callback type unknown')
-        self._draw_callback[type] = callback
+    def set_framerate(self, framerate: int|None):
+        if not framerate:
+            # disable manual vsync
+            self._frame_rate = None
+        else:
+            self._frame_rate = int(framerate)
 
-    def set_framerate(self, framerate):
-        self._frame_rate = int(framerate)
-
-    def set_interesting_keys(self, keys: list[str]):
-        if isinstance(keys,str):
-            keys = [x for x in keys]
-
-        self._interesting_keys = {}
-        self._pressed_keys = {}
-        for k in keys:
-            # convert to imgui enum
-            self._interesting_keys[k] = getattr(imgui.Key,k)
-            # storage for presses
-            self._pressed_keys[k] = [-1, False]
-
-    def get_key_presses(self) -> dict[str,float]:
-        out = {}
-        thisT = time.perf_counter()
-        for k in self._pressed_keys:
-            if self._pressed_keys[k][0] != -1:
-                t = thisT - self._pressed_keys[k][0]
-                if self._pressed_keys[k][1]:
-                    out[k.upper()] = t
-                else:
-                    out[    k    ] = t
-
-                # clear key press so its not output again
-                self._pressed_keys[k] = [-1, False]
-        return out
+    def notify_annotations_changed(self):
+        for w in self._windows:
+            if self._window_timeline[w] is not None:
+                self._window_timeline[w].notify_annotations_changed()
 
     def _get_main_window_id(self):
         with self._windows_lock:
-            return next(iter(self._windows))
+            if len(self._windows)==1:
+                return next(iter(self._windows))
+            else:
+                raise RuntimeError("You have more than one window, you must indicate for which window you are making this call for")
 
     def _thread_start_fun(self):
         self._lastT=0.
         self._should_exit = False
-        self._user_closed_window = False
 
         def close_callback(window: glfw._GLFWwindow):
-            self._user_closed_window = True
+            self._requests.append(('exit',True))
 
         def post_init():
             imgui.get_io().config_viewports_no_decoration = False
@@ -152,6 +294,7 @@ class GUI:
         params.app_window_params.window_title = self._windows[self._get_main_window_id()]
         params.app_window_params.hidden = True
         params.fps_idling.fps_idle = 0
+        params.callbacks.default_icon_font = hello_imgui.DefaultIconFont.font_awesome6
         params.callbacks.show_gui  = self._gui_func
         params.callbacks.post_init = post_init
 
@@ -182,13 +325,8 @@ class GUI:
         elapsedT = thisT-self._lastT
         self._lastT = thisT
 
-        if elapsedT < 1/self._frame_rate:
+        if self._frame_rate and elapsedT < 1/self._frame_rate:
             time.sleep(1/self._frame_rate-elapsedT)
-
-        # if user wants to know about keypresses, keep record of them
-        for k in self._interesting_keys:
-            if imgui.is_key_pressed(self._interesting_keys[k]):
-                self._pressed_keys[k] = [thisT, imgui.is_key_down(imgui.Key.im_gui_mod_shift)]
 
         # upload texture if needed
         with self._windows_lock:
@@ -223,6 +361,10 @@ class GUI:
                     self._current_frame[w]  = self._new_frame[w]
                     self._new_frame[w]      = (None, None, -1)
 
+                    # inform timeline GUI of new frame's timestamp
+                    if self._window_timeline[w] is not None:
+                        self._window_timeline[w].set_position(*self._current_frame[w][1:])
+
             # show windows
             for w in self._windows.keys():
                 if self._window_visible[w]:
@@ -239,72 +381,156 @@ class GUI:
             win     = glfw_utils.glfw_window_hello_imgui()
             w_bounds= get_current_monitor(*glfw.get_window_pos(win))[1]
             w_bounds= adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
+            tl_height = 0
+            if (tl:=self._window_timeline[w]) is not None:
+                # calc size of timeline and adjust
+                timeline_fixed_elements_height = tl.get_fixed_elements_height()
+                tracks_height = 25*tl.get_num_annotations()*dpi_fac  # 25 pixels per track
+                tl_height = int(timeline_fixed_elements_height+tracks_height)
+                w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_height]
             img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz]))
             self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz)])
             img_fit.size = [int(x*self._window_sfac[w]) for x in img_sz]
             if not need_begin_end:
                 glfw.set_window_pos (win, *img_fit.position)
-                glfw.set_window_size(win, *img_fit.size)
+                glfw.set_window_size(win, img_fit.size[0], img_fit.size[1]+tl_height)
 
         if need_begin_end:
             if self._window_determine_size[w]:
                 imgui.set_next_window_pos(img_fit.position)
-                imgui.set_next_window_size(img_fit.size)
+                imgui.set_next_window_size(img_fit.size + imgui.ImVec2((0, tl_height)))
             opened, self._window_visible[w] = imgui.begin(self._windows[w], self._window_visible[w], self._window_flags)
             if not opened:
                 imgui.end()
                 return
         self._window_determine_size[w] = False
 
-        imgui.set_cursor_pos((0,0))
         # draw image
         img_sz = (img_sz * self._window_sfac[w]).astype('int')
+        img_space = imgui.get_content_region_avail().x
+        img_margin = max((img_space-img_sz[0])/2,0)
+        imgui.set_cursor_pos((img_margin,0))
         imgui.image(self._texID[w], img_sz)
 
-        # draw bottom status overlay
-        txt_sz = imgui.calc_text_size('')
-        win_bottom = min(self._current_frame[w][0].shape[0]*dpi_fac, imgui.get_window_size().y+imgui.get_scroll_y())
-        imgui.set_cursor_pos_y(win_bottom-txt_sz.y)
-        imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
-        imgui.begin_child("##status_overlay", size=(-imgui.FLT_MIN,txt_sz.y))
-        if self._current_frame[w][1] is not None:
-            imgui.text(" %8.3f [%d]" % (self._current_frame[w][1], self._current_frame[w][2]))
+        # draw action buttons (may be invisible, still submit them for shortcut routing)
+        # collect buttons in right order
+        buttons: list[Button|None] = []
+        if self._allow_seek:
+            buttons.append(self._buttons[Action.Back_Time])
+            buttons.append(self._buttons[Action.Back_Frame])
+        if self._allow_pause:
+            buttons.append(self._buttons[Action.Pause])
+        if self._allow_seek:
+            buttons.append(self._buttons[Action.Forward_Frame])
+            buttons.append(self._buttons[Action.Forward_Time])
+        if self._allow_pause or self._allow_seek:
+            buttons.extend([None, None])
+        buttons.append(self._buttons[Action.Quit])
+        if self._allow_annotate and self._annotate_shortcut_key_map:
+            buttons.extend([None, None])
+            for e in self._annotate_shortcut_key_map:
+                buttons.append(self._buttons[(Action.Annotate, e)])
+        # determine space they take up
+        def _get_text_size(b: Button|None):
+            if b is None:
+                return imgui.calc_text_size('')
+            elif isinstance(b.lbl,tuple):
+                return max([imgui.calc_text_size(l) for l in b.lbl], key=lambda x: x.x)
+            return imgui.calc_text_size(b.lbl)
+        text_sizes = [_get_text_size(b) for b in buttons]
+        button_sizes = [imgui.ImVec2([x+2*y for x,y in zip(ts, imgui.get_style().frame_padding)]) for ts in text_sizes]
+        total_button_size = functools.reduce(lambda a,b: imgui.ImVec2(a.x+b.x, max(a.y,b.y)), button_sizes)
+        total_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*imgui.get_style().item_spacing.x, total_button_size.y)
+        # draw them, or info item for tooltip
+        if self._window_show_controls[w]:
+            imgui.set_cursor_pos(((img_space-total_size.x)/2,img_sz[1]-total_size.y))
+            child_size = total_size
         else:
-            imgui.text(" %d" % (self._current_frame[w][2],))
-        if self._draw_callback['status']:
-            self._draw_callback['status']()
+            txt_sz = imgui.calc_text_size('(?)')
+            imgui.set_cursor_pos((img_margin+img_sz[0]-txt_sz.x-2*imgui.get_style().frame_padding.x, img_sz[1]-txt_sz.y-2*imgui.get_style().frame_padding.y))
+            child_size = txt_sz+imgui.ImVec2([x*2 for x in imgui.get_style().frame_padding])
+        imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
+        imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
+        imgui.begin_child("##controls_overlay", size=child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
+        if not self._window_show_controls[w]:
+            imgui.text('(?)')
+            if imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
+                text = ''
+                for b in buttons:
+                    if b is not None:
+                        text += f"'{imgui.get_key_name(b.key)}': {b.tooltip}\n"
+                text = text[:-1]
+                imgui.set_tooltip(text)
+
+        for b,sz in zip(buttons,button_sizes):
+            if b is None:
+                imgui.dummy(sz)
+                imgui.same_line()
+                continue
+            mod_key = 0
+            if b.has_shift and imgui.is_key_down(imgui.Key.im_gui_mod_shift):
+                # ensure the shortcut with shift is picked up
+                mod_key = imgui.Key.im_gui_mod_shift
+            flags = imgui.InputFlags_.route_global
+            if b.repeats:
+                flags |= imgui.InputFlags_.repeat
+            imgui.set_next_item_shortcut(b.key|mod_key, flags=flags)
+            lbl = b.lbl
+            if b.action==Action.Pause:
+                lbl = lbl[1] if self._is_playing else lbl[0]
+            if self._window_show_controls[w]:
+                activated = imgui.button(lbl, size=sz)
+            else:
+                activated = imgui.invisible_button(lbl, size=sz)
+            if activated:
+                match b.action:
+                    case Action.Pause:
+                        self._requests.append(('toggle_pause',None))
+                    case Action.Back_Time:
+                        self._requests.append(('delta_time', -10. if imgui.is_key_down(imgui.Key.im_gui_mod_shift) else -1.))
+                    case Action.Back_Frame:
+                        self._requests.append(('delta_frame', -10 if imgui.is_key_down(imgui.Key.im_gui_mod_shift) else -1))
+                    case Action.Forward_Frame:
+                        self._requests.append(('delta_frame',  10 if imgui.is_key_down(imgui.Key.im_gui_mod_shift) else  1))
+                    case Action.Forward_Time:
+                        self._requests.append(('delta_time',  10. if imgui.is_key_down(imgui.Key.im_gui_mod_shift) else  1.))
+                    case Action.Quit:
+                        self._requests.append(('exit',None))
+                    case Action.Annotate:
+                        self._requests.append(('add_coding',(b.event, [self._current_frame[0][2]])))
+            if self._window_show_controls[w] and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
+                imgui.set_tooltip(b.full_tooltip)
+            imgui.same_line()
         imgui.end_child()
         imgui.pop_style_color()
+        imgui.pop_style_var()
 
-        if self._draw_callback['main']:
-            self._draw_callback['main']()
+        # draw bottom status overlay
+        fr_ts, fr_idx = self._current_frame[w][1:]
+        if fr_ts is not None:
+            text = f'{utils.format_duration(fr_ts,True)} ({fr_ts:.3f}) [{fr_idx}]'
+        else:
+            text = f'{fr_idx}'
+        txt_sz = imgui.calc_text_size(text)
+        imgui.set_cursor_pos((img_margin,img_sz[1]-txt_sz.y-2*imgui.get_style().frame_padding.y))
+        imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
+        imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
+        imgui.begin_child("##status_overlay", size=txt_sz+imgui.ImVec2([x*2 for x in imgui.get_style().frame_padding]))
+        imgui.set_cursor_pos(imgui.get_style().frame_padding)
+        imgui.text(text)
+        imgui.end_child()
+        imgui.pop_style_color()
+        imgui.pop_style_var()
+
+        # draw timeline, if any
+        if self._window_timeline[w] is not None:
+            cur_pos = imgui.get_cursor_pos()
+            imgui.set_cursor_pos((cur_pos.x, cur_pos.y-imgui.get_style().item_spacing.y))
+            self._window_timeline[w].draw()
+            self._requests.extend(self._window_timeline[w].get_requests())
 
         if need_begin_end:
             imgui.end()
-
-def generic_tooltip_drawer(info_dict: dict[str,str]):
-    ws = imgui.get_window_size()
-    ts = imgui.calc_text_size('(?)')
-    imgui.same_line(ws.x-ts.x)
-    imgui.text('(?)')
-
-    if imgui.is_item_hovered():
-        imgui.begin_tooltip()
-        imgui.push_text_wrap_pos(min(imgui.get_font_size() * 35, ws.x))
-        text = ''
-        for k in info_dict:
-            text += f"'{k.upper()}': {info_dict[k]}\n"
-        text = text[:-1]
-        imgui.text_unformatted(text)
-        imgui.pop_text_wrap_pos()
-        imgui.end_tooltip()
-
-def qns_tooltip() -> dict[str,str]:
-    return {
-        'q': 'Quit',
-        'n': 'Next',
-        's': 'Screenshot'
-    }
 
 def get_current_monitor(wx, wy, ww=None, wh=None):
     # so we always return something sensible
