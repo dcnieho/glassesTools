@@ -83,8 +83,10 @@ class GUI:
         self._should_exit = False
         self._use_thread = use_thread # NB: on MacOSX the GUI needs to be on the main thread, see https://github.com/pthom/hello_imgui/issues/33
         self._thread: threading.Thread = None
+        self._not_shown_yet: dict[int, bool] = {}
         self._new_frame: dict[int, tuple[np.ndarray, float, int]] = {}
         self._current_frame: dict[int, tuple[np.ndarray, float, int]] = {}
+        self._frame_size: dict[int, tuple[int,int]] = {}
         self._texID: dict[int,int] = {}
         self._frame_rate = None
 
@@ -128,9 +130,11 @@ class GUI:
         with self._windows_lock:
             w_id = self._next_window_id
             self._windows[w_id]                 = name
+            self._not_shown_yet[w_id]           = True
             self._texID[w_id]                   = None
             self._new_frame[w_id]               = (None, None, -1)
             self._current_frame[w_id]           = (None, None, -1)
+            self._frame_size[w_id]              = (-1, -1)
             self._window_visible[w_id]          = False
             self._window_determine_size[w_id]   = False
             self._window_show_controls[w_id]    = False
@@ -263,10 +267,7 @@ class GUI:
         # since this has an independently running loop,
         # need to update image whenever new one available
         if window_id is None:
-            if len(self._windows)==1:
-                window_id = self._get_main_window_id()
-            else:
-                raise RuntimeError("You have more than one window, you must indicate for which window you are providing an image")
+            window_id = self._get_main_window_id()
         self._new_frame[window_id] = (frame, pts, frame_nr) # just copy ref to frame is enough
 
     def set_framerate(self, framerate: int|None):
@@ -359,7 +360,8 @@ class GUI:
                     gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGB, self._new_frame[w][0].shape[1], self._new_frame[w][0].shape[0], 0, gl.GL_BGR, gl.GL_UNSIGNED_BYTE, self._new_frame[w][0])
 
                     # if first time we're showing something (we have a new frame but not yet a current frame)
-                    if self._current_frame[w][0] is None:
+                    self._frame_size[w] = self._new_frame[w][0].shape
+                    if self._not_shown_yet[w]:
                         if w==0:
                             # tell window to resize
                             self._window_determine_size[w] = True
@@ -368,10 +370,12 @@ class GUI:
                                 hello_imgui.get_runner_params().app_window_params.hidden = False
                         # mark window as shown
                         self._window_visible[w] = True
+                        self._not_shown_yet[w] = False
                     else:
                         # detect when frame changed size
-                        self._window_determine_size[w] = any([x!=y for x,y in zip(self._current_frame[w][0].shape,self._new_frame[w][0].shape)])
+                        self._window_determine_size[w] = any([x!=y for x,y in zip(self._frame_size[w],self._new_frame[w][0].shape)])
 
+                if self._new_frame[w][2]!=-1:
                     # keep record of what we're showing
                     self._current_frame[w]  = self._new_frame[w]
                     self._new_frame[w]      = (None, None, -1)
@@ -386,46 +390,61 @@ class GUI:
                     self._draw_gui(w, w>0)
 
     def _draw_gui(self, w, need_begin_end):
-        if self._current_frame[w] is None or self._texID[w] is None:
+        if self._current_frame[w][2]==-1 or self._texID[w] is None:
             return
 
         # determine window size if needed
         dpi_fac = hello_imgui.dpi_window_size_factor()
-        img_sz = np.array([self._current_frame[w][0].shape[1]*dpi_fac, self._current_frame[w][0].shape[0]*dpi_fac])
-        if self._window_determine_size[w]:
-            win     = glfw_utils.glfw_window_hello_imgui()
-            w_bounds= get_current_monitor(*glfw.get_window_pos(win))[1]
-            w_bounds= adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
-            tl_height = 0
-            if (tl:=self._window_timeline[w]) is not None:
-                # calc size of timeline and adjust
-                timeline_fixed_elements_height = tl.get_fixed_elements_height()
-                tracks_height = 25*tl.get_num_annotations()*dpi_fac  # 25 pixels per track
-                tl_height = int(timeline_fixed_elements_height+tracks_height)
-                w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_height]
-            img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz]))
-            self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz)])
-            img_fit.size = [int(x*self._window_sfac[w]) for x in img_sz]
-            if not need_begin_end:
-                glfw.set_window_pos (win, *img_fit.position)
-                glfw.set_window_size(win, img_fit.size[0], img_fit.size[1]+tl_height)
-
-        if need_begin_end:
+        img_sz = np.array([self._frame_size[w][1]*dpi_fac, self._frame_size[w][0]*dpi_fac])
+        if self._current_frame[w][0] is not None:
             if self._window_determine_size[w]:
-                imgui.set_next_window_pos(img_fit.position)
-                imgui.set_next_window_size(img_fit.size + imgui.ImVec2((0, tl_height)))
+                win     = glfw_utils.glfw_window_hello_imgui()
+                w_bounds= get_current_monitor(*glfw.get_window_pos(win))[1]
+                w_bounds= adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
+                tl_height = 0
+                if (tl:=self._window_timeline[w]) is not None:
+                    # calc size of timeline and adjust
+                    timeline_fixed_elements_height = tl.get_fixed_elements_height()
+                    tracks_height = 25*tl.get_num_annotations()*dpi_fac  # 25 pixels per track
+                    tl_height = int(timeline_fixed_elements_height+tracks_height)
+                    w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_height]
+                img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz]))
+                self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz)])
+                img_fit.size = [int(x*self._window_sfac[w]) for x in img_sz]
+                if not need_begin_end:
+                    glfw.set_window_pos (win, *img_fit.position)
+                    glfw.set_window_size(win, img_fit.size[0], img_fit.size[1]+tl_height)
+
+            if need_begin_end:
+                if self._window_determine_size[w]:
+                    imgui.set_next_window_pos(img_fit.position)
+                    imgui.set_next_window_size(img_fit.size + imgui.ImVec2((0, tl_height)))
+                opened, self._window_visible[w] = imgui.begin(self._windows[w], self._window_visible[w], self._window_flags)
+                if not opened:
+                    imgui.end()
+                    return
+            self._window_determine_size[w] = False
+        elif need_begin_end:
             opened, self._window_visible[w] = imgui.begin(self._windows[w], self._window_visible[w], self._window_flags)
             if not opened:
                 imgui.end()
                 return
-        self._window_determine_size[w] = False
 
         # draw image
         img_sz = (img_sz * self._window_sfac[w]).astype('int')
         img_space = imgui.get_content_region_avail().x
         img_margin = max((img_space-img_sz[0])/2,0)
         imgui.set_cursor_pos((img_margin,0))
-        imgui.image(self._texID[w], img_sz)
+        if self._current_frame[w][0] is None:
+            text = 'No image'
+            text_size = imgui.calc_text_size(text)
+            offset = [(x-y)/2 for x,y in zip(img_sz,text_size)]
+            imgui.set_cursor_pos((img_margin+offset[0],offset[1]))
+            imgui.text_colored((1., 0., 0., 1.), text)
+            imgui.set_cursor_pos((img_margin,0))
+            imgui.dummy(img_sz)
+        else:
+            imgui.image(self._texID[w], img_sz)
 
         # draw action buttons (may be invisible, still submit them for shortcut routing)
         # collect buttons in right order
