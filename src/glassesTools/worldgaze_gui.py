@@ -26,7 +26,13 @@ def show_visualization(
     cam_params      = ocv.CameraParams.readFromFile(camera_calibration_file)
 
     gui.set_framerate(cap.get_prop(cv2.CAP_PROP_FPS))
-    annotations_flat = {e:[i for iv in annotations[e] for i in iv] for e in annotations}
+    # flatten if needed
+    annotations_flat: dict[annotation.Event, list[int]] = {}
+    for e in annotations:
+        if annotations[e] and isinstance(annotations[e][0],list):
+            annotations_flat[e] = [i for iv in annotations[e] for i in iv]
+        else:
+            annotations_flat[e] = annotations[e].copy()
     gui.set_show_timeline(True, video_ts, annotations_flat, window_id=frame_win_id)
 
     # add windows for planes, if wanted
