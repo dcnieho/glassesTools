@@ -162,7 +162,7 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
                         processing_intervals: dict[str, list[int]|list[list[int]]],
                         planes: dict[str], individual_markers: dict[int, dict[str]]|None,
                         extra_processing: dict[str,tuple[Callable[[np.ndarray,...],tuple[float,float]],list[list[int]],dict[str]]]|None,
-                        gui: video_gui.GUI|None, sub_pixel_fac = 8, show_rejected_markers = False) -> tuple[bool, dict[str,list[plane.Pose]], dict[str,list[marker.Pose]]]:
+                        gui: video_gui.GUI|None, sub_pixel_fac = 8, show_rejected_markers = False) -> tuple[dict[str,list[plane.Pose]], dict[str,list[marker.Pose]]]:
     show_visualization = gui is not None
 
     # deal with extra processing functions
@@ -171,7 +171,10 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
         extra_processing_intervals = {e:extra_processing[e][1] for e in extra_processing}
 
     # open video
-    cap = ocv.CV2VideoReader(in_video, timestamps.VideoTimestamps(frame_timestamp_file).timestamps)
+    video_ts = timestamps.VideoTimestamps(frame_timestamp_file)
+    cap = ocv.CV2VideoReader(in_video, video_ts.timestamps)
+    if show_visualization:
+        gui.set_show_timeline(True, video_ts)
 
     # setup aruco marker detection
     aruco_boards = {p: planes[p]['plane'].get_aruco_board() for p in planes}
@@ -199,11 +202,13 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
     else:
         individual_markers_out = None
 
-    stop_all_processing = False
     poses_out = {p:[] for p in planes}
     extra_processing_out = None
     if has_extra_processing:
         extra_processing_out = {e:[] for e in extra_processing}
+    if show_visualization:
+        gui.set_playing(True)
+    should_exit = False
     while True:
         # process frame-by-frame
         done, frame, frame_idx, frame_ts = cap.read_frame(report_gap=True)
@@ -220,13 +225,12 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
             continue
 
         if show_visualization:
-            keys = gui.get_key_presses()
-            if 'q' in keys:
-                # quit fully
-                stop_all_processing = True
-                break
-            if 'n' in keys:
-                # goto next
+            requests = gui.get_requests()
+            for r,p in requests:
+                if r=='exit':   # only request we need to handle
+                    should_exit = True
+                    break
+            if should_exit:
                 break
 
         # check we're in a current interval, else skip processing
@@ -275,17 +279,9 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
             extra_processing_out[e].append([frame_idx, *extra_processing[e][0](frame,**extra_processing[e][2])])
 
         if show_visualization:
-            # keys is populated above
-            if 's' in keys:
-                # screenshot
-                cv2.imwrite(output_dir / f'detect_frame_{frame_idx}.png', frame)
             gui.update_image(frame, frame_ts/1000., frame_idx)
-            closed, = gui.get_state()
-            if closed:
-                stop_all_processing = True
-                break
 
     if show_visualization:
         gui.stop()
 
-    return stop_all_processing, poses_out, individual_markers_out, extra_processing_out
+    return poses_out, individual_markers_out, extra_processing_out
