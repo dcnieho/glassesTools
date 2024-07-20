@@ -136,6 +136,7 @@ class GUI:
             self._window_show_controls[w_id]    = False
             self._window_show_play_percentage[w_id] = False
             self._window_sfac[w_id]             = 1.
+            self._window_timeline[w_id]         = None
 
             self._next_window_id += 1
             return w_id
