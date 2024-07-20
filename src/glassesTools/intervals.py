@@ -19,6 +19,8 @@ def beyond_last_interval(frame_idx, intervals):
         return False
     elif isinstance(intervals, dict):
         for k in intervals:
+            if not intervals[k]:
+                return False
             if intervals[k] and frame_idx <= intervals[k][-1][-1]:
                 return False
         return True
