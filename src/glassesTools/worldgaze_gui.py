@@ -39,8 +39,12 @@ def show_visualization(
 
     max_frame_idx = max(head_gazes.keys())
     should_exit = False
+    first_frame = True
     for frame_idx in range(max_frame_idx+1):
         done, frame, frame_idx, frame_ts = cap.read_frame(report_gap=True)
+        if first_frame and frame is not None:
+            gui.set_frame_size(frame.shape, frame_win_id)
+            first_frame = False
         if done or intervals.beyond_last_interval(frame_idx, annotations):
             break
 

@@ -208,6 +208,7 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
     if show_visualization:
         gui.set_playing(True)
     should_exit = False
+    first_frame = True
     while True:
         # process frame-by-frame
         done, frame, frame_idx, frame_ts = cap.read_frame(report_gap=True)
@@ -224,6 +225,9 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
             continue
 
         if show_visualization:
+            if first_frame:
+                gui.set_frame_size(frame.shape)
+                first_frame = False
             requests = gui.get_requests()
             for r,p in requests:
                 if r=='exit':   # only request we need to handle
