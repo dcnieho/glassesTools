@@ -21,7 +21,9 @@ def beyond_last_interval(frame_idx, intervals):
         for k in intervals:
             if not intervals[k]:
                 return False
-            if intervals[k] and frame_idx <= intervals[k][-1][-1]:
+            if isinstance(intervals[k][-1], list) and frame_idx <= intervals[k][-1][-1]:
+                return False
+            elif frame_idx <= intervals[k][-1]:
                 return False
         return True
     else:
