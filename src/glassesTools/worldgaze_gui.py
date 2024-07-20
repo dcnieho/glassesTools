@@ -54,6 +54,11 @@ def show_visualization(
         # for VFR video files
         if show_only_intervals and not intervals.is_in_interval(frame_idx, interval_dict):
             # no need to show this frame
+            # do update timeline of the viewers
+            if show_planes:
+                gui.update_image(None, frame_ts/1000., frame_idx, window_id = frame_win_id)
+                for p in planes:
+                    gui.update_image(None, frame_ts/1000., frame_idx, window_id = plane_win_id[p])
             continue
 
         if show_planes:
