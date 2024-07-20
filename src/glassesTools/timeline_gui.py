@@ -6,12 +6,12 @@ from matplotlib import ticker
 
 from . import annotation, timestamps, utils
 
-def _color_u32_adjust_alpha(color: int, alpha: float) -> int:
+def _color_u32_replace_alpha(color: int, alpha: float) -> int:
     col = imgui.ImVec4(*imgui.get_style_color_vec4(color)) # make copy so we don't change the original!
     col.w = alpha
     return imgui.color_convert_float4_to_u32(col)
 
-def _color_adjust_alpha(color: imgui.ImColor, alpha: float) -> imgui.ImColor:
+def color_replace_alpha(color: imgui.ImColor, alpha: float) -> imgui.ImColor:
     return imgui.ImColor(color.value.x, color.value.y, color.value.z, alpha)
 
 def _color_luminance(color: imgui.ImColor) -> float:
@@ -21,6 +21,15 @@ def _calc_contrast_ratio(a: imgui.ImColor, b: imgui.ImColor) -> float:
     y1 = _color_luminance(a)
     y2 = _color_luminance(b)
     return (y2 + 0.05) / (y1 + 0.05) if (y1 > y2) else (y1 + 0.05) / (y2 + 0.05)
+
+def color_adjust_contrast(color: imgui.ImColor, contrast: float, bg_color: imgui.ImColor) -> imgui.ImColor:
+    bg_contrast_ratio = _calc_contrast_ratio(bg_color, color)
+    return imgui.ImColor(0, 0, 0, 1 - bg_contrast_ratio * 0.45) if (bg_contrast_ratio > contrast) else color
+
+def color_brighten(color: imgui.ImColor, amount: float):
+    amount = 1. / (1. + amount)
+    return imgui.ImColor(1. - (1. - color.value.x) * amount, 1. - (1. - color.value.y) * amount,
+                         1. - (1. - color.value.z) * amount, color.value.w)
 
 
 class Timeline:
@@ -54,6 +63,7 @@ class Timeline:
         # tracks
         self._annotations_frame = annotations
         self._annotations       = self._annotations_to_time()
+        self._annotation_colors = self._make_annotation_colors()
         self._show_annotation_labels = True
         self._annotation_tooltips: dict[annotation.Event, str] = {}
 
@@ -98,6 +108,13 @@ class Timeline:
         if not self._annotations_frame:
             return None
         return {e:[self._video_ts.get_timestamp(i)/1000 for i in self._annotations_frame[e]] for e in self._annotations_frame}  # ms -> s
+
+    def _make_annotation_colors(self) -> dict[annotation.Event, imgui.ImColor]:
+        color_steps = 1/(len(self._annotations_frame)+1)
+        return {k:imgui.ImColor.hsv(i*color_steps, 0.45, 0.65) for i,k in enumerate(self._annotations_frame)}
+
+    def get_annotation_colors(self) -> dict[annotation.Event, imgui.ImColor]:
+        return self._annotation_colors
 
     def set_position(self, time: float, frame_idx: int):
         self._current_time = max(0,min(time,self._duration))
@@ -298,7 +315,7 @@ class Timeline:
         draw_list.push_clip_rect(cursor_pos, cursor_pos+size)
 
         # draw background, alternate color every division
-        section_color = _color_u32_adjust_alpha(imgui.Col_.separator, 0.12)
+        section_color = _color_u32_replace_alpha(imgui.Col_.separator, 0.12)
         for i in range(1,len(self._major_ticks_pos),2):
             start = self._major_ticks_pos[i]
             end   = self._major_ticks_pos[i+1] if i+1<len(self._major_ticks_pos) else self.draw_width
@@ -309,8 +326,8 @@ class Timeline:
             )
 
         # draw gridlines
-        grid_color_major = _color_u32_adjust_alpha(imgui.Col_.separator, 0.85)
-        grid_color_minor = _color_u32_adjust_alpha(imgui.Col_.separator, 0.3)
+        grid_color_major = _color_u32_replace_alpha(imgui.Col_.separator, 0.85)
+        grid_color_minor = _color_u32_replace_alpha(imgui.Col_.separator, 0.3)
         for i,pos in enumerate(self._minor_ticks_pos):
             rounded_gridline_pos_x = round(cursor_pos.x + pos)
             if i%self._n_minor_divs==0:
@@ -322,10 +339,9 @@ class Timeline:
         # now draw the actual tracks
         height_per_track = imgui.get_content_region_avail().y/len(self._annotations_frame)
         imgui.push_style_var(imgui.StyleVar_.item_spacing, (0,0))
-        color_steps = 1/(len(self._annotations_frame)+1)
         text_size = max([imgui.calc_text_size(e.value) for e in self._annotations_frame.keys()], key=lambda x: x.x)
-        for i,e in enumerate(self._annotations_frame):
-            self._draw_track(e, self._annotations[e], height_per_track, imgui.ImColor.hsv(i*color_steps, 0.45, 0.65), text_size)
+        for e in self._annotations_frame:
+            self._draw_track(e, self._annotations[e], height_per_track, self._annotation_colors[e], text_size)
         imgui.pop_style_var()
 
         # draw player bar
@@ -357,7 +373,7 @@ class Timeline:
 
     def _draw_track(self, event: annotation.Event, annotations: list[float], height: float, color: imgui.ImColor, text_size: imgui.ImVec2):
         dpi_fac = hello_imgui.dpi_window_size_factor()
-        grid_color = _color_u32_adjust_alpha(imgui.Col_.separator, 0.85)
+        grid_color = _color_u32_replace_alpha(imgui.Col_.separator, 0.85)
         cursor_pos = imgui.get_cursor_screen_pos()
         draw_list = imgui.get_window_draw_list()
         size = imgui.ImVec2(imgui.get_content_region_avail().x, height)
@@ -374,10 +390,9 @@ class Timeline:
         # setup for other drawing
         text_contrast_ratio = 1 / 1.57
         text_color = imgui.ImColor(imgui.get_style_color_vec4(imgui.Col_.text))
-        bg_contrast_ratio = _calc_contrast_ratio(color, text_color)
-        text_color_adjusted = imgui.color_convert_float4_to_u32((imgui.ImColor(0, 0, 0, 1 - bg_contrast_ratio * 0.45) if (bg_contrast_ratio > text_contrast_ratio) else text_color).value)
-        bg_color     = imgui.color_convert_float4_to_u32(_color_adjust_alpha(color, color.value.w * 0.5).value)
-        border_color = imgui.color_convert_float4_to_u32(_color_adjust_alpha(color, color.value.w * 0.9).value)
+        text_color_adjusted = imgui.color_convert_float4_to_u32(color_adjust_contrast(text_color, text_contrast_ratio, color).value)
+        bg_color     = imgui.color_convert_float4_to_u32(color_replace_alpha(color, color.value.w * 0.5).value)
+        border_color = imgui.color_convert_float4_to_u32(color_replace_alpha(color, color.value.w * 0.9).value)
 
         text_offset = imgui.ImVec2((2*dpi_fac, 2*dpi_fac))
         clip_title_max = text_size + imgui.ImVec2([2*x for x in text_offset])
