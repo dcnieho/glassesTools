@@ -27,6 +27,15 @@ def rgba_0_1_to_hex(rgba):
         a = "FF"
     return f"#{r}{g}{b}{a}"
 
+def format_duration(dur: float, show_ms: bool) -> str:
+    hours, remainder = divmod(dur, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    seconds, ms      = divmod(seconds, 1)
+    dur_str = f'{int(hours)}:{int(minutes):02d}:{int(seconds):02d}'
+    if show_ms:
+        dur_str += f'.{ms*1000:03.0f}'
+    return dur_str
+
 
 class AutoName(enum.Enum):
     def _generate_next_value_(name, start, count, last_values):
