@@ -448,9 +448,11 @@ class Timeline:
             flags |= imgui.WindowFlags_.always_horizontal_scrollbar
         available = imgui.get_content_region_avail()
         imgui.begin_child('##all', size=available, window_flags=flags)
-        self.draw_width = available.x*self._scale
-        self._calc_scale_fac()
-        self._determine_ticks()
+        draw_width = available.x*self._scale
+        if draw_width != self.draw_width:
+            self.draw_width = draw_width
+            self._calc_scale_fac()
+            self._determine_ticks()
         self._h_scroll = imgui.get_scroll_x()
         imgui.begin_child('##timeline',size=(self.draw_width,0),window_flags=imgui.WindowFlags_.no_background)
         imgui.push_style_var(imgui.StyleVar_.item_spacing, (0., 0.))
