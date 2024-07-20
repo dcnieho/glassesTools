@@ -197,12 +197,19 @@ class Timeline:
 
         # draw play head
         playhead_screen_position = self._time_to_pos(self._dragged_time if self._dragged_time is not None else self._current_time)
-        playhead_screen_position = playhead_screen_position - size.y * 0.5
-        draw_list.add_triangle_filled(
-            (playhead_screen_position           , cursor_pos.y + 2.5*dpi_fac),
-            (playhead_screen_position + size.y  , cursor_pos.y + 2.5*dpi_fac),
-            (playhead_screen_position + size.y/2, cursor_pos.y + size.y - 2.5*dpi_fac),
-            0xE553A3F9)
+        if self.get_num_annotations():
+            playhead_screen_position = playhead_screen_position - size.y * 0.5
+            draw_list.add_triangle_filled(
+                (playhead_screen_position           , cursor_pos.y + 2.5*dpi_fac),
+                (playhead_screen_position + size.y  , cursor_pos.y + 2.5*dpi_fac),
+                (playhead_screen_position + size.y/2, cursor_pos.y + size.y - 2.5*dpi_fac),
+                0xE553A3F9)
+        else:
+            playhead_line_pos = imgui.ImVec2(playhead_screen_position, cursor_pos.y)
+            draw_list.add_line(playhead_line_pos,
+                               playhead_line_pos + imgui.ImVec2(0, size.y),
+                               0xE553A3F9,
+                               thickness=2*dpi_fac)
 
         # draw vertical separator
         curr_pos = imgui.get_cursor_screen_pos()
