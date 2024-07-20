@@ -436,7 +436,6 @@ class GUI:
         img_sz = (img_sz * self._window_sfac[w]).astype('int')
         img_space = imgui.get_content_region_avail().x
         img_margin = max((img_space-img_sz[0])/2,0)
-        imgui.set_cursor_pos((img_margin,0))
         if self._current_frame[w][0] is None:
             text = 'No image'
             text_size = imgui.calc_text_size(text)
@@ -446,6 +445,7 @@ class GUI:
             imgui.set_cursor_pos((img_margin,0))
             imgui.dummy(img_sz)
         else:
+            imgui.set_cursor_pos((img_margin,0))
             imgui.image(self._texID[w], img_sz)
 
         # draw action buttons (may be invisible, still submit them for shortcut routing)
