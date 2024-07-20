@@ -62,6 +62,7 @@ class Button:
     tooltip: str
     key: imgui.Key
     event: annotation.Event = None
+    color: imgui.ImVec4 = None
 
     has_shift: bool = dataclasses.field(init=False, default=False)
     repeats: bool =  dataclasses.field(init=False, default=False)
@@ -225,9 +226,11 @@ class GUI:
                 self._window_timeline[w].set_annotation_keys(self._annotate_shortcut_key_map, self._annotate_tooltips)
         self._create_annotation_buttons()
 
+    def _has_timeline(self, window_id: int):
+        return self._window_timeline[window_id] is not None and self._window_timeline[window_id].get_num_annotations()
     def _any_has_timeline(self):
         for w in self._windows:
-            if self._window_timeline[w] is not None and self._window_timeline[w].get_num_annotations():
+            if self._has_timeline(w):
                 return True
         return False
     def _create_annotation_buttons(self):
@@ -472,11 +475,18 @@ class GUI:
         if self._allow_pause or self._allow_seek:
             buttons.extend([None, None])
         buttons.append(self._buttons[Action.Quit])
-        if self._allow_annotate and self._any_has_timeline() and self._annotate_shortcut_key_map:
+        if self._allow_annotate and self._has_timeline(w) and self._annotate_shortcut_key_map:
             buttons.extend([None, None])
             buttons.append(self._buttons[Action.Annotate_Delete])
+            annotation_colors = self._window_timeline[w].get_annotation_colors()
+            annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], self._annotations_frame)
             for e in self._annotate_shortcut_key_map:
-                buttons.append(self._buttons[(Action.Annotate_Make, e)])
+                if e in annotation_colors and e in annotate_keys:
+                    but = dataclasses.replace(self._buttons[(Action.Annotate_Make, e)])
+                    but.color = annotation_colors[e]
+                else:
+                    but = self._buttons[(Action.Annotate_Make, e)]
+                buttons.append(but)
         # determine space they take up
         def _get_text_size(b: Button|None):
             if b is None:
@@ -527,11 +537,21 @@ class GUI:
                 lbl = lbl[1] if self._is_playing else lbl[0]
             disable = False
             if b.action==Action.Annotate_Delete:
-                disable = not self._annotations_frame or not intervals.is_in_interval(self._current_frame[w][2],self._annotations_frame)
+                disable = not annotate_keys # we are not in an interval
             if disable:
                 imgui.begin_disabled()
             if self._window_show_controls[w]:
+                if b.color is not None:
+                    but_alphas = [imgui.get_style_color_vec4(b)[3] for b in [imgui.Col_.button, imgui.Col_.button_hovered, imgui.Col_.button_active]]
+                    imgui.push_style_color(imgui.Col_.button,         timeline_gui.color_replace_alpha(b.color,but_alphas[0]).value)
+                    imgui.push_style_color(imgui.Col_.button_hovered, timeline_gui.color_replace_alpha(timeline_gui.color_brighten(b.color, .15),but_alphas[1]).value)
+                    imgui.push_style_color(imgui.Col_.button_active,  timeline_gui.color_replace_alpha(timeline_gui.color_brighten(b.color, .9 ),but_alphas[2]).value)
+                    text_contrast_ratio = 1 / 1.57
+                    text_color = imgui.ImColor(imgui.get_style_color_vec4(imgui.Col_.text))
+                    imgui.push_style_color(imgui.Col_.text  ,         timeline_gui.color_adjust_contrast(text_color,text_contrast_ratio,b.color).value)
                 activated = imgui.button(lbl, size=sz)
+                if b.color is not None:
+                    imgui.pop_style_color(4)
             else:
                 activated = imgui.invisible_button(lbl, size=sz)
             if activated:
@@ -551,8 +571,7 @@ class GUI:
                     case Action.Annotate_Make:
                         self._requests.append(('add_coding',(b.event, [self._current_frame[w][2]])))
                     case Action.Annotate_Delete:
-                        keys, ivals = intervals.which_interval(self._current_frame[w][2], self._annotations_frame)
-                        for k,iv in zip(keys,ivals):
+                        for k,iv in zip(annotate_keys,annotate_ivals):
                             if len(iv)>1 and self._current_frame[w][2] in iv:
                                 # on the edge of an episode, return only the edge so we don't delete the whole episode
                                 self._requests.append(('delete_coding',(k,[self._current_frame[w][2]])))
