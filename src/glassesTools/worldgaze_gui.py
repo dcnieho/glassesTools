@@ -26,7 +26,8 @@ def show_visualization(
     cam_params      = ocv.CameraParams.readFromFile(camera_calibration_file)
 
     gui.set_framerate(cap.get_prop(cv2.CAP_PROP_FPS))
-    gui.set_show_timeline(True, video_ts, annotations, window_id=frame_win_id)
+    annotations_flat = {e:[i for iv in annotations[e] for i in iv] for e in annotations}
+    gui.set_show_timeline(True, video_ts, annotations_flat, window_id=frame_win_id)
 
     # add windows for planes, if wanted
     if show_planes:
