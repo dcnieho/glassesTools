@@ -5,14 +5,12 @@ from . import annotation, drawing, gaze_headref, gaze_worldref, intervals, ocv, 
 
 
 def show_visualization(
-        working_dir: str|pathlib.Path,
         in_video: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path, camera_calibration_file: str|pathlib.Path,
         planes: dict[str, plane.Plane], poses: dict[str, dict[int, plane.Pose]],
         head_gazes: dict[int, list[gaze_headref.Gaze]], plane_gazes: dict[int, list[gaze_worldref.Gaze]],
         annotations: dict[annotation.Event, list[list[int]]],
         gui: video_gui.GUI, frame_win_id: int, show_planes: bool, show_only_intervals: bool, sub_pixel_fac: int
     ):
-    working_dir             = pathlib.Path(working_dir)
     in_video                = pathlib.Path(in_video)
     frame_timestamp_file    = pathlib.Path(frame_timestamp_file)
     camera_calibration_file = pathlib.Path(camera_calibration_file)

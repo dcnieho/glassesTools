@@ -158,7 +158,6 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
 
 def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path, camera_calibration_file: str|pathlib.Path,
-                        output_dir: pathlib.Path,
                         processing_intervals: dict[str, list[int]|list[list[int]]],
                         planes: dict[str], individual_markers: dict[int, dict[str]]|None,
                         extra_processing: dict[str,tuple[Callable[[np.ndarray,...],tuple[float,float]],list[list[int]],dict[str]]]|None,
