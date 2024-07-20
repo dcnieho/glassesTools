@@ -32,7 +32,6 @@ def show_visualization(
     if show_planes:
         plane_win_id = {p: gui.add_window(p) for p in planes}
 
-    stopAllProcessing = False
     max_frame_idx = max(head_gazes.keys())
     should_exit = False
     for frame_idx in range(max_frame_idx+1):
@@ -92,5 +91,3 @@ def show_visualization(
         gui.update_image(frame, frame_ts/1000., frame_idx, window_id = frame_win_id)
 
     gui.stop()
-
-    return stopAllProcessing
