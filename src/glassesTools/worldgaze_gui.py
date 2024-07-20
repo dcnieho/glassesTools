@@ -19,11 +19,14 @@ def show_visualization(
 
     # prep visualizations
     # open video
-    cap             = ocv.CV2VideoReader(in_video, timestamps.VideoTimestamps(frame_timestamp_file).timestamps)
+    video_ts        = timestamps.VideoTimestamps(frame_timestamp_file)
+    cap             = ocv.CV2VideoReader(in_video, video_ts.timestamps)
     width           = cap.get_prop(cv2.CAP_PROP_FRAME_WIDTH)
     height          = cap.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)
-    gui.set_framerate(cap.get_prop(cv2.CAP_PROP_FPS))
     cam_params      = ocv.CameraParams.readFromFile(camera_calibration_file)
+
+    gui.set_framerate(cap.get_prop(cv2.CAP_PROP_FPS))
+    gui.set_show_timeline(True, video_ts, window_id=frame_win_id)
 
     # add windows for planes, if wanted
     if show_planes:
@@ -31,18 +34,18 @@ def show_visualization(
 
     stopAllProcessing = False
     max_frame_idx = max(head_gazes.keys())
+    should_exit = False
     for frame_idx in range(max_frame_idx+1):
         done, frame, frame_idx, frame_ts = cap.read_frame(report_gap=True)
         if done or intervals.beyond_last_interval(frame_idx, interval_dict):
             break
 
-        keys = gui.get_key_presses()
-        if 'q' in keys:
-            # quit fully
-            stopAllProcessing = True
-            break
-        if 'n' in keys:
-            # goto next
+        requests = gui.get_requests()
+        for r,p in requests:
+            if r=='exit':   # only request we need to handle
+                should_exit = True
+                break
+        if should_exit:
             break
 
         # check we're in a current interval, else skip processing
@@ -81,16 +84,7 @@ def show_visualization(
                 drawing.openCVLine(frame, (a[0],0), (a[0],height), (0,255,0), 1, sub_pixel_fac)
                 drawing.openCVLine(frame, (0,a[1]), (width,a[1]) , (0,255,0), 1, sub_pixel_fac)
 
-        # keys is populated above
-        if 's' in keys:
-            # screenshot
-            cv2.imwrite(working_dir / f'project_frame_{frame_idx}.png', frame)
-
         gui.update_image(frame, frame_ts/1000., frame_idx, window_id = frame_win_id)
-        closed, = gui.get_state()
-        if closed:
-            stopAllProcessing = True
-            break
 
     gui.stop()
 
