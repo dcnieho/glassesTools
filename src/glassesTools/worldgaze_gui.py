@@ -1,7 +1,7 @@
 import pathlib
 import cv2
 
-from . import drawing, gaze_headref, gaze_worldref, intervals, ocv, plane, timestamps, video_gui
+from . import annotation, drawing, gaze_headref, gaze_worldref, intervals, ocv, plane, timestamps, video_gui
 
 
 def show_visualization(
@@ -9,7 +9,7 @@ def show_visualization(
         in_video: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path, camera_calibration_file: str|pathlib.Path,
         planes: dict[str, plane.Plane], poses: dict[str, dict[int, plane.Pose]],
         head_gazes: dict[int, list[gaze_headref.Gaze]], plane_gazes: dict[int, list[gaze_worldref.Gaze]],
-        interval_dict: dict[str, list[list[int]]],
+        annotations: dict[annotation.Event, list[list[int]]],
         gui: video_gui.GUI, frame_win_id: int, show_planes: bool, show_only_intervals: bool, sub_pixel_fac: int
     ):
     working_dir             = pathlib.Path(working_dir)
@@ -26,7 +26,7 @@ def show_visualization(
     cam_params      = ocv.CameraParams.readFromFile(camera_calibration_file)
 
     gui.set_framerate(cap.get_prop(cv2.CAP_PROP_FPS))
-    gui.set_show_timeline(True, video_ts, window_id=frame_win_id)
+    gui.set_show_timeline(True, video_ts, annotations, window_id=frame_win_id)
 
     # add windows for planes, if wanted
     if show_planes:
@@ -36,7 +36,7 @@ def show_visualization(
     should_exit = False
     for frame_idx in range(max_frame_idx+1):
         done, frame, frame_idx, frame_ts = cap.read_frame(report_gap=True)
-        if done or intervals.beyond_last_interval(frame_idx, interval_dict):
+        if done or intervals.beyond_last_interval(frame_idx, annotations):
             break
 
         requests = gui.get_requests()
@@ -51,7 +51,7 @@ def show_visualization(
         # NB: have to spool through like this, setting specific frame to read
         # with cap.get(cv2.CAP_PROP_POS_FRAMES) doesn't seem to work reliably
         # for VFR video files
-        if show_only_intervals and not intervals.is_in_interval(frame_idx, interval_dict):
+        if show_only_intervals and not intervals.is_in_interval(frame_idx, annotations):
             # no need to show this frame
             # do update timeline of the viewers
             if show_planes:
