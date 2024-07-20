@@ -88,6 +88,9 @@ class GUI:
         self._texID: dict[int,int] = {}
         self._frame_rate = None
 
+        self._duration: float = None
+        self._last_frame_idx: int = None
+
         self._action_tooltips   = action_tooltip_map.copy()
         self._action_button_lbls= action_lbl_map.copy()
         self._shortcut_key_map  = shortcut_key_map.copy()
@@ -111,6 +114,7 @@ class GUI:
         self._window_visible: dict[int,bool] = {}
         self._window_determine_size: dict[int,bool] = {}
         self._window_show_controls: dict[int,bool] = {}
+        self._window_show_play_percentage: dict[int,bool] = {}
         self._window_sfac: dict[int,float]    = {}
         self._window_timeline: dict[int,timeline_gui.Timeline] = {}
 
@@ -120,7 +124,7 @@ class GUI:
     def __del__(self):
         self.stop()
 
-    def add_window(self, name: str, show_timeline=False, video_ts: timestamps.VideoTimestamps = None, annotations: dict[annotation.Event, list[int]] = None) -> int:
+    def add_window(self, name: str) -> int:
         with self._windows_lock:
             w_id = self._next_window_id
             self._windows[w_id]                 = name
@@ -130,8 +134,8 @@ class GUI:
             self._window_visible[w_id]          = False
             self._window_determine_size[w_id]   = False
             self._window_show_controls[w_id]    = False
+            self._window_show_play_percentage[w_id] = False
             self._window_sfac[w_id]             = 1.
-            self.set_show_timeline(show_timeline, video_ts, annotations, w_id)
 
             self._next_window_id += 1
             return w_id
@@ -171,6 +175,13 @@ class GUI:
         if window_id is None:
             window_id = self._get_main_window_id()
         self._window_show_controls[window_id] = show_controls
+    def set_show_play_percentage(self, show_play_percentage: bool, window_id = None):
+        if window_id is None:
+            window_id = self._get_main_window_id()
+        self._window_show_play_percentage[window_id] = show_play_percentage
+    def set_duration(self, duration: float, last_frame_idx: int):
+        self._duration = duration
+        self._last_frame_idx = last_frame_idx
 
     def set_show_timeline(self, show_timeline: bool, video_ts: timestamps.VideoTimestamps = None, annotations: dict[annotation.Event, list[int]] = None, window_id = None):
         if window_id is None:
@@ -181,6 +192,9 @@ class GUI:
             self._window_timeline[window_id].set_allow_annotate(self._allow_annotate)
             self._window_timeline[window_id].set_allow_seek(self._allow_seek)
             self._window_timeline[window_id].set_annotation_keys(self._annotate_shortcut_key_map, self._annotate_tooltips)
+            if video_ts is not None:
+                last_frame_idx, duration = video_ts.get_last()
+                self.set_duration(duration, last_frame_idx)
         else:
             self._window_timeline[window_id] = None
         self._create_annotation_buttons()
@@ -511,6 +525,8 @@ class GUI:
             text = f'{utils.format_duration(fr_ts,True)} ({fr_ts:.3f}) [{fr_idx}]'
         else:
             text = f'{fr_idx}'
+        if self._window_show_play_percentage[w] and self._last_frame_idx is not None:
+            text += f' ({fr_idx/self._last_frame_idx*100:.0f}%)'
         txt_sz = imgui.calc_text_size(text)
         imgui.set_cursor_pos((img_margin,img_sz[1]-txt_sz.y-2*imgui.get_style().frame_padding.y))
         imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
