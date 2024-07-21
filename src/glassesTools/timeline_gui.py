@@ -288,10 +288,9 @@ class Timeline:
         action = None
 
         if self._allow_seek or self._allow_annotate:
-            dpi_fac = hello_imgui.dpi_window_size_factor()
             cursor_pos = imgui.get_cursor_screen_pos()
-            imgui.set_cursor_screen_pos((x_start+2*dpi_fac, cursor_pos.y))
-            size = imgui.ImVec2(x_end-x_start-4*dpi_fac, y_ext)
+            imgui.set_cursor_screen_pos((x_start, cursor_pos.y))
+            size = imgui.ImVec2(x_end-x_start, y_ext)
             imgui.invisible_button(f'##episode_interactable_{lbl}', size)
             imgui.set_cursor_screen_pos(cursor_pos)
 
@@ -337,7 +336,7 @@ class Timeline:
             draw_list.add_line((rounded_gridline_pos_x, cursor_pos.y), (rounded_gridline_pos_x, cursor_pos.y+size.y), grid_color, thickness=dpi_fac)
 
         # now draw the actual tracks
-        height_per_track = imgui.get_content_region_avail().y/len(self._annotations_frame)
+        height_per_track = size.y/len(self._annotations_frame)
         imgui.push_style_var(imgui.StyleVar_.item_spacing, (0,0))
         text_size = max([imgui.calc_text_size(e.value) for e in self._annotations_frame.keys()], key=lambda x: x.x)
         for e in self._annotations_frame:
@@ -412,12 +411,6 @@ class Timeline:
                                    border_color,
                                    thickness=dpi_fac)
 
-                x_pos, do_move, action = self._episode_interaction_logic(f'annotation_{name}_{m}', start_screen_position, end_screen_position, size.y)
-                if do_move:
-                    self._request_time(self._pos_to_time(x_pos, True))
-                elif action=='delete_episode':
-                    self._request_delete(event, self._annotations_frame[event][m:m+2])
-
                 _, do_move, action = self._timepoint_interaction_logic(f'annotation_{name}_{m}', start_screen_position, size.y, draggable=False, has_context_menu=True, add_episode_action=True)
                 if do_move:
                     self._request_time(self._pos_to_time(start_screen_position, True))
@@ -431,6 +424,12 @@ class Timeline:
                     self._request_time(self._pos_to_time(end_screen_position, True))
                 elif action=='delete_timepoint':
                     self._request_delete(event, self._annotations_frame[event][m+1])
+                elif action=='delete_episode':
+                    self._request_delete(event, self._annotations_frame[event][m:m+2])
+
+                x_pos, do_move, action = self._episode_interaction_logic(f'annotation_{name}_{m}', start_screen_position, end_screen_position, size.y)
+                if do_move:
+                    self._request_time(self._pos_to_time(x_pos, True))
                 elif action=='delete_episode':
                     self._request_delete(event, self._annotations_frame[event][m:m+2])
 
