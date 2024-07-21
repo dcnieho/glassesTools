@@ -37,9 +37,10 @@ class Timeline:
         self._video_ts = video_ts
         self._duration = self._video_ts.get_last()[1]/1000. # ms -> s
 
-        # horizontal scroll position, in fractions of timeline duration
-        self._h_scroll   = 0
-        self._scale      = 1.
+        # horizontal scroll position, in pixels
+        self._h_scroll      = 0
+        self._scale         = 1.
+        self._new_h_scroll  = None
 
         self._current_time = 0.
         self._dragged_time: float = None
@@ -191,16 +192,19 @@ class Timeline:
         cursor_pos = imgui.get_cursor_screen_pos()
         size = imgui.ImVec2(self.draw_width, imgui.get_font_size()+2*style.frame_padding.y)
 
-        # enable moving play head
-        if self._allow_seek:
+        # set up for interaction with the timeline
+        if self._allow_seek or self._allow_timeline_zoom:
             # 1. make button over whole width
             imgui.invisible_button('##play_head_control', size)
+
+        # enable moving play head
+        if self._allow_seek:
             # 2. if pressed on the button, move play head
             if imgui.is_item_activated() or (imgui.is_item_active() and abs(drag_delta.x)>.001):
                 self._request_time(self._pos_to_time(mouse_pos.x, True))
                 imgui.reset_mouse_drag_delta()  # mark that drag has been processed
-        else:
-            imgui.dummy(size)
+        if self._allow_timeline_zoom:
+            self._handle_zoom(imgui.is_item_hovered())
 
         # draw ticks
         draw_list = imgui.get_window_draw_list()
@@ -239,6 +243,22 @@ class Timeline:
             imgui.get_color_u32(imgui.Col_.separator))
 
         draw_list.pop_clip_rect()
+
+    def _handle_zoom(self, is_hovered: bool):
+        mouse_pos = imgui.get_mouse_pos()
+        mouse_wheel = imgui.get_io().mouse_wheel
+        if is_hovered and mouse_wheel!=0.:
+            # clamp scaling, scale should not get smaller than 1
+            delta_scale = .25*mouse_wheel
+            delta_scale = max(1., self._scale+delta_scale)-self._scale
+            if np.isclose(0., delta_scale):
+                return
+
+            self._scale += delta_scale
+            new_h_scroll = min(max(0., self._h_scroll + mouse_pos.x*delta_scale), self.draw_width)
+            print(self._h_scroll, mouse_pos.x, new_h_scroll)
+            if not np.isclose(self._h_scroll, new_h_scroll):
+                self._new_h_scroll = new_h_scroll
 
     def _timepoint_interaction_logic(self, lbl: str, x_pos: float, y_ext: float, draggable=False, has_context_menu=True, add_episode_action=False) -> tuple[float, bool, str|None]:
         do_move = False
@@ -357,6 +377,15 @@ class Timeline:
         new_pos, should_process, _ = self._timepoint_interaction_logic('player_bar', playhead_screen_position, size.y, draggable=True, has_context_menu=False)
         if should_process:
             self._request_time(self._pos_to_time(new_pos, True))
+
+        # draw invisible button for interaction logic
+        imgui.set_cursor_screen_pos(cursor_pos)
+        imgui.invisible_button('##all_tracks', size)
+        imgui.same_line(0,0)
+        if self._allow_timeline_zoom:
+            tracks_hovered = imgui.is_item_hovered()
+            self._handle_zoom(tracks_hovered)
+
         draw_list.pop_clip_rect()
 
     def _draw_annotation_line(self, name: str, idx: int, time: float, height: float, border_color: int) -> str|None:
@@ -479,12 +508,17 @@ class Timeline:
         if self._allow_timeline_zoom:
             flags |= imgui.WindowFlags_.always_horizontal_scrollbar
         available = imgui.get_content_region_avail()
-        imgui.begin_child('##all', size=available, window_flags=flags)
         draw_width = available.x*self._scale
         if draw_width != self.draw_width:
             self.draw_width = draw_width
             self._calc_scale_fac()
             self._determine_ticks()
+        # deal with scroll requests: submit content size and scroll for next window to avoid glitch (one frame delay in scroll)
+        imgui.set_next_window_content_size((self.draw_width,0))
+        if self._new_h_scroll is not None:
+            imgui.set_next_window_scroll((self._new_h_scroll, -1))
+            self._new_h_scroll = None
+        imgui.begin_child('##all', size=available, window_flags=flags)
         self._h_scroll = imgui.get_scroll_x()
         imgui.begin_child('##timeline',size=(self.draw_width,0),window_flags=imgui.WindowFlags_.no_background)
         imgui.push_style_var(imgui.StyleVar_.item_spacing, (0., 0.))
