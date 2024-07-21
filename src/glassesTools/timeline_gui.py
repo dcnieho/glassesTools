@@ -256,7 +256,6 @@ class Timeline:
 
             self._scale += delta_scale
             new_h_scroll = min(max(0., self._h_scroll + mouse_pos.x*delta_scale), self.draw_width)
-            print(self._h_scroll, mouse_pos.x, new_h_scroll)
             if not np.isclose(self._h_scroll, new_h_scroll):
                 self._new_h_scroll = new_h_scroll
 
