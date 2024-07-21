@@ -109,6 +109,7 @@ class GUI:
         self._allow_pause = False
         self._allow_seek = False
         self._allow_annotate = False
+        self._allow_timeline_zoom = False
         self._is_playing = False
         self._requests: list[tuple[str,Any]] = []
 
@@ -180,6 +181,7 @@ class GUI:
             self._buttons[d_key] = Button(action, lbl, tooltip, key, event)
 
     def set_allow_timeline_zoom(self, allow_timeline_zoom: bool):
+        self._allow_timeline_zoom = allow_timeline_zoom
         for w in self._windows:
             if self._window_timeline[w] is not None:
                 self._window_timeline[w].set_allow_timeline_zoom(allow_timeline_zoom)
@@ -203,6 +205,7 @@ class GUI:
             self._window_timeline[window_id] = timeline_gui.Timeline(video_ts, annotations)
             self._window_timeline[window_id].set_allow_annotate(self._allow_annotate)
             self._window_timeline[window_id].set_allow_seek(self._allow_seek)
+            self._window_timeline[window_id].set_allow_timeline_zoom(self._allow_timeline_zoom)
             self._window_timeline[window_id].set_annotation_keys(self._annotate_shortcut_key_map, self._annotate_tooltips)
             if video_ts is not None:
                 last_frame_idx, duration = video_ts.get_last()
