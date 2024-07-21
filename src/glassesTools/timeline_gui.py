@@ -196,6 +196,8 @@ class Timeline:
         if self._allow_seek or self._allow_timeline_zoom:
             # 1. make button over whole width
             imgui.invisible_button('##play_head_control', size)
+        else:
+            imgui.dummy(size)
 
         # enable moving play head
         if self._allow_seek:
