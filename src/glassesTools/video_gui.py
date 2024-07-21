@@ -91,6 +91,7 @@ class GUI:
         self._thread: threading.Thread = None
         self._not_shown_yet: dict[int, bool] = {}
         self._new_frame: dict[int, tuple[np.ndarray, float, int]] = {}
+        self._new_frame_lock: threading.Lock = threading.Lock()
         self._current_frame: dict[int, tuple[np.ndarray, float, int]] = {}
         self._frame_size: dict[int, tuple[int,int]] = {}
         self._texID: dict[int,int] = {}
@@ -291,7 +292,8 @@ class GUI:
         # need to update image whenever new one available
         if window_id is None:
             window_id = self._get_main_window_id()
-        self._new_frame[window_id] = (frame, pts, frame_nr) # just copy ref to frame is enough
+        with self._new_frame_lock:
+            self._new_frame[window_id] = (frame, pts, frame_nr) # just copy ref to frame is enough
 
     def set_framerate(self, framerate: int|None):
         if not framerate:
@@ -370,43 +372,44 @@ class GUI:
         # upload texture if needed
         with self._windows_lock:
             for w in self._windows:
-                if self._new_frame[w][0] is not None:
-                    if self._texID[w] is None:
-                        self._texID[w] = gl.glGenTextures(1)
-                    # upload texture
-                    gl.glBindTexture(gl.GL_TEXTURE_2D, self._texID[w])
-                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
-                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
-                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_BORDER)
-                    gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_BORDER)
-                    gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
-                    gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGB, self._new_frame[w][0].shape[1], self._new_frame[w][0].shape[0], 0, gl.GL_BGR, gl.GL_UNSIGNED_BYTE, self._new_frame[w][0])
+                with self._new_frame_lock:
+                    if self._new_frame[w][0] is not None:
+                        if self._texID[w] is None:
+                            self._texID[w] = gl.glGenTextures(1)
+                        # upload texture
+                        gl.glBindTexture(gl.GL_TEXTURE_2D, self._texID[w])
+                        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MIN_FILTER, gl.GL_LINEAR)
+                        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_MAG_FILTER, gl.GL_LINEAR)
+                        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_S, gl.GL_CLAMP_TO_BORDER)
+                        gl.glTexParameteri(gl.GL_TEXTURE_2D, gl.GL_TEXTURE_WRAP_T, gl.GL_CLAMP_TO_BORDER)
+                        gl.glPixelStorei(gl.GL_UNPACK_ALIGNMENT, 1)
+                        gl.glTexImage2D(gl.GL_TEXTURE_2D, 0, gl.GL_RGB, self._new_frame[w][0].shape[1], self._new_frame[w][0].shape[0], 0, gl.GL_BGR, gl.GL_UNSIGNED_BYTE, self._new_frame[w][0])
 
-                    # if first time we're showing something (we have a new frame but not yet a current frame)
-                    self._frame_size[w] = self._new_frame[w][0].shape
+                        # if first time we're showing something (we have a new frame but not yet a current frame)
+                        self._frame_size[w] = self._new_frame[w][0].shape
 
-                if self._new_frame[w][2]!=-1:
-                    if self._not_shown_yet[w] and self._frame_size[w][0]!=-1:   # need to have a known framesize to be able to start showing the window
-                        # tell window to resize
-                        self._window_determine_size[w] = True
-                        if w==0:
-                            # and show window if needed
-                            if not self._window_visible[w]:
-                                hello_imgui.get_runner_params().app_window_params.hidden = False
-                        # mark window as shown
-                        self._window_visible[w] = True
-                        self._not_shown_yet[w] = False
-                    elif self._new_frame[w][0] is not None:
-                        # detect when frame changed size
-                        self._window_determine_size[w] = any([x!=y for x,y in zip(self._frame_size[w],self._new_frame[w][0].shape)])
+                    if self._new_frame[w][2]!=-1:
+                        if self._not_shown_yet[w] and self._frame_size[w][0]!=-1:   # need to have a known framesize to be able to start showing the window
+                            # tell window to resize
+                            self._window_determine_size[w] = True
+                            if w==0:
+                                # and show window if needed
+                                if not self._window_visible[w]:
+                                    hello_imgui.get_runner_params().app_window_params.hidden = False
+                            # mark window as shown
+                            self._window_visible[w] = True
+                            self._not_shown_yet[w] = False
+                        elif self._new_frame[w][0] is not None:
+                            # detect when frame changed size
+                            self._window_determine_size[w] = any([x!=y for x,y in zip(self._frame_size[w],self._new_frame[w][0].shape)])
 
-                    # keep record of what we're showing
-                    self._current_frame[w]  = self._new_frame[w]
-                    self._new_frame[w]      = (None, None, -1)
+                        # keep record of what we're showing
+                        self._current_frame[w]  = self._new_frame[w]
+                        self._new_frame[w]      = (None, None, -1)
 
-                    # inform timeline GUI of new frame's timestamp
-                    if self._window_timeline[w] is not None:
-                        self._window_timeline[w].set_position(*self._current_frame[w][1:])
+                        # inform timeline GUI of new frame's timestamp
+                        if self._window_timeline[w] is not None:
+                            self._window_timeline[w].set_position(*self._current_frame[w][1:])
 
             # show windows
             for w in self._windows.keys():
