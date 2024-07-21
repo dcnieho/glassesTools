@@ -77,13 +77,13 @@ def show_visualization(
                 # draw gaze point on scene video
                 gaze_head.draw(frame, cam_params, sub_pixel_fac)
 
-                # draw plane gazes on video and plane
-                for p in planes:
-                    if frame_idx in plane_gazes[p]:
-                        for gaze_world in plane_gazes[p][frame_idx]:
-                            gaze_world.drawOnWorldVideo(frame, cam_params, sub_pixel_fac)
-                            if show_planes:
-                                gaze_world.drawOnPlane(refImg[p], planes[p], sub_pixel_fac)
+        # draw plane gazes on video and plane
+        for p in planes:
+            if frame_idx in plane_gazes[p]:
+                for gaze_world in plane_gazes[p][frame_idx]:
+                    gaze_world.drawOnWorldVideo(frame, cam_params, sub_pixel_fac)
+                    if show_planes:
+                        gaze_world.drawOnPlane(refImg[p], planes[p], sub_pixel_fac)
 
         if show_planes:
             for p in planes:
