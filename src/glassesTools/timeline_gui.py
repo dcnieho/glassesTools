@@ -148,8 +148,11 @@ class Timeline:
         # in seconds
         return duration_frac * self._duration
 
-    def _time_to_pos(self, time: float) -> float:
-        return imgui.get_cursor_screen_pos().x + time / self._view_scale_fac
+    def _time_to_pos(self, time: float, as_window_pos) -> float:
+        pos = time / self._view_scale_fac
+        if as_window_pos:
+            pos += imgui.get_cursor_screen_pos().x
+        return pos
 
     def _determine_ticks(self):
         # calculate number of major ticks
@@ -170,8 +173,8 @@ class Timeline:
         minor_ticks_time = (np.arange(0, tmax) * minorstep)
 
         # convert from time to pixels
-        self._major_ticks_pos = self._time_to_pos(major_ticks_time)
-        self._minor_ticks_pos = self._time_to_pos(minor_ticks_time)
+        self._major_ticks_pos = self._time_to_pos(major_ticks_time, False)
+        self._minor_ticks_pos = self._time_to_pos(minor_ticks_time, False)
 
         # format the values
         # determine if we have a ms part
@@ -213,7 +216,7 @@ class Timeline:
             draw_list.add_line((rounded_gridline_pos_x, tick_pos_y - 10*dpi_fac), (rounded_gridline_pos_x, tick_pos_y - 2*dpi_fac), tick_color, thickness=dpi_fac)
 
         # draw play head
-        playhead_screen_position = self._time_to_pos(self._dragged_time if self._dragged_time is not None else self._current_time)
+        playhead_screen_position = self._time_to_pos(self._dragged_time if self._dragged_time is not None else self._current_time, True)
         if self.get_num_annotations():
             playhead_screen_position = playhead_screen_position - size.y * 0.5
             draw_list.add_triangle_filled(
@@ -345,7 +348,7 @@ class Timeline:
 
         # draw player bar
         imgui.set_cursor_screen_pos(cursor_pos)
-        playhead_screen_position = self._time_to_pos(self._dragged_time if self._dragged_time is not None else self._current_time)
+        playhead_screen_position = self._time_to_pos(self._dragged_time if self._dragged_time is not None else self._current_time, True)
         playhead_line_pos = imgui.ImVec2(playhead_screen_position, cursor_pos.y)
         draw_list.add_line(playhead_line_pos,
                            playhead_line_pos + imgui.ImVec2(0, size.y),
@@ -360,7 +363,7 @@ class Timeline:
         dpi_fac = hello_imgui.dpi_window_size_factor()
         cursor_pos = imgui.get_cursor_screen_pos()
         draw_list = imgui.get_window_draw_list()
-        screen_position = self._time_to_pos(time)
+        screen_position = self._time_to_pos(time, True)
         draw_list.add_line((screen_position, cursor_pos.y),
                             (screen_position, cursor_pos.y+height),
                             border_color,
@@ -401,8 +404,8 @@ class Timeline:
             # intervals, draw as boxes
             action = None
             for m in range(0,len(annotations)-1,2):     # -1 to make sure we don't try incomplete intervals
-                start_screen_position = self._time_to_pos(annotations[m])
-                end_screen_position   = self._time_to_pos(annotations[m+1])
+                start_screen_position = self._time_to_pos(annotations[m],   True)
+                end_screen_position   = self._time_to_pos(annotations[m+1], True)
                 draw_list.add_rect_filled((start_screen_position, cursor_pos.y),
                                           (end_screen_position, cursor_pos.y+size.y),
                                           bg_color)
