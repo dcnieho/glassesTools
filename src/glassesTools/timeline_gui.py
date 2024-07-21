@@ -162,7 +162,7 @@ class Timeline:
 
         # generate ticks
         self._major_ticker.set_params(nbins=num_ticks)
-        major_ticks_time = self._major_ticker.tick_values(0, self._duration)
+        major_ticks_time = np.array([t for t in self._major_ticker.tick_values(0, self._duration) if t>=0 and t<=self._duration])
 
         # generate minor ticks, logic similar to matplotlib.ticker.AutoMinorLocator
         majorstep = major_ticks_time[1] - major_ticks_time[0]
