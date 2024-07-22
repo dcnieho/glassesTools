@@ -219,14 +219,11 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
             break
         cap.report_frame()
 
-        if frame is None:
-            # we don't have a valid frame, continue to next
-            continue
-
         if show_visualization:
-            if first_frame:
+            if first_frame and frame is not None:
                 gui.set_frame_size(frame.shape)
                 first_frame = False
+
             requests = gui.get_requests()
             for r,p in requests:
                 if r=='exit':   # only request we need to handle
@@ -243,7 +240,11 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
         extra_processing_for_this_frame = []
         if has_extra_processing:
             extra_processing_for_this_frame = [e for e in extra_processing if intervals.is_in_interval(frame_idx, extra_processing_intervals[e])]
-        if not planes_for_this_frame and not extra_processing_for_this_frame:
+        if frame is None or (not planes_for_this_frame and not extra_processing_for_this_frame):
+            # we don't have a valid frame or nothing to do, continue to next
+            if show_visualization:
+                # do update timeline of the viewers
+                gui.update_image(None, frame_ts/1000., frame_idx)
             continue
 
         if planes_for_this_frame:
