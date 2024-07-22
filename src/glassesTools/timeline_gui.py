@@ -111,6 +111,9 @@ class Timeline:
         return {e:[self._video_ts.get_timestamp(i)/1000 for i in self._annotations_frame[e]] for e in self._annotations_frame}  # ms -> s
 
     def _make_annotation_colors(self) -> dict[annotation.Event, imgui.ImColor]:
+        if not self._annotations_frame:
+            return {}
+
         color_steps = 1/(len(self._annotations_frame)+1)
         return {k:imgui.ImColor.hsv(i*color_steps, 0.45, 0.65) for i,k in enumerate(self._annotations_frame)}
 
