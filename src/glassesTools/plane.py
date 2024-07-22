@@ -313,12 +313,12 @@ class Pose:
                 self._RtMat = np.hstack((self._RMat, self.pose_T_vec.reshape(3,1)))
 
             # get poster normal
-            self._planeNormal = np.matmul(self._RMat, np.array([0., 0., 1.]))
+            self._planeNormal = self._RMat[:,2]     # equivalent to: np.matmul(self._RMat, np.array([0., 0., 1.]))
             # get point on poster (just use origin)
-            self._planePoint  = np.matmul(self._RtMat, np.array([0., 0., 0., 1.]))
+            self._planePoint  = self._RtMat[:,3]    # equivalent to: np.matmul(self._RtMat, np.array([0., 0., 0., 1.]))
 
         # normalize vector
-        vector /= np.sqrt((vector**2).sum())
+        vector /= np.linalg.norm(vector)
 
         # find intersection of 3D gaze with poster
         return transforms.intersect_plane_ray(self._planeNormal, self._planePoint, vector.flatten(), origin.flatten())
