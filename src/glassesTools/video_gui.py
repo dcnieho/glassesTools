@@ -599,7 +599,7 @@ class GUI:
         else:
             text = f'{fr_idx}'
         if self._window_show_play_percentage[w] and self._last_frame_idx is not None:
-            text += f' ({fr_idx/self._last_frame_idx*100:.0f}%)'
+            text += f' ({fr_idx/self._last_frame_idx*100:.1f}%)'
         txt_sz = imgui.calc_text_size(text)
         imgui.set_cursor_pos((img_margin,img_sz[1]-txt_sz.y-2*imgui.get_style().frame_padding.y))
         imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
