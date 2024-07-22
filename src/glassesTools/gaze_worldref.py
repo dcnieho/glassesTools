@@ -122,13 +122,13 @@ def write_dict_to_file(gazes: list[Gaze] | dict[int,list[Gaze]], fileName:str|pa
                                    Gaze._columns_optional,
                                    skip_all_nan=skip_missing)
 
-def gazes_head_to_world(poses: list[plane.Pose], gazes_head: dict[int,list[gaze_headref.Gaze]], cameraParams: ocv.CameraParams) -> dict[int,list[Gaze]]:
+def gazes_head_to_world(poses: list[plane.Pose], gazes_head: dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams) -> dict[int,list[Gaze]]:
     from . import transforms
     plane_gazes = {}
     for frame_idx in poses:
         if frame_idx in gazes_head:
             plane_gazes[frame_idx] = []
             for gaze in gazes_head[frame_idx]:
-                gazePoster = transforms.gazeToPlane(gaze, poses[frame_idx], cameraParams)
+                gazePoster = transforms.gazeToPlane(gaze, poses[frame_idx], camera_params)
                 plane_gazes[frame_idx].append(gazePoster)
     return plane_gazes
