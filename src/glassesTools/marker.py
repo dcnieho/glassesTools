@@ -1,7 +1,7 @@
 import numpy as np
 import pathlib
 
-from . import data_files, drawing
+from . import data_files, drawing, ocv
 
 
 class Marker:
@@ -53,8 +53,10 @@ class Pose:
         self.R_vec      : np.ndarray  = R_vec
         self.T_vec      : np.ndarray  = T_vec
 
-    def draw_origin_on_frame(self, frame, camera_matrix, dist_coeffs, arm_length, sub_pixel_fac = 8):
-        drawing.openCVFrameAxis(frame, camera_matrix, dist_coeffs, self.R_vec, self.T_vec, arm_length, 3, sub_pixel_fac)
+    def draw_frame_axis(self, frame, camera_params: ocv.CameraParams, arm_length, sub_pixel_fac = 8):
+        if not camera_params.has_intrinsics():
+            return
+        drawing.openCVFrameAxis(frame, camera_params.camera_mtx, camera_params.distort_coeffs, self.R_vec, self.T_vec, arm_length, 3, sub_pixel_fac)
 
 
 def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,Pose]:
