@@ -36,7 +36,7 @@ class Plane:
         self.unit                                           = unit
 
         # prep markers
-        self._get_markers(markers, marker_pos_scale_fac, package_to_read_from)
+        self._load_markers(markers, marker_pos_scale_fac, package_to_read_from)
 
         # get reference image of plane
         if ref_image_store_path:
@@ -65,7 +65,7 @@ class Plane:
         self.bbox[1] -= origin[1]
         self.bbox[3] -= origin[1]
 
-    def get_ref_image(self, im_size: int=None, as_RGB=False):
+    def get_ref_image(self, im_size: int=None, as_RGB=False) -> np.ndarray:
         if im_size is None:
             im_size = self._ref_image_size
         assert isinstance(im_size,int), f'width input should be an int, not {type(im_size)}'
@@ -90,7 +90,7 @@ class Plane:
                 color = (0,0,0)
             drawing.openCVCircle(img, xy, size, color, -1, sub_pixel_fac)
 
-    def _get_markers(self, markers: str|pathlib.Path|pd.DataFrame, marker_pos_scale_fac: float, package_to_read_from: str|None):
+    def _load_markers(self, markers: str|pathlib.Path|pd.DataFrame, marker_pos_scale_fac: float, package_to_read_from: str|None):
         # read in aruco marker positions
         markerHalfSizeMm  = self.marker_size/2.
 
@@ -118,7 +118,7 @@ class Plane:
 
             self.markers[idx] = marker.Marker(idx, c, corners=[tl, tr, br, bl], rot=rot)
 
-    def get_aruco_board(self):
+    def get_aruco_board(self) -> cv2.aruco.Board:
         from . import aruco
         board_corner_points = []
         ids = []
