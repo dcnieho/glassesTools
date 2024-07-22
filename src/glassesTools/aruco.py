@@ -1,9 +1,10 @@
 import numpy as np
 import cv2
 import pathlib
-from typing import Callable
+from typing import Any, Callable
+from enum import Enum, auto
 
-from . import drawing, intervals, marker, ocv, plane, timestamps, video_gui
+from . import annotation, drawing, intervals, marker, ocv, plane, timestamps, video_gui
 
 
 
@@ -102,8 +103,15 @@ class ArUcoDetector():
         return pose, {'corners': corners, 'ids': ids, 'rejectedImgPoints': rejectedImgPoints, 'recoveredIds': recoveredIds}
 
     def visualize(self, frame, pose: plane.Pose, detect_dict, arm_length, sub_pixel_fac = 8, show_rejected_markers = False):
+        # for debug, can draw rejected markers on frame
+        if show_rejected_markers:
+            cv2.aruco.drawDetectedMarkers(frame, detect_dict['rejectedImgPoints'], None, borderColor=(211,0,148))
+
+        # if any markers were detected, draw where on the frame
+        drawing.arucoDetectedMarkers(frame, detect_dict['corners'], detect_dict['ids'], sub_pixel_fac=sub_pixel_fac, special_highlight=[detect_dict['recoveredIds'],(255,255,0)])
+
         if pose.pose_N_markers>0:
-            # draw axis indicating poster pose (origin and orientation)
+            # draw axis indicating plane pose (origin and orientation)
             drawing.openCVFrameAxis(frame, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, pose.pose_R_vec, pose.pose_T_vec, arm_length, 3, sub_pixel_fac)
 
         if pose.homography_N_markers>0:
@@ -113,12 +121,6 @@ class ArUcoDetector():
             if target[0] >= 0 and target[0] < frame.shape[1] and target[1] >= 0 and target[1] < frame.shape[0]:
                 drawing.openCVCircle(frame, target, 3, (0,0,0), -1, sub_pixel_fac)
 
-        # if any markers were detected, draw where on the frame
-        drawing.arucoDetectedMarkers(frame, detect_dict['corners'], detect_dict['ids'], sub_pixel_fac=sub_pixel_fac, special_highlight=[detect_dict['recoveredIds'],(255,255,0)])
-
-        # for debug, can draw rejected markers on frame
-        if show_rejected_markers:
-            cv2.aruco.drawDetectedMarkers(frame, detect_dict['rejectedImgPoints'], None, borderColor=(211,0,148))
 
 
 
@@ -157,134 +159,191 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     board_corner_points = np.pad(board_corner_points,((0,0),(0,0),(0,1)),'constant', constant_values=(0.,0.)) # Nx4x2 -> Nx4x3
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
 
-def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path, camera_calibration_file: str|pathlib.Path,
-                        processing_intervals: dict[str, list[int]|list[list[int]]],
-                        planes: dict[str], individual_markers: dict[int, dict[str]]|None,
-                        extra_processing: dict[str,tuple[Callable[[np.ndarray,...],tuple[float,float]],list[list[int]],dict[str]]]|None,
-                        gui: video_gui.GUI|None, sub_pixel_fac = 8, show_rejected_markers = False) -> tuple[dict[str,list[plane.Pose]], dict[str,list[marker.Pose]]]:
-    show_visualization = gui is not None
+class Status(Enum):
+    Ok = auto()
+    Skip = auto()
+    Finished = auto()
 
-    # deal with extra processing functions
-    has_extra_processing = extra_processing is not None
-    if has_extra_processing:
-        extra_processing_intervals = {e:extra_processing[e][1] for e in extra_processing}
+class PoseEstimator:
+    def __init__(self, video_file: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path|timestamps.VideoTimestamps, camera_calibration_file: str|pathlib.Path|ocv.CameraParams):
+        self.video_ts   = frame_timestamp_file if isinstance(frame_timestamp_file,timestamps.VideoTimestamps) else timestamps.VideoTimestamps(frame_timestamp_file)
+        self.video      = ocv.CV2VideoReader(video_file, self.video_ts.timestamps)
+        self.cam_params = camera_calibration_file if isinstance(camera_calibration_file,ocv.CameraParams) else ocv.CameraParams.read_from_file(camera_calibration_file)
 
-    # open video
-    video_ts = timestamps.VideoTimestamps(frame_timestamp_file)
-    cap = ocv.CV2VideoReader(in_video, video_ts.timestamps)
-    if show_visualization:
-        gui.set_show_timeline(True, video_ts)
+        self.planes                 : list[str]                             = []
+        self.plane_setups           : dict[str, dict[str]]                  = {}
+        self.plane_proc_intervals   : dict[str, list[int]|list[list[int]]]  = {}
+        self._aruco_boards          : dict[str, cv2.aruco.Board]            = {}
+        self._detectors             : dict[str, ArUcoDetector]              = {}
+        self._single_detect_pass                                            = False
 
-    # setup aruco marker detection
-    aruco_boards = {p: planes[p]['plane'].get_aruco_board() for p in planes}
-    detectors = {p: ArUcoDetector(aruco_boards[p].getDictionary(), planes[p]['aruco_params']) for p in planes}
-    cam_params = ocv.CameraParams.read_from_file(camera_calibration_file)
-    for p in detectors:
-        detectors[p].set_board(aruco_boards[p])
-        detectors[p].set_intrinsics(cam_params)
+        self.individual_markers                 : dict[int, dict[str]]  = {}
+        self._individual_marker_object_points   : dict[int, np.ndarray] = {}
 
-    # check if we can do an optimization of detecting the markers only once for multiple planes (if it makes sense because we have more than one plane)
-    plane_names = list(planes.keys())
-    aruco_dicts = [planes[p]['aruco_dict'] for p in planes if 'aruco_dict' in planes[p]]
-    all_same_dict_and_dect = len(planes)>1 and len(aruco_dicts)==len(planes) and len(set(aruco_dicts))==1 and all([planes[plane_names[0]]['aruco_params']==planes[p]['aruco_params'] for p in planes])
+        self.extra_proc_functions   : dict[str, Callable[[np.ndarray,Any], tuple[float,float]]] = {}
+        self.extra_proc_intervals   : dict[str, list[int]|list[list[int]]]                      = {}
+        self.extra_proc_parameters  : dict[str]                                                 = {}
 
-    # check individual markers (detected using the same detector as for the plane(s))
-    has_individual_markers = individual_markers is not None
-    if has_individual_markers:
-        assert all_same_dict_and_dect or len(planes)==1, "Detecting and reporting individual markers is only supported when there is a single plane, or all planes have identical ArUco setup"
-        individual_markers_out = {i:[] for i in individual_markers}
-        object_points = {}
-        for i in individual_markers:
-            marker_size = individual_markers[i]['marker_size']
-            object_points[i] = np.array([[-marker_size/2, marker_size/2, 0],[marker_size/2, marker_size/2, 0],[marker_size/2, -marker_size/2, 0],[-marker_size/2, -marker_size/2, 0]])
-    else:
-        individual_markers_out = None
+        self.gui                    : video_gui.GUI = None
+        self.do_visualize                           = False
+        self.has_gui                                = False
+        self.sub_pixel_fac                          = 8
+        self.show_rejected_markers                  = False
 
-    poses_out = {p:[] for p in planes}
-    extra_processing_out = None
-    if has_extra_processing:
-        extra_processing_out = {e:[] for e in extra_processing}
-    if show_visualization:
-        gui.set_playing(True)
-    should_exit = False
-    first_frame = True
-    while True:
-        # process frame-by-frame
-        done, frame, frame_idx, frame_ts = cap.read_frame(report_gap=True)
-        if done or \
+        self._first_frame = True
+
+    def __del__(self):
+        if self.has_gui:
+            self.gui.stop()
+
+    def add_plane(self, plane: str, planes_setup: dict[str], processing_intervals: list[int]|list[list[int]] = None):
+        assert plane not in self.planes, f'Cannot register the plane "{plane}", it is already registered'
+        self.planes.append(plane)
+        self.plane_setups[plane] = planes_setup
+        self.plane_proc_intervals[plane] = processing_intervals
+
+        self._aruco_boards[plane]   = planes_setup['plane'].get_aruco_board()
+        self._detectors[plane]      = ArUcoDetector(self._aruco_boards[plane].getDictionary(), planes_setup['aruco_params'])
+        self._detectors[plane].set_board(self._aruco_boards[plane])
+        self._detectors[plane].set_intrinsics(self.cam_params)
+
+        # check if we can do an optimization of detecting the markers only once for multiple planes (if it makes sense because we have more than one plane)
+        aruco_dicts = [self.plane_setups[p]['aruco_dict'] for p in self.planes if 'aruco_dict' in self.plane_setups[p]]
+        self._single_detect_pass = len(self.planes)>1 and len(aruco_dicts)==len(self.planes) and len(set(aruco_dicts))==1 and all([self.plane_setups[self.planes[0]]['aruco_params']==self.plane_setups[p]['aruco_params'] for p in self.planes])
+
+    def add_individual_marker(self, marker_id: int, marker_setup):
+        assert self._single_detect_pass or len(self.planes)==1, "Detecting and reporting individual markers is only supported when there is a single plane, or all planes have identical ArUco setup"
+        assert marker_id not in self.individual_markers, f'Cannot register the individual marker with id {marker_id}, it is already registered'
+        self.individual_markers[marker_id] = marker_setup
+        marker_size = self.individual_markers[marker_id]['marker_size']
+        self._individual_marker_object_points[marker_id] = np.array([[-marker_size/2,  marker_size/2, 0],
+                                                                     [ marker_size/2,  marker_size/2, 0],
+                                                                     [ marker_size/2, -marker_size/2, 0],
+                                                                     [-marker_size/2, -marker_size/2, 0]])
+
+    def register_extra_processing_fun(self,
+                                      name: str,
+                                      func: Callable[[np.ndarray,Any], tuple[float,float]],
+                                      processing_intervals: list[int]|list[list[int]],
+                                      func_parameters: dict[str]):
+        assert name not in self.extra_proc_functions, f'Cannot register the extra processing function "{name}", it is already registered'
+        self.extra_proc_functions[name] = func
+        self.extra_proc_intervals[name] = processing_intervals
+        self.extra_proc_parameters[name]= func_parameters
+
+    def attach_gui(self, gui: video_gui.GUI, sub_pixel_fac = 8, show_rejected_markers = False, episodes: dict[annotation.Event, list[int]] = None, window_id: int = None):
+        self.gui                    = gui
+        self.has_gui                = self.gui is not None
+        self.do_visualize           = self.has_gui
+        self.sub_pixel_fac          = sub_pixel_fac
+        self.show_rejected_markers  = show_rejected_markers
+
+        if self.has_gui:
+            self.gui.set_show_timeline(True, self.video_ts, episodes, window_id)
+
+    def set_visualize_on_frame(self, do_visualize: bool, show_rejected_markers = False):
+        self.do_visualize           = do_visualize
+        self.show_rejected_markers  = show_rejected_markers
+
+    def get_video_info(self) -> tuple[float, float, float]:
+        return self.video.get_prop(cv2.CAP_PROP_FRAME_WIDTH), \
+               self.video.get_prop(cv2.CAP_PROP_FRAME_HEIGHT), \
+               self.video.get_prop(cv2.CAP_PROP_FPS)
+
+    def process_one_frame(self) -> tuple[Status, dict[str, plane.Pose], dict[str, marker.Pose], dict[str, list[int, Any]], tuple[np.ndarray, int, float]]:
+        if self._first_frame and self.has_gui:
+            self.gui.set_playing(True)
+        should_exit, frame, frame_idx, frame_ts = self.video.read_frame(report_gap=True)
+        if should_exit or \
             (
-                intervals.beyond_last_interval(frame_idx, processing_intervals) and \
-                (not has_extra_processing or intervals.beyond_last_interval(frame_idx, extra_processing_intervals))
+                intervals.beyond_last_interval(frame_idx, self.plane_proc_intervals) and \
+                (not self.extra_proc_intervals or intervals.beyond_last_interval(frame_idx, self.extra_proc_intervals))
             ):
-            break
-        cap.report_frame()
+            return Status.Finished, None, None, None, (None, None, None)
+        self.video.report_frame()
 
-        if show_visualization:
-            if first_frame and frame is not None:
-                gui.set_frame_size(frame.shape)
-                first_frame = False
+        if self.has_gui:
+            if self._first_frame and frame is not None:
+                self.gui.set_frame_size(frame.shape)
+                self._first_frame = False
 
-            requests = gui.get_requests()
-            for r,p in requests:
+            requests = self.gui.get_requests()
+            for r,_ in requests:
                 if r=='exit':   # only request we need to handle
                     should_exit = True
-                    break
-            if should_exit:
-                break
+                    return Status.Finished, None, None, None, (None, None, None)
 
         # check we're in a current interval, else skip processing
         # NB: have to spool through like this, setting specific frame to read
         # with cap.set(cv2.CAP_PROP_POS_FRAMES) doesn't seem to work reliably
         # for VFR video files
-        planes_for_this_frame = [p for p in planes if intervals.is_in_interval(frame_idx, processing_intervals[p])]
-        extra_processing_for_this_frame = []
-        if has_extra_processing:
-            extra_processing_for_this_frame = [e for e in extra_processing if intervals.is_in_interval(frame_idx, extra_processing_intervals[e])]
+        planes_for_this_frame = [p for p in self.planes if intervals.is_in_interval(frame_idx, self.plane_proc_intervals[p])]
+        extra_processing_for_this_frame = [e for e in self.extra_proc_functions if intervals.is_in_interval(frame_idx, self.extra_proc_intervals[e])]
         if frame is None or (not planes_for_this_frame and not extra_processing_for_this_frame):
             # we don't have a valid frame or nothing to do, continue to next
-            if show_visualization:
+            if self.has_gui:
                 # do update timeline of the viewers
-                gui.update_image(None, frame_ts/1000., frame_idx)
-            continue
+                self.gui.update_image(None, frame_ts/1000., frame_idx)
+            return Status.Skip, None, None, None, (frame, frame_idx, frame_ts)
 
+        pose_out                : dict[str, plane.Pose]     = {}
+        individual_marker_out   : dict[str, marker.Pose]    = {}
+        extra_processing_out    : dict[str, list[int, Any]] = {}
         if planes_for_this_frame:
             # detect markers
             detect_dicts = {}
-            if all_same_dict_and_dect or has_individual_markers:
-                corners, ids, rejected_corners = _detect_markers(frame, detectors[plane_names[0]]._det)
-                detect_dicts = _refine_for_multiple_planes(frame, corners, ids, rejected_corners, {p:detectors[p] for p in planes_for_this_frame}, cam_params.camera_mtx, cam_params.distort_coeffs)
+            if self._single_detect_pass or self.individual_markers:
+                corners, ids, rejected_corners = _detect_markers(frame, self._detectors[self.planes[0]]._det)
+                detect_dicts = _refine_for_multiple_planes(frame, corners, ids, rejected_corners, {p:self._detectors[p] for p in planes_for_this_frame}, self.cam_params.camera_mtx, self.cam_params.distort_coeffs)
             else:
                 for p in planes_for_this_frame:
-                    detect_dicts[p] = dict(zip(['corners', 'ids', 'rejectedImgPoints', 'recoveredIds'], detectors[p].detect_markers(frame, planes[p]['min_num_markers'])))
+                    detect_dicts[p] = dict(zip(['corners', 'ids', 'rejectedImgPoints', 'recoveredIds'], self._detectors[p].detect_markers(frame, self.plane_setups[p]['min_num_markers'])))
             # determine pose
             for p in planes_for_this_frame:
-                pose = detectors[p].estimate_pose_and_homography(frame_idx, planes[p]['min_num_markers'], detect_dicts[p]['corners'], detect_dicts[p]['ids'])
-                poses_out[p].append(pose)
+                pose = self._detectors[p].estimate_pose_and_homography(frame_idx, self.plane_setups[p]['min_num_markers'], detect_dicts[p]['corners'], detect_dicts[p]['ids'])
+                pose_out[p] = pose
                 # draw detection and pose, if wanted
-                if show_visualization:
-                    detectors[p].visualize(frame, pose, detect_dicts[p], planes[p]['plane'].marker_size/2, sub_pixel_fac, show_rejected_markers)
+                if self.do_visualize:
+                    self._detectors[p].visualize(frame, pose, detect_dicts[p], self.plane_setups[p]['plane'].marker_size/2, self.sub_pixel_fac, self.show_rejected_markers)
 
             # deal with individual markers, if any
-            if has_individual_markers and ids is not None:
-                found_markers = np.where([x[0] in individual_markers for x in ids])[0]
+            if self.individual_markers and ids is not None:
+                found_markers = np.where([x[0] in self.individual_markers for x in ids])[0]
                 if found_markers.size>0:
                     for idx in found_markers:
                         m_id = ids[idx][0]
                         pose = marker.Pose(frame_idx)
-                        if cam_params.has_intrinsics():
+                        if self.cam_params.has_intrinsics():
                             # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
-                            _, pose.R_vec, pose.T_vec = cv2.solvePnP(object_points[m_id], corners[idx], cam_params.camera_mtx, cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                        individual_markers_out[m_id].append(pose)
-                        if show_visualization and cam_params.has_intrinsics():
-                            pose.draw_origin_on_frame(frame, cam_params.camera_mtx, cam_params.distort_coeffs, individual_markers[m_id]['marker_size']/2, sub_pixel_fac)
+                            _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                        individual_marker_out[m_id] = pose
+                        if self.do_visualize and self.cam_params.has_intrinsics():
+                            pose.draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['marker_size']/2, self.sub_pixel_fac)
 
         for e in extra_processing_for_this_frame:
-            extra_processing_out[e].append([frame_idx, *extra_processing[e][0](frame,**extra_processing[e][2])])
+            extra_processing_out[e] = [frame_idx, *self.extra_proc_functions[e](frame,**self.extra_proc_parameters[e])]
 
-        if show_visualization:
-            gui.update_image(frame, frame_ts/1000., frame_idx)
+        if self.has_gui:
+            self.gui.update_image(frame, frame_ts/1000., frame_idx)
 
-    if show_visualization:
-        gui.stop()
+        return Status.Ok, pose_out, individual_marker_out, extra_processing_out, (frame, frame_idx, frame_ts)
 
-    return poses_out, individual_markers_out, extra_processing_out
+    def process_video(self) -> tuple[Status, dict[str, list[plane.Pose]], dict[str, list[marker.Pose]], dict[str, list[list[int, float, float]]]]:
+        poses_out               : dict[str, list[plane.Pose]]               = {p:[] for p in self.planes}
+        individual_markers_out  : dict[str, list[marker.Pose]]              = {i:[] for i in self.individual_markers}
+        extra_processing_out    : dict[str, list[list[int, float, float]]]  = {e:[] for e in self.extra_proc_functions}
+        while True:
+            status, pose, individual_marker, extra_proc, _ = self.process_one_frame()
+            if status==Status.Finished:
+                break
+            if status==Status.Skip:
+                continue
+            # store outputs
+            for p in pose:
+                poses_out[p].append(pose[p])
+            for i in individual_marker:
+                individual_markers_out[i].append(individual_marker[i])
+            for e in extra_proc:
+                extra_processing_out[e].append(extra_proc[e])
+
+        return poses_out, individual_markers_out, extra_processing_out
