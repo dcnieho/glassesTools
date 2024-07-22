@@ -27,10 +27,16 @@ def rgba_0_1_to_hex(rgba):
         a = "FF"
     return f"#{r}{g}{b}{a}"
 
-def format_duration(dur: float, show_ms: bool) -> str:
-    hours, remainder = divmod(dur, 3600)
+def get_hour_minutes_seconds_ms(dur_seconds: float) -> tuple[float, float, float, float]:
+    hours, remainder = divmod(dur_seconds, 3600)
     minutes, seconds = divmod(remainder, 60)
     seconds, ms      = divmod(seconds, 1)
+    return hours, minutes, seconds, ms
+def format_duration(dur: float, show_ms: bool) -> str:
+    hours, minutes, seconds, ms = get_hour_minutes_seconds_ms(dur)
+    if round(ms,3)==1.:
+        # prevent getting timecode x:xx:xx.1000
+        hours, minutes, seconds, ms = get_hour_minutes_seconds_ms(round(dur))
     dur_str = f'{int(hours)}:{int(minutes):02d}:{int(seconds):02d}'
     if show_ms:
         dur_str += f'.{ms*1000:03.0f}'
