@@ -70,7 +70,7 @@ class CV2VideoReader:
     def set_prop(self, cv2_prop, val):
         return self.cap.set(cv2_prop, val)
 
-    def read_frame(self, report_gap=False):
+    def read_frame(self, report_gap=False) -> tuple[bool, np.ndarray, int, float]:
         ts0 = self.cap.get(cv2.CAP_PROP_POS_MSEC)
         ret, frame = self.cap.read()
         ts1 = self.cap.get(cv2.CAP_PROP_POS_MSEC)

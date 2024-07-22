@@ -186,11 +186,11 @@ class GUI:
         for w in self._windows:
             if self._window_timeline[w] is not None:
                 self._window_timeline[w].set_allow_timeline_zoom(allow_timeline_zoom)
-    def set_show_controls(self, show_controls: bool, window_id = None):
+    def set_show_controls(self, show_controls: bool, window_id:int = None):
         if window_id is None:
             window_id = self._get_main_window_id()
         self._window_show_controls[window_id] = show_controls
-    def set_show_play_percentage(self, show_play_percentage: bool, window_id = None):
+    def set_show_play_percentage(self, show_play_percentage: bool, window_id:int = None):
         if window_id is None:
             window_id = self._get_main_window_id()
         self._window_show_play_percentage[window_id] = show_play_percentage
@@ -198,7 +198,7 @@ class GUI:
         self._duration = duration
         self._last_frame_idx = last_frame_idx
 
-    def set_show_timeline(self, show_timeline: bool, video_ts: timestamps.VideoTimestamps = None, annotations: dict[annotation.Event, list[int]] = None, window_id = None):
+    def set_show_timeline(self, show_timeline: bool, video_ts: timestamps.VideoTimestamps = None, annotations: dict[annotation.Event, list[int]] = None, window_id:int = None):
         if window_id is None:
             window_id = self._get_main_window_id()
 
@@ -249,7 +249,7 @@ class GUI:
         for e in self._annotate_shortcut_key_map:
             self._add_remove_button(self._allow_annotate, Action.Annotate_Make, e)
 
-    def set_show_annotation_label(self, show_label: bool, window_id = None):
+    def set_show_annotation_label(self, show_label: bool, window_id:int = None):
         if window_id is None:
             window_id = self._get_main_window_id()
         if self._window_timeline[window_id] is not None:
@@ -280,14 +280,14 @@ class GUI:
             self._thread.join()
         self._thread = None
 
-    def set_frame_size(self, frame_size: tuple[int,int], window_id=None):
+    def set_frame_size(self, frame_size: tuple[int,int], window_id:int = None):
         if window_id is None:
             window_id = self._get_main_window_id()
 
         self._window_determine_size[window_id] = any([x!=y for x,y in zip(self._frame_size[window_id],frame_size)])
         self._frame_size[window_id] = frame_size
 
-    def update_image(self, frame: np.ndarray, pts: float, frame_nr: int, window_id = None):
+    def update_image(self, frame: np.ndarray, pts: float, frame_nr: int, window_id:int = None):
         # since this has an independently running loop,
         # need to update image whenever new one available
         if window_id is None:
