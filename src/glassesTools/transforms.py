@@ -115,7 +115,7 @@ def angle_between(v1, v2):
 
 
 def gazeToPlane(gaze: gaze_headref.Gaze, pose: plane.Pose, cameraParams: ocv.CameraParams) -> gaze_worldref.Gaze:
-    gazeWorld     = gaze_worldref.Gaze(gaze.timestamp, gaze.frame_idx, gaze.timestamp_ori, gaze.frame_idx_ori, gaze.timestamp_VOR, gaze.frame_idx_VOR, gaze.timestamp_ref, gaze.frame_idx_ref)
+    gazeWorld = gaze_worldref.Gaze(gaze.timestamp, gaze.frame_idx, gaze.timestamp_ori, gaze.frame_idx_ori, gaze.timestamp_VOR, gaze.frame_idx_VOR, gaze.timestamp_ref, gaze.frame_idx_ref)
     if pose.pose_N_markers>0:
         # get transform from ET data's coordinate frame to camera's coordinate frame
         cameraRotation = cameraParams.rotation_vec
