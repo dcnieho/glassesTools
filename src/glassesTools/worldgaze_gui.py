@@ -70,7 +70,7 @@ def show_visualization(
             continue
 
         if show_planes:
-            refImg = {p: planes[p].get_ref_image(400) for p in planes}
+            ref_img = {p: planes[p].get_ref_image(400) for p in planes}
 
         if frame_idx in head_gazes:
             for gaze_head in head_gazes[frame_idx]:
@@ -83,13 +83,13 @@ def show_visualization(
                 for gaze_world in plane_gazes[p][frame_idx]:
                     gaze_world.draw_on_world_video(frame, cam_params, sub_pixel_fac)
                     if show_planes:
-                        gaze_world.draw_on_plane(refImg[p], planes[p], sub_pixel_fac)
+                        gaze_world.draw_on_plane(ref_img[p], planes[p], sub_pixel_fac)
 
         if show_planes:
             for p in planes:
-                gui.update_image(refImg[p], frame_ts/1000., frame_idx, window_id = plane_win_id[p])
+                gui.update_image(ref_img[p], frame_ts/1000., frame_idx, window_id = plane_win_id[p])
 
-        # if we have poster pose, draw poster origin on video
+        # if we have plane pose, draw plane origin on video
         for p in planes:
             if frame_idx in poses[p]:
                 a = poses[p][frame_idx].get_origin_on_image(cam_params)
