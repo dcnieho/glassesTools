@@ -183,7 +183,7 @@ def formatGazeData(inputDir: str|pathlib.Path, sceneVideoDimensions: list[int], 
     df = csv2df(inputDir, sceneVideoDimensions)
 
     # read video file, create array of frame timestamps
-    frameTimestamps = video_utils.getFrameTimestampsFromVideo(recInfo.get_scene_video_path())
+    frameTimestamps = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
 
     # return the gaze data df and frame time stamps array
     return df, frameTimestamps

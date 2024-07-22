@@ -13,7 +13,7 @@ def av_rescale(a, b, c):
     return (a * b + r) // c
 
 
-def getFrameTimestampsFromVideo(vid_file):
+def get_frame_timestamps_from_video(vid_file):
     """
     Parse the supplied video, return an array of frame timestamps. There must be only one video stream
     in the video file, because otherwise we do not know which is the correct stream.
@@ -115,12 +115,12 @@ def getFrameTimestampsFromVideo(vid_file):
             # then we subtract the dts by that amount to make the first pts zero.
             dts -= min_corrected_pts
         # now turn into timestamps in ms
-        frameTs = (dts+empty_duration)/media_time_scale*1000
+        frame_ts = (dts+empty_duration)/media_time_scale*1000
     else:
         # open file with opencv and get timestamps of each frame
         vid = cv2.VideoCapture(vid_file)
         nframes = float(vid.get(cv2.CAP_PROP_FRAME_COUNT))
-        frameTs = []
+        frame_ts = []
         frame_idx = 0
         while vid.isOpened():
             # read timestamp _before_ reading the frame, so we get position at start of the frame, not at
@@ -138,31 +138,31 @@ def getFrameTimestampsFromVideo(vid_file):
             if frame_idx==1 and ts==vid.get(cv2.CAP_PROP_POS_MSEC):
                 continue
 
-            frameTs.append(ts)
+            frame_ts.append(ts)
             # check if we're done. Can't trust ret==False to indicate we're at end of video, as it may also return false for some frames when video has errors in the middle that we can just read past
             if (not ret and frame_idx>0 and frame_idx/nframes<.99):
                 raise RuntimeError("The video file is corrupt. Testing has shown that it cannot be guaranteed that timestamps remain correct when trying to read past the hole. So abort, cannot process this video.")
 
         # release the video capture object
         vid.release()
-        frameTs = np.array(frameTs)
+        frame_ts = np.array(frame_ts)
 
     ### convert the frame_timestamps to dataframe
-    frameIdx = np.arange(0, len(frameTs))
-    frameTsDf = pd.DataFrame({'frame_idx': frameIdx, 'timestamp': frameTs})
-    frameTsDf.set_index('frame_idx', inplace=True)
+    frame_idx = np.arange(0, len(frame_ts))
+    frame_ts_df = pd.DataFrame({'frame_idx': frame_idx, 'timestamp': frame_ts})
+    frame_ts_df.set_index('frame_idx', inplace=True)
 
-    return frameTsDf
+    return frame_ts_df
 
 
-def tssToFrameNumber(ts,frameTimestamps,mode='nearest',trim=False):
+def timestamps_to_frame_number(ts,frame_timestamps,mode='nearest',trim=False):
     df = pd.DataFrame(index=ts)
     df.insert(0,'frame_idx',np.int64(0))
-    if isinstance(frameTimestamps, list):
-        frameTimestamps = np.array(frameTimestamps)
+    if isinstance(frame_timestamps, list):
+        frame_timestamps = np.array(frame_timestamps)
 
     # get index where this ts would be inserted into the frame_timestamp array
-    idxs = np.searchsorted(frameTimestamps, ts)
+    idxs = np.searchsorted(frame_timestamps, ts)
     if mode=='after':
         idxs = idxs.astype('float32')
         # out of range, set to nan
@@ -172,9 +172,9 @@ def tssToFrameNumber(ts,frameTimestamps,mode='nearest',trim=False):
     elif mode=='nearest':
         # implementation from https://stackoverflow.com/questions/8914491/finding-the-nearest-value-and-return-the-index-of-array-in-python/8929827#8929827
         # same logic as used by pupil labs
-        idxs = np.clip(idxs, 1, len(frameTimestamps)-1)
-        left = frameTimestamps[idxs-1]
-        right = frameTimestamps[idxs]
+        idxs = np.clip(idxs, 1, len(frame_timestamps)-1)
+        left = frame_timestamps[idxs-1]
+        right = frame_timestamps[idxs]
         idxs -= ts - left < right - ts
 
     if trim:
@@ -182,7 +182,7 @@ def tssToFrameNumber(ts,frameTimestamps,mode='nearest',trim=False):
         idxs[df.index<0] = -1
         # get average frame interval, and set data beyond framets+1 extra frame to -1 as well
         avIFI = np.mean(np.diff(df.index.to_numpy()))
-        idxs[df.index>frameTimestamps[-1]+avIFI] = -1
+        idxs[df.index>frame_timestamps[-1]+avIFI] = -1
 
     df=df.assign(frame_idx=idxs)
     if mode=='after':

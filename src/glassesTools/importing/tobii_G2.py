@@ -223,11 +223,11 @@ def formatGazeData(inputDir: str|pathlib.Path, sceneVideoDimensions: list[int], 
     df,scene_video_ts_offset = json2df(inputDir / 'livedata.json', sceneVideoDimensions)
 
     # read video file, create array of frame timestamps
-    frameTimestamps = video_utils.getFrameTimestampsFromVideo(recInfo.get_scene_video_path())
+    frameTimestamps = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
     frameTimestamps['timestamp'] += scene_video_ts_offset
 
     # use the frame timestamps to assign a frame number to each data point
-    frameIdx = video_utils.tssToFrameNumber(df.index,frameTimestamps['timestamp'].to_numpy())
+    frameIdx = video_utils.timestamps_to_frame_number(df.index,frameTimestamps['timestamp'].to_numpy())
     df.insert(0,'frame_idx',frameIdx['frame_idx'])
 
     # build the formatted dataframe

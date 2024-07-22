@@ -75,7 +75,7 @@ class ArUcoDetector():
         if self._camera_params.has_intrinsics():
             imgP = np.vstack([cv2.undistortPoints(x, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, P=self._camera_params.camera_mtx) for x in imgP])
 
-        H, status = transforms.estimateHomography(objP, imgP)
+        H, status = transforms.estimate_homography(objP, imgP)
         if status:
             N_markers = int(objP.shape[0]/4)
         return N_markers, H
@@ -108,13 +108,13 @@ class ArUcoDetector():
 
         if pose.homography_N_markers>0:
             # find where plane origin is expected to be in the image
-            target = pose.planeToCamHomography([0., 0.], self._camera_params)
+            target = pose.plane_to_cam_homography([0., 0.], self._camera_params)
             # draw target location on image
             if target[0] >= 0 and target[0] < frame.shape[1] and target[1] >= 0 and target[1] < frame.shape[0]:
                 drawing.openCVCircle(frame, target, 3, (0,0,0), -1, sub_pixel_fac)
 
         # if any markers were detected, draw where on the frame
-        drawing.arucoDetectedMarkers(frame, detect_dict['corners'], detect_dict['ids'], subPixelFac=sub_pixel_fac, specialHighlight=[detect_dict['recoveredIds'],(255,255,0)])
+        drawing.arucoDetectedMarkers(frame, detect_dict['corners'], detect_dict['ids'], sub_pixel_fac=sub_pixel_fac, special_highlight=[detect_dict['recoveredIds'],(255,255,0)])
 
         # for debug, can draw rejected markers on frame
         if show_rejected_markers:
@@ -178,7 +178,7 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
     # setup aruco marker detection
     aruco_boards = {p: planes[p]['plane'].get_aruco_board() for p in planes}
     detectors = {p: ArUcoDetector(aruco_boards[p].getDictionary(), planes[p]['aruco_params']) for p in planes}
-    cam_params = ocv.CameraParams.readFromFile(camera_calibration_file)
+    cam_params = ocv.CameraParams.read_from_file(camera_calibration_file)
     for p in detectors:
         detectors[p].set_board(aruco_boards[p])
         detectors[p].set_intrinsics(cam_params)

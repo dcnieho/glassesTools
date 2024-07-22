@@ -220,7 +220,7 @@ def formatGazeData(inputDir: str|pathlib.Path, recInfo: Recording, sceneVideoDim
     df = gazedata2df(inputDir / file, sceneVideoDimensions)
 
     # read video file, create array of frame timestamps
-    frameTimestamps = video_utils.getFrameTimestampsFromVideo(recInfo.get_scene_video_path())
+    frameTimestamps = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
 
     # SMI frame counter seems to be of the format HH:MM:SS:FR, where HH:MM:SS is a normal
     # hour, minute, second timecode, and FR is a frame number for within that second. The

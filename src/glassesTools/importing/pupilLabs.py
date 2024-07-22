@@ -382,7 +382,7 @@ def formatGazeDataPupilPlayer(inputDir: str|pathlib.Path, exportFile: str|pathli
     df = readGazeDataPupilPlayer(exportFile, sceneVideoDimensions, recInfo)
 
     # get timestamps for the scene video
-    frameTs = video_utils.getFrameTimestampsFromVideo(recInfo.get_scene_video_path())
+    frameTs = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
 
     # check pupil-labs' frame timestamps because we may need to correct
     # frame indices in case of holes in the video
@@ -499,7 +499,7 @@ def formatGazeDataCloudExport(inputDir: str|pathlib.Path, exportFile: str|pathli
     df = df.set_index('timestamp')
 
     # use the frame timestamps to assign a frame number to each data point
-    frameIdx = video_utils.tssToFrameNumber(df.index,frameTimestamps['timestamp'].to_numpy())
+    frameIdx = video_utils.timestamps_to_frame_number(df.index,frameTimestamps['timestamp'].to_numpy())
     df.insert(0,'frame_idx',frameIdx['frame_idx'])
 
     return df, frameTimestamps

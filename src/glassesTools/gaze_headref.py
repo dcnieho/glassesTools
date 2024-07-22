@@ -48,24 +48,24 @@ class Gaze:
         self.gaze_dir_r   : np.ndarray  = gaze_dir_r
         self.gaze_ori_r   : np.ndarray  = gaze_ori_r
 
-    def draw(self, img:np.ndarray, cameraParams:ocv.CameraParams=None, subPixelFac=1):
-        drawing.openCVCircle(img, self.gaze_pos_vid, 8, (0,255,0), 2, subPixelFac)
+    def draw(self, img:np.ndarray, camera_arams:ocv.CameraParams=None, sub_ixel_fac=1):
+        drawing.openCVCircle(img, self.gaze_pos_vid, 8, (0,255,0), 2, sub_ixel_fac)
         # draw 3D gaze point as well, usually coincides with 2D gaze point, but not always. E.g. the Adhawk MindLink may
         # apply a correction for parallax error to the projected gaze point using the vergence signal.
-        if self.gaze_pos_3d is not None and cameraParams.has_intrinsics():
-            camRot = np.zeros((1,3)) if cameraParams.rotation_vec is None else cameraParams.rotation_vec
-            camPos = np.zeros((1,3)) if cameraParams.position     is None else cameraParams.position
-            a = cv2.projectPoints(np.array(self.gaze_pos_3d).reshape(1,3),camRot,camPos,cameraParams.camera_mtx,cameraParams.distort_coeffs)[0][0][0]
-            drawing.openCVCircle(img, a, 5, (0,255,255), -1, subPixelFac)
+        if self.gaze_pos_3d is not None and camera_arams.has_intrinsics():
+            camRot = np.zeros((1,3)) if camera_arams.rotation_vec is None else camera_arams.rotation_vec
+            camPos = np.zeros((1,3)) if camera_arams.position     is None else camera_arams.position
+            a = cv2.projectPoints(np.array(self.gaze_pos_3d).reshape(1,3),camRot,camPos,camera_arams.camera_mtx,camera_arams.distort_coeffs)[0][0][0]
+            drawing.openCVCircle(img, a, 5, (0,255,255), -1, sub_ixel_fac)
 
 
-def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None, ts_column_suffixes: list[str] = None) -> tuple[dict[int,list[Gaze]], int]:
-    return data_files.read_file(fileName,
+def read_dict_from_file(file_name:str|pathlib.Path, episodes:list[list[int]]=None, ts_column_suffixes: list[str] = None) -> tuple[dict[int,list[Gaze]], int]:
+    return data_files.read_file(file_name,
                                 Gaze, False, False, True, True,
                                 episodes=episodes, ts_fridx_field_suffixes=ts_column_suffixes)
 
-def write_dict_to_file(gazes: list[Gaze] | dict[int,list[Gaze]], fileName:str|pathlib.Path, skip_missing=False):
-    data_files.write_array_to_file(gazes, fileName,
+def write_dict_to_file(gazes: list[Gaze] | dict[int,list[Gaze]], file_name:str|pathlib.Path, skip_missing=False):
+    data_files.write_array_to_file(gazes, file_name,
                                    Gaze._columns_compressed,
                                    Gaze._columns_optional,
                                    skip_all_nan=skip_missing)

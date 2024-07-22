@@ -21,7 +21,7 @@ class CameraParams:
         self.position       : np.ndarray = position
 
     @staticmethod
-    def readFromFile(fileName: str|pathlib.Path) -> 'CameraParams':
+    def read_from_file(fileName: str|pathlib.Path) -> 'CameraParams':
         fileName = pathlib.Path(fileName)
         if not fileName.is_file():
             return CameraParams(None,None)

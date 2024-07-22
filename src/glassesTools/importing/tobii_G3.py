@@ -200,10 +200,10 @@ def formatGazeData(inputDir: str|pathlib.Path, sceneVideoDimensions: list[int], 
     df = json2df(inputDir / 'gazedata', sceneVideoDimensions)
 
     # read video file, create array of frame timestamps
-    frameTimestamps = video_utils.getFrameTimestampsFromVideo(recInfo.get_scene_video_path())
+    frameTimestamps = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
 
     # use the frame timestamps to assign a frame number to each data point
-    frameIdx = video_utils.tssToFrameNumber(df.index,frameTimestamps['timestamp'].to_numpy())
+    frameIdx = video_utils.timestamps_to_frame_number(df.index,frameTimestamps['timestamp'].to_numpy())
     df.insert(0,'frame_idx',frameIdx['frame_idx'])
 
     # return the gaze data df and frame time stamps array
@@ -236,13 +236,13 @@ def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> pd.D
         if 'data.eye'+eye+'.gazeorigin' not in dfR.columns:
             continue    # no data at all for this eye
         which_eye = eye[:1]
-        df[data_files.getColumnLabels('gaze_ori_'+which_eye,3)] = pd.DataFrame(expander(dfR['data.eye'+eye+'.gazeorigin'   ].tolist(),3), index=dfR.index)
-        df[data_files.getColumnLabels('gaze_dir_'+which_eye,3)] = pd.DataFrame(expander(dfR['data.eye'+eye+'.gazedirection'].tolist(),3), index=dfR.index)
+        df[data_files.get_column_labels('gaze_ori_'+which_eye,3)] = pd.DataFrame(expander(dfR['data.eye'+eye+'.gazeorigin'   ].tolist(),3), index=dfR.index)
+        df[data_files.get_column_labels('gaze_dir_'+which_eye,3)] = pd.DataFrame(expander(dfR['data.eye'+eye+'.gazedirection'].tolist(),3), index=dfR.index)
         df['pup_diam_'+which_eye] = dfR['data.eye'+eye+'.pupildiameter']
 
     # binocular gaze data
-    df[data_files.getColumnLabels('gaze_pos_3d',3) ] = pd.DataFrame(expander(dfR['data.gaze3d'].tolist(),3), index=dfR.index)
-    df[data_files.getColumnLabels('gaze_pos_vid',2)] = pd.DataFrame(expander(dfR['data.gaze2d'].tolist(),2), index=dfR.index)
+    df[data_files.get_column_labels('gaze_pos_3d',3) ] = pd.DataFrame(expander(dfR['data.gaze3d'].tolist(),3), index=dfR.index)
+    df[data_files.get_column_labels('gaze_pos_vid',2)] = pd.DataFrame(expander(dfR['data.gaze2d'].tolist(),2), index=dfR.index)
     df.loc[:,'gaze_pos_vid_x'] *= sceneVideoDimensions[0]
     df.loc[:,'gaze_pos_vid_y'] *= sceneVideoDimensions[1]
 

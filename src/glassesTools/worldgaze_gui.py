@@ -21,7 +21,7 @@ def show_visualization(
     cap             = ocv.CV2VideoReader(in_video, video_ts.timestamps)
     width           = cap.get_prop(cv2.CAP_PROP_FRAME_WIDTH)
     height          = cap.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)
-    cam_params      = ocv.CameraParams.readFromFile(camera_calibration_file)
+    cam_params      = ocv.CameraParams.read_from_file(camera_calibration_file)
 
     gui.set_framerate(cap.get_prop(cv2.CAP_PROP_FPS))
     # flatten if needed
@@ -60,8 +60,8 @@ def show_visualization(
         # NB: have to spool through like this, setting specific frame to read
         # with cap.get(cv2.CAP_PROP_POS_FRAMES) doesn't seem to work reliably
         # for VFR video files
-        if show_only_intervals and not intervals.is_in_interval(frame_idx, annotations):
-            # no need to show this frame
+        if show_only_intervals and not intervals.is_in_interval(frame_idx, annotations) or frame is None:
+            # we don't have a valid frame or no need to show this frame
             # do update timeline of the viewers
             if show_planes:
                 gui.update_image(None, frame_ts/1000., frame_idx, window_id = frame_win_id)
@@ -81,9 +81,9 @@ def show_visualization(
         for p in planes:
             if frame_idx in plane_gazes[p]:
                 for gaze_world in plane_gazes[p][frame_idx]:
-                    gaze_world.drawOnWorldVideo(frame, cam_params, sub_pixel_fac)
+                    gaze_world.draw_on_world_video(frame, cam_params, sub_pixel_fac)
                     if show_planes:
-                        gaze_world.drawOnPlane(refImg[p], planes[p], sub_pixel_fac)
+                        gaze_world.draw_on_plane(refImg[p], planes[p], sub_pixel_fac)
 
         if show_planes:
             for p in planes:
@@ -92,7 +92,7 @@ def show_visualization(
         # if we have poster pose, draw poster origin on video
         for p in planes:
             if frame_idx in poses[p]:
-                a = poses[p][frame_idx].getOriginOnImage(cam_params)
+                a = poses[p][frame_idx].get_origin_on_image(cam_params)
                 drawing.openCVCircle(frame, a, 3, (0,255,0), -1, sub_pixel_fac)
                 drawing.openCVLine(frame, (a[0],0), (a[0],height), (0,255,0), 1, sub_pixel_fac)
                 drawing.openCVLine(frame, (0,a[1]), (width,a[1]) , (0,255,0), 1, sub_pixel_fac)

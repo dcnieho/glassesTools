@@ -65,7 +65,7 @@ class Plane:
         self.bbox[1] -= origin[1]
         self.bbox[3] -= origin[1]
 
-    def get_ref_image(self, im_size: int=None, asRGB=False):
+    def get_ref_image(self, im_size: int=None, as_RGB=False):
         if im_size is None:
             im_size = self._ref_image_size
         assert isinstance(im_size,int), f'width input should be an int, not {type(im_size)}'
@@ -75,20 +75,20 @@ class Plane:
             self._ref_image_cache[im_size] = cv2.resize(self._ref_image_cache[self._ref_image_size], None, fx=scale, fy=scale, interpolation = cv2.INTER_AREA)
 
         # return
-        if asRGB:
+        if as_RGB:
             return self._ref_image_cache[im_size][:,:,[2,1,0]]    # indexing returns a copy
         else:
             # OpenCV's BGR
             return self._ref_image_cache[im_size].copy()
 
-    def draw(self, img, x, y, subPixelFac=1, color=None, size=6):
+    def draw(self, img, x, y, sub_pixel_fac=1, color=None, size=6):
         from . import transforms
         if not math.isnan(x):
-            xy = transforms.toImagePos(x, y, self.bbox, [img.shape[1], img.shape[0]])
+            xy = transforms.to_image_pos(x, y, self.bbox, [img.shape[1], img.shape[0]])
             if color is None:
-                drawing.openCVCircle(img, xy, 8, (0,255,0), -1, subPixelFac)
+                drawing.openCVCircle(img, xy, 8, (0,255,0), -1, sub_pixel_fac)
                 color = (0,0,0)
-            drawing.openCVCircle(img, xy, size, color, -1, subPixelFac)
+            drawing.openCVCircle(img, xy, size, color, -1, sub_pixel_fac)
 
     def _get_markers(self, markers: str|pathlib.Path|pd.DataFrame, marker_pos_scale_fac: float, package_to_read_from: str|None):
         # read in aruco marker positions
@@ -130,13 +130,13 @@ class Plane:
 
     def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
         # get image with markers
-        bboxExtents = [self.bbox[2]-self.bbox[0], math.fabs(self.bbox[3]-self.bbox[1])]  # math.fabs to deal with bboxes where (-,-) is bottom left
-        aspectRatio = bboxExtents[0]/bboxExtents[1]
-        if aspectRatio>1:
+        bbox_extents = [self.bbox[2]-self.bbox[0], math.fabs(self.bbox[3]-self.bbox[1])]  # math.fabs to deal with bboxes where (-,-) is bottom left
+        aspect_ratio = bbox_extents[0]/bbox_extents[1]
+        if aspect_ratio>1:
             width       = im_size
-            height      = math.ceil(im_size/aspectRatio)
+            height      = math.ceil(im_size/aspect_ratio)
         else:
-            width       = math.ceil(im_size*aspectRatio)
+            width       = math.ceil(im_size*aspect_ratio)
             height      = im_size
 
         img = np.zeros((height, width), np.uint8)
@@ -154,8 +154,8 @@ class Plane:
         corner_points = corner_points-np.expand_dims(np.array([self.bbox[:2]]),2).astype('float32')
 
         # get position and size of marker in the generated image
-        corner_points[:,0,:] = corner_points[:,0,:]/bboxExtents[0] * float(img.shape[1])
-        corner_points[:,1,:] = corner_points[:,1,:]/bboxExtents[1] * float(img.shape[0])
+        corner_points[:,0,:] = corner_points[:,0,:]/bbox_extents[0] * float(img.shape[1])
+        corner_points[:,1,:] = corner_points[:,1,:]/bbox_extents[1] * float(img.shape[0])
 
         # get marker size
         pix_sz = np.vstack((np.hypot(corner_points[0,0,:]-corner_points[1,0,:], corner_points[0,1,:]-corner_points[1,1,:]),
@@ -216,15 +216,20 @@ class Pose:
         self.homography_mat       : np.ndarray  = homography_mat.reshape(3,3) if homography_mat is not None else homography_mat
 
         # internals
-        self._RMat        = None
-        self._RtMat       = None
-        self._planeNormal = None
-        self._planePoint  = None
-        self._RMatInv     = None
-        self._RtMatInv    = None
-        self._iH          = None
+        self._RMat              = None
+        self._RtMat             = None
+        self._plane_normal      = None
+        self._plane_point       = None
+        self._RMatInv           = None
+        self._RtMatInv          = None
+        self._i_homography_mat  = None
 
-    def camToWorld(self, point: np.ndarray):
+    def draw_frame_axis(self, img, camera_params: ocv.CameraParams, arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.]):
+        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or not camera_params.has_intrinsics():
+            return
+        drawing.openCVFrameAxis(img, camera_params.camera_mtx, camera_params.distort_coeffs, self.pose_R_vec, self.pose_T_vec, arm_length, thickness, sub_pixel_fac, position)
+
+    def cam_frame_to_world(self, point: np.ndarray):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
             return np.full((3,), np.nan)
 
@@ -237,7 +242,7 @@ class Pose:
 
         return np.matmul(self._RtMatInv,np.append(np.array(point),1.).reshape((4,1))).flatten()
 
-    def worldToCam(self, point: np.ndarray):
+    def world_frame_to_cam(self, point: np.ndarray):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
             return np.full((3,), np.nan)
 
@@ -248,80 +253,82 @@ class Pose:
 
         return np.matmul(self._RtMat,np.append(np.array(point),1.).reshape((4,1))).flatten()
 
-    def planeToCamPose(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
+    def plane_to_cam_pose(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
+        # from location on plane (2D) to location on camera image (2D)
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)) or not camera_params.has_intrinsics():
             return np.full((2,), np.nan)
         return cv2.projectPoints(point, self.pose_R_vec, self.pose_T_vec, camera_params.camera_mtx, camera_params.distort_coeffs)[0].flatten()
 
-    def camToPlanePose(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
-        # NB: also returns intermediate result (intersection with poster in camera space)
+    def cam_to_plane_pose(self, point: np.ndarray, camera_params: ocv.CameraParams) -> tuple[np.ndarray,np.ndarray]:
+        # from location on camera image (2D) to location on plane (2D)
+        # NB: also returns intermediate result (intersection with plane in camera space)
         from . import transforms
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)) or not camera_params.has_intrinsics():
             return np.full((2,), np.nan), np.full((3,), np.nan)
 
-        g3D = transforms.unprojectPoint(*point, camera_params.camera_mtx, camera_params.distort_coeffs)
+        g3D = transforms.unproject_point(*point, camera_params.camera_mtx, camera_params.distort_coeffs)
 
-        # find intersection of 3D gaze with poster
-        pos_cam = self.vectorIntersect(g3D)  # default vec origin (0,0,0) because we use g3D from camera's view point
+        # find intersection of 3D gaze with plane
+        pos_cam = self.vector_intersect(g3D)  # default vec origin (0,0,0) because we use g3D from camera's view point
 
-        # above intersection is in camera space, turn into poster space to get position on poster
-        (x,y,z) = self.camToWorld(pos_cam) # z should be very close to zero
+        # above intersection is in camera space, turn into world space to get position on plane
+        (x,y,z) = self.cam_frame_to_world(pos_cam) # z should be very close to zero
         return np.asarray([x, y]), pos_cam
 
-    def planeToCamHomography(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
+    def plane_to_cam_homography(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
         # from location on plane (2D) to location on camera image (2D)
         from . import transforms
         if self.homography_mat is None:
             return np.full((2,), np.nan)
 
-        if self._iH is None:
-            self._iH = np.linalg.inv(self.homography_mat)
-        out = transforms.applyHomography(self._iH, *point)
+        if self._i_homography_mat is None:
+            self._i_homography_mat = np.linalg.inv(self.homography_mat)
+        out = transforms.apply_homography(self._i_homography_mat, *point)
         if camera_params.has_intrinsics():
-            out = transforms.distortPoint(*out, camera_params.camera_mtx, camera_params.distort_coeffs)
+            out = transforms.distort_point(*out, camera_params.camera_mtx, camera_params.distort_coeffs)
         return out
 
-    def camToPlaneHomography(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
+    def cam_to_plane_homography(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
         # from location on camera image (2D) to location on plane (2D)
         from . import transforms
         if self.homography_mat is None:
             return np.full((2,), np.nan)
 
         if camera_params.has_intrinsics():
-            point = transforms.undistortPoint(*point, camera_params.camera_mtx, camera_params.distort_coeffs)
-        return transforms.applyHomography(self.homography_mat, *point)
+            point = transforms.undistort_point(*point, camera_params.camera_mtx, camera_params.distort_coeffs)
+        return transforms.apply_homography(self.homography_mat, *point)
 
-    def getOriginOnImage(self, camera_params: ocv.CameraParams) -> np.ndarray:
+    def get_origin_on_image(self, camera_params: ocv.CameraParams) -> np.ndarray:
         if self.pose_N_markers>0 and camera_params.has_intrinsics():
-            a = cv2.projectPoints(np.zeros((1,3)), self.pose_R_vec,self.pose_T_vec, camera_params.camera_mtx,camera_params.distort_coeffs)[0].flatten()
+            a = self.plane_to_cam_pose(np.zeros((1,3)), camera_params)
         elif self.homography_N_markers>0:
-            a = self.planeToCamHomography([0., 0.], camera_params.camera_mtx, camera_params.distort_coeffs)
+            a = self.plane_to_cam_homography([0., 0.], camera_params)
         else:
             a = np.full((2,), np.nan)
         return a
 
-    def vectorIntersect(self, vector: np.ndarray, origin = np.array([0.,0.,0.])):
+    def vector_intersect(self, vector: np.ndarray, origin = np.array([0.,0.,0.])):
         from . import transforms
 
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(vector)):
             return np.full((3,), np.nan)
 
-        if self._planeNormal is None:
+        if self._plane_normal is None:
             if self._RtMat is None:
                 if self._RMat is None:
                     self._RMat = cv2.Rodrigues(self.pose_R_vec)[0]
                 self._RtMat = np.hstack((self._RMat, self.pose_T_vec.reshape(3,1)))
 
             # get poster normal
-            self._planeNormal = self._RMat[:,2]     # equivalent to: np.matmul(self._RMat, np.array([0., 0., 1.]))
+            self._plane_normal = self._RMat[:,2]     # equivalent to: np.matmul(self._RMat, np.array([0., 0., 1.]))
             # get point on poster (just use origin)
-            self._planePoint  = self._RtMat[:,3]    # equivalent to: np.matmul(self._RtMat, np.array([0., 0., 0., 1.]))
+            self._plane_point  = self._RtMat[:,3]    # equivalent to: np.matmul(self._RtMat, np.array([0., 0., 0., 1.]))
 
         # normalize vector
         vector /= np.linalg.norm(vector)
 
         # find intersection of 3D gaze with poster
-        return transforms.intersect_plane_ray(self._planeNormal, self._planePoint, vector.flatten(), origin.flatten())
+        return transforms.intersect_plane_ray(self._plane_normal, self._plane_point, vector.flatten(), origin.flatten())
 
 
 def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,Pose]:

@@ -7,7 +7,7 @@ from typing import Any, Optional
 from collections import defaultdict
 
 
-def getColumnLabels(lbl,N=3):
+def get_column_labels(lbl,N=3):
     if N<=3:
         return [lbl+'_%s' % (chr(c)) for c in range(ord('x'), ord('x')+N)]
     elif N==9:
@@ -15,13 +15,13 @@ def getColumnLabels(lbl,N=3):
     else:
         raise ValueError(f'N input should be <=3 or 9, was {N}')
 
-def noneIfAnyNan(vals):
+def none_if_any_nan(vals):
     if not np.any(np.isnan(vals)):
         return vals
     else:
         return None
 
-def allNanIfNone(vals, numel):
+def all_nan_if_none(vals, numel):
     if vals is None:
         return np.full((numel,), np.nan)
     else:
@@ -45,17 +45,17 @@ def read_coord_file(file, package_to_read_from=None):
 
 
 def uncompress_columns(cols_compressed: dict[str, int]):
-    return [getColumnLabels(c,N) if (N:=cols_compressed[c])>1 else [c] for c in cols_compressed]
+    return [get_column_labels(c,N) if (N:=cols_compressed[c])>1 else [c] for c in cols_compressed]
 
 def _get_col_name_with_suffix(base:str, suf:str):
     if not suf:
         return base
     return base + '_' + suf
 
-def read_file(fileName               : str|pathlib.Path,
+def read_file(file_name              : str|pathlib.Path,
               object                 : Any,
               drop_if_all_nan        : bool,
-              none_if_any_nan        : bool,
+              put_none_if_any_nan    : bool,
               as_list_dict           : bool,
               make_ori_ts_fridx      : bool,
               episodes               : Optional[list[list[int]]] = None,
@@ -67,7 +67,7 @@ def read_file(fileName               : str|pathlib.Path,
     dtypes         : dict[str, Any] = object._non_float
 
     # read file and select, if wanted
-    df          = pd.read_csv(fileName, delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **dtypes))
+    df          = pd.read_csv(file_name, delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **dtypes))
     if episodes:
         sel = (df[subset_var] >= episodes[0][0]) & (df[subset_var] <= episodes[0][1])
         for e in episodes[1:]:
@@ -88,8 +88,8 @@ def read_file(fileName               : str|pathlib.Path,
         elif ac:
             if not any([a in df.columns for a in ac]):
                 continue
-            if none_if_any_nan:
-                df[c] = [noneIfAnyNan(x) for x in df[ac].values]  # make list of numpy arrays, or None if there are any NaNs in the array
+            if put_none_if_any_nan:
+                df[c] = [none_if_any_nan(x) for x in df[ac].values]  # make list of numpy arrays, or None if there are any NaNs in the array
             else:
                 df[c] = [             x  for x in df[ac].values]  # make list of numpy arrays
         else:
@@ -130,7 +130,7 @@ def read_file(fileName               : str|pathlib.Path,
     return objs, df[subset_var].max()
 
 def write_array_to_file(objects             : list[Any] | dict[int,list[Any]],
-                        fileName            : str|pathlib.Path,
+                        file_name           : str|pathlib.Path,
                         cols_compressed     : dict[str, int],
                         drop_all_nan_cols   : list[str]         = None,
                         skip_all_nan        : bool              = False):
@@ -151,7 +151,7 @@ def write_array_to_file(objects             : list[Any] | dict[int,list[Any]],
     cols_uncompressed = uncompress_columns(cols_compressed)
     for c,ac in zip(cols_compressed,cols_uncompressed):
         if len(ac)>1:
-            df[ac] = np.vstack([allNanIfNone(v,len(ac)).flatten() for v in df[c].values])
+            df[ac] = np.vstack([all_nan_if_none(v,len(ac)).flatten() for v in df[c].values])
 
     # if wanted, drop specific columns for which all rows are nan
     if drop_all_nan_cols:
@@ -174,4 +174,4 @@ def write_array_to_file(objects             : list[Any] | dict[int,list[Any]],
 
     # convert to polars as that library saves to file waaay faster
     df = pl.from_pandas(df)
-    df.write_csv(fileName, separator='\t', null_value='nan', float_precision=8)
+    df.write_csv(file_name, separator='\t', null_value='nan', float_precision=8)

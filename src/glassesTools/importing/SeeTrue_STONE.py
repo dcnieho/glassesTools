@@ -228,7 +228,7 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
     # instead now, get actual ts for each frame in written video as that is what we
     # have to work with. Note that these do not match gaze data ts, but code nowhere
     # assumes they do
-    frameTimestamps = video_utils.getFrameTimestampsFromVideo(recInfo.get_scene_video_path())
+    frameTimestamps = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
 
     return gazeDf, frameTimestamps
 
