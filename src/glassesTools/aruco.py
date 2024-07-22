@@ -181,7 +181,6 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
     cam_params = ocv.CameraParams.readFromFile(camera_calibration_file)
     for p in detectors:
         detectors[p].set_board(aruco_boards[p])
-        # get camera calibration info
         detectors[p].set_intrinsics(cam_params)
 
     # check if we can do an optimization of detecting the markers only once for multiple planes (if it makes sense because we have more than one plane)
@@ -192,7 +191,7 @@ def run_pose_estimation(in_video: str|pathlib.Path, frame_timestamp_file: str|pa
     # check individual markers (detected using the same detector as for the plane(s))
     has_individual_markers = individual_markers is not None
     if has_individual_markers:
-        assert all_same_dict_and_dect or len(planes)==1, "Detecting and Reporting individual markers are only supported when there is a single plane, or all planes have identical aruco setup"
+        assert all_same_dict_and_dect or len(planes)==1, "Detecting and reporting individual markers is only supported when there is a single plane, or all planes have identical ArUco setup"
         individual_markers_out = {i:[] for i in individual_markers}
         object_points = {}
         for i in individual_markers:
