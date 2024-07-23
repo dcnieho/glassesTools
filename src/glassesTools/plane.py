@@ -54,11 +54,11 @@ class Plane:
         self._ref_image_size                                = ref_image_size
         self._ref_image_cache   : dict[int, np.ndarray]     = {ref_image_size: img}
 
-    def set_origin(self, origin: np.ndarray):
+    def set_origin(self, origin: tuple[float, float]):
         # set origin of plane. Origin location is on current (not original) plane
         # so set_origin([5., 0.]) three times in a row shifts the origin rightward by 15 units
         for i in self.markers:
-            self.markers[i].shift(-origin)
+            self.markers[i].shift(-np.array(origin))
 
         self.bbox[0] -= origin[0]
         self.bbox[2] -= origin[0]
