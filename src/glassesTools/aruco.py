@@ -241,8 +241,9 @@ class PoseEstimator:
         if self.has_gui:
             self.gui.set_show_timeline(True, self.video_ts, episodes, window_id)
 
-    def set_visualize_on_frame(self, do_visualize: bool, show_rejected_markers = False):
+    def set_visualize_on_frame(self, do_visualize: bool, sub_pixel_fac = 8, show_rejected_markers = False):
         self.do_visualize           = do_visualize
+        self.sub_pixel_fac          = sub_pixel_fac
         self.show_rejected_markers  = show_rejected_markers
 
     def get_video_info(self) -> tuple[float, float, float]:
