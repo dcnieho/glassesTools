@@ -95,7 +95,6 @@ class GUI:
         self._current_frame: dict[int, tuple[np.ndarray, float, int]] = {}
         self._frame_size: dict[int, tuple[int,int]] = {}
         self._texID: dict[int,int] = {}
-        self._frame_rate = None
 
         self._duration: float = None
         self._last_frame_idx: int = None
@@ -295,13 +294,6 @@ class GUI:
         with self._new_frame_lock:
             self._new_frame[window_id] = (frame, pts, frame_nr) # just copy ref to frame is enough
 
-    def set_framerate(self, framerate: int|None):
-        if not framerate:
-            # disable manual vsync
-            self._frame_rate = None
-        else:
-            self._frame_rate = int(framerate)
-
     def notify_annotations_changed(self):
         for w in self._windows:
             if self._window_timeline[w] is not None:
@@ -359,15 +351,6 @@ class GUI:
             hello_imgui.get_runner_params().app_shall_exit = True
             # nothing more to do
             return
-
-        # manual vsync with a sleep, so that other thread can run
-        # thats crappy vsync, but ok for our purposes
-        thisT = time.perf_counter()
-        elapsedT = thisT-self._lastT
-        self._lastT = thisT
-
-        if self._frame_rate and elapsedT < 1/self._frame_rate:
-            time.sleep(1/self._frame_rate-elapsedT)
 
         # upload texture if needed
         with self._windows_lock:

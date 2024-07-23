@@ -23,7 +23,6 @@ def show_visualization(
     height          = cap.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)
     cam_params      = ocv.CameraParams.read_from_file(camera_calibration_file)
 
-    gui.set_framerate(cap.get_prop(cv2.CAP_PROP_FPS))
     # flatten if needed
     annotations_flat: dict[annotation.Event, list[int]] = {}
     for e in annotations:
