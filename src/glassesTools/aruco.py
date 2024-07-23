@@ -224,7 +224,7 @@ class PoseEstimator:
 
     def register_extra_processing_fun(self,
                                       name: str,
-                                      func: Callable[[np.ndarray,Any], tuple[float,float]],
+                                      func: Callable[[np.ndarray,Any], Any],
                                       processing_intervals: list[int]|list[list[int]],
                                       func_parameters: dict[str]):
         assert name not in self.extra_proc_functions, f'Cannot register the extra processing function "{name}", it is already registered'
