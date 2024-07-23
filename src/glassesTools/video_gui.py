@@ -153,6 +153,22 @@ class GUI:
             self._next_window_id += 1
             return w_id
 
+    def delete_window(self, window_id: int):
+        assert window_id!=0, 'It is not possible to delete the main window'
+        with self._windows_lock:
+            self._windows.pop(window_id)
+            self._not_shown_yet.pop(window_id)
+            self._texID.pop(window_id)
+            self._new_frame.pop(window_id)
+            self._current_frame.pop(window_id)
+            self._frame_size.pop(window_id)
+            self._window_visible.pop(window_id)
+            self._window_determine_size.pop(window_id)
+            self._window_show_controls.pop(window_id)
+            self._window_show_play_percentage.pop(window_id)
+            self._window_sfac.pop(window_id)
+            self._window_timeline.pop(window_id)
+
     def set_allow_pause(self, allow_pause: bool):
         self._allow_pause = allow_pause
         self._add_remove_button(self._allow_pause, Action.Pause)
