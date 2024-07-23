@@ -180,9 +180,9 @@ class PoseEstimator:
         self.individual_markers                 : dict[int, dict[str]]  = {}
         self._individual_marker_object_points   : dict[int, np.ndarray] = {}
 
-        self.extra_proc_functions   : dict[str, Callable[[np.ndarray,Any], tuple[float,float]]] = {}
-        self.extra_proc_intervals   : dict[str, list[int]|list[list[int]]]                      = {}
-        self.extra_proc_parameters  : dict[str]                                                 = {}
+        self.extra_proc_functions   : dict[str, Callable[[np.ndarray,Any], Any]]    = {}
+        self.extra_proc_intervals   : dict[str, list[int]|list[list[int]]]          = {}
+        self.extra_proc_parameters  : dict[str]                                     = {}
 
         self.gui                    : video_gui.GUI = None
         self.do_visualize                           = False
@@ -329,10 +329,10 @@ class PoseEstimator:
 
         return Status.Ok, pose_out, individual_marker_out, extra_processing_out, (frame, frame_idx, frame_ts)
 
-    def process_video(self) -> tuple[Status, dict[str, list[plane.Pose]], dict[str, list[marker.Pose]], dict[str, list[list[int, float, float]]]]:
-        poses_out               : dict[str, list[plane.Pose]]               = {p:[] for p in self.planes}
-        individual_markers_out  : dict[str, list[marker.Pose]]              = {i:[] for i in self.individual_markers}
-        extra_processing_out    : dict[str, list[list[int, float, float]]]  = {e:[] for e in self.extra_proc_functions}
+    def process_video(self) -> tuple[dict[str, list[plane.Pose]], dict[str, list[marker.Pose]], dict[str, list[list[int, Any]]]]:
+        poses_out               : dict[str, list[plane.Pose]]       = {p:[] for p in self.planes}
+        individual_markers_out  : dict[str, list[marker.Pose]]      = {i:[] for i in self.individual_markers}
+        extra_processing_out    : dict[str, list[list[int, Any]]]   = {e:[] for e in self.extra_proc_functions}
         while True:
             status, pose, individual_marker, extra_proc, _ = self.process_one_frame()
             if status==Status.Finished:
