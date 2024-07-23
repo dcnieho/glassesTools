@@ -5,7 +5,6 @@ try:
 except ImportError:
     raise ImportError('imgui_bundle (or one of its dependencies) is not installed, GUI functionality is not available')
 
-import time
 import threading
 import numpy as np
 import functools
