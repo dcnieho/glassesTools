@@ -231,6 +231,13 @@ class GUI:
         if annotations is not None and self._any_has_timeline():
             self._annotations_frame = annotations
         self._create_annotation_buttons()
+    def get_annotation_colors(self, window_id:int = None):
+        if window_id is None:
+            window_id = self._get_main_window_id()
+        if self._window_timeline[window_id] is None:
+            return None
+        colors = self._window_timeline[window_id].get_annotation_colors()
+        return {e:(*colors[e],) for e in colors}
 
     def set_allow_annotate(self, allow_annotate: bool, annotate_shortcut_key_map: dict[annotation.Event, imgui.Key]=None, annotate_tooltips: dict[annotation.Event, str] = None):
         self._allow_annotate = allow_annotate
