@@ -70,6 +70,11 @@ class CV2VideoReader:
     def set_prop(self, cv2_prop, val):
         return self.cap.set(cv2_prop, val)
 
+    def seek_frame(self, frame_ts):
+        self.cap.set_prop(cv2.CAP_PROP_POS_MSEC, frame_ts)
+        self.frame_idx = self._find_closest_idx(frame_ts, self.ts)
+        self._last_good_ts = (-1, -1., -1.)
+
     def read_frame(self, report_gap=False) -> tuple[bool, np.ndarray, int, float]:
         ts0 = self.cap.get(cv2.CAP_PROP_POS_MSEC)
         ret, frame = self.cap.read()
@@ -89,15 +94,12 @@ class CV2VideoReader:
         ts_from_list = self.ts[self.frame_idx]
         if self.frame_idx==1 or ts1>0.:
             # check for gap, and if there is a gap, fix up frame_idx if needed
-            if self._last_good_ts[0]!=-1 and ts_from_list-self._last_good_ts[2] < ts1-self._last_good_ts[1]-1:  # little bit of leeway for precision or mismatched timestamps
+            if self._last_good_ts[0]!=-1 and ts_from_list-self._last_good_ts[2] < ts1-self._last_good_ts[1]-1:  # little bit of leeway (1ms) for precision or mismatched timestamps
                 # we skipped some frames altogether, need to correct current frame_idx
                 t_jump = ts1-self._last_good_ts[1]
                 tss = self.ts-self._last_good_ts[2]
                 # find best matching frame idx so we catch up with the jump
-                idx = bisect.bisect(tss, t_jump)
-                if abs(tss[idx-1]-t_jump)<abs(tss[idx]-t_jump):
-                    idx -= 1
-                self.frame_idx = idx
+                self.frame_idx = self._find_closest_idx(t_jump, tss)
                 ts_from_list = self.ts[self.frame_idx]
                 if report_gap and self.frame_idx-self._last_good_ts[0]>1:
                     print(f'Frame discontinuity detected (jumped from {self._last_good_ts[0]} to {self.frame_idx}), there are probably corrupt frames in your video')
@@ -108,6 +110,12 @@ class CV2VideoReader:
             return False, None,  self.frame_idx, ts_from_list
         else:
             return False, frame, self.frame_idx, ts_from_list
+
+    def _find_closest_idx(self, time: float, times: np.ndarray) -> int:
+        idx = bisect.bisect(tss, time)
+        if abs(times[idx-1]-time)<abs(times[idx]-time):
+            idx -= 1
+        return idx
 
     def report_frame(self, interval=100):
         if self.frame_idx%interval==0:
