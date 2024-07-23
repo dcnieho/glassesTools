@@ -114,8 +114,8 @@ class Timeline:
         if not self._annotations_frame:
             return {}
 
-        color_steps = 1/(len(self._annotations_frame)+1)
-        return {k:imgui.ImColor.hsv(i*color_steps, 0.45, 0.65) for i,k in enumerate(self._annotations_frame)}
+        colors = utils.get_colors(len(self._annotations_frame), 0.45, 0.65)
+        return {k:imgui.ImColor(*c) for k,c in zip(self._annotations_frame, colors)}
 
     def get_annotation_colors(self) -> dict[annotation.Event, imgui.ImColor]:
         return self._annotation_colors

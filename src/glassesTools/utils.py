@@ -5,6 +5,7 @@ import dataclasses
 import typing
 import numpy as np
 import os
+import colorsys
 
 
 def hex_to_rgba_0_1(hex):
@@ -26,6 +27,10 @@ def rgba_0_1_to_hex(rgba):
     else:
         a = "FF"
     return f"#{r}{g}{b}{a}"
+
+def get_colors(n_colors: int, saturation: float, value: float) -> list[tuple[float, float, float]]:
+    color_steps = 1/(n_colors+1)
+    return [colorsys.hsv_to_rgb(i*color_steps, saturation, value) for i in range(n_colors)]
 
 def get_hour_minutes_seconds_ms(dur_seconds: float) -> tuple[float, float, float, float]:
     hours, remainder = divmod(dur_seconds, 3600)
