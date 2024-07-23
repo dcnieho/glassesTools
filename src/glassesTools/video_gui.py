@@ -460,6 +460,7 @@ class GUI:
             if self._window_determine_size[w]:
                 imgui.set_next_window_pos(img_fit.position)
                 imgui.set_next_window_size([x+y for x,y in zip(img_fit.size,(0, tl_height))])
+            imgui.push_style_var(imgui.StyleVar_.window_padding, (0., 0.))
             opened, self._window_visible[w] = imgui.begin(self._windows[w], self._window_visible[w], self._window_flags)
             if not opened:
                 imgui.end()
@@ -634,6 +635,7 @@ class GUI:
             self._requests.extend(self._window_timeline[w].get_requests())
 
         if need_begin_end:
+            imgui.pop_style_var()
             imgui.end()
 
 def get_current_monitor(wx, wy, ww=None, wh=None):
