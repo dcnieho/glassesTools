@@ -255,9 +255,11 @@ class PoseEstimator:
                int(self.video.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)), \
                    self.video.get_prop(cv2.CAP_PROP_FPS)
 
-    def process_one_frame(self) -> tuple[Status, dict[str, plane.Pose], dict[str, marker.Pose], dict[str, list[int, Any]], tuple[np.ndarray, int, float]]:
+    def process_one_frame(self, frame_idx:int = None) -> tuple[Status, dict[str, plane.Pose], dict[str, marker.Pose], dict[str, list[int, Any]], tuple[np.ndarray, int, float]]:
         if self._first_frame and self.has_gui:
             self.gui.set_playing(True)
+        if frame_idx is not None:
+            self.video.seek_frame(frame_idx)
         should_exit, frame, frame_idx, frame_ts = self.video.read_frame(report_gap=True)
         if should_exit or \
             (
