@@ -82,9 +82,10 @@ class Button:
         self.full_tooltip = f'{self.tooltip} ({accelerator})'
 
 
-# GUI provider for viewer and coder windows in glassesValidator.process
+# GUI provider for viewer and coder windows
 class GUI:
     def __init__(self, use_thread=True):
+        self._running = False
         self._should_exit = False
         self._use_thread = use_thread # NB: on MacOSX the GUI needs to be on the main thread, see https://github.com/pthom/hello_imgui/issues/33
         self._thread: threading.Thread = None
@@ -267,6 +268,18 @@ class GUI:
         else:
             self._thread_start_fun()
 
+    def set_window_title(self, new_title: str, window_id:int = None):
+        if window_id is None:
+            window_id = self._get_main_window_id()
+        if self._running and window_id==0:  # main window
+            # this is just for show, doesn't trigger an update. But lets keep them in sync
+            hello_imgui.get_runner_params().app_window_params.window_title = new_title
+            # actually update window title
+            win = glfw_utils.glfw_window_hello_imgui()
+            glfw.set_window_title(win, new_title)
+        else:
+            self._windows[window_id] = new_title
+
     def get_requests(self):
         reqs = self._requests
         self._requests = []
@@ -299,6 +312,8 @@ class GUI:
                 self._window_timeline[w].notify_annotations_changed()
 
     def _get_main_window_id(self):
+        # NB: actually the main window id is always 0, but i want to have a defensive check here
+        # so that user doesn't make a mistake not specifying the window they apply an operation to
         with self._windows_lock:
             if len(self._windows)==1:
                 return next(iter(self._windows))
@@ -306,6 +321,7 @@ class GUI:
                 raise RuntimeError("You have more than one window, you must indicate for which window you are making this call for")
 
     def _thread_start_fun(self):
+        self._running = True
         self._lastT=0.
         self._should_exit = False
 
@@ -335,6 +351,7 @@ class GUI:
         params.imgui_window_params.enable_viewports = True
 
         immapp.run(params)
+        self._running = False
 
     def _gui_func(self):
         # check if we should exit
