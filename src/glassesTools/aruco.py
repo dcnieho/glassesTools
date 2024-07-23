@@ -190,7 +190,8 @@ class PoseEstimator:
         self.sub_pixel_fac                          = 8
         self.show_rejected_markers                  = False
 
-        self._first_frame = True
+        self._first_frame       = True
+        self._do_report_frames  = True
 
     def __del__(self):
         if self.has_gui:
@@ -246,6 +247,9 @@ class PoseEstimator:
         self.sub_pixel_fac          = sub_pixel_fac
         self.show_rejected_markers  = show_rejected_markers
 
+    def set_do_report_frames(self, do_report_frames: bool):
+        self._do_report_frames = do_report_frames
+
     def get_video_info(self) -> tuple[float, float, float]:
         return self.video.get_prop(cv2.CAP_PROP_FRAME_WIDTH), \
                self.video.get_prop(cv2.CAP_PROP_FRAME_HEIGHT), \
@@ -261,7 +265,8 @@ class PoseEstimator:
                 (not self.extra_proc_intervals or intervals.beyond_last_interval(frame_idx, self.extra_proc_intervals))
             ):
             return Status.Finished, None, None, None, (None, None, None)
-        self.video.report_frame()
+        if self._do_report_frames:
+            self.video.report_frame()
 
         if self.has_gui:
             if self._first_frame and frame is not None:
