@@ -250,10 +250,10 @@ class PoseEstimator:
     def set_do_report_frames(self, do_report_frames: bool):
         self._do_report_frames = do_report_frames
 
-    def get_video_info(self) -> tuple[float, float, float]:
-        return self.video.get_prop(cv2.CAP_PROP_FRAME_WIDTH), \
-               self.video.get_prop(cv2.CAP_PROP_FRAME_HEIGHT), \
-               self.video.get_prop(cv2.CAP_PROP_FPS)
+    def get_video_info(self) -> tuple[int, int, float]:
+        return int(self.video.get_prop(cv2.CAP_PROP_FRAME_WIDTH)), \
+               int(self.video.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)), \
+                   self.video.get_prop(cv2.CAP_PROP_FPS)
 
     def process_one_frame(self) -> tuple[Status, dict[str, plane.Pose], dict[str, marker.Pose], dict[str, list[int, Any]], tuple[np.ndarray, int, float]]:
         if self._first_frame and self.has_gui:
