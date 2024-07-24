@@ -126,8 +126,9 @@ class GUI:
         self._window_determine_size: dict[int,bool] = {}
         self._window_show_controls: dict[int,bool] = {}
         self._window_show_play_percentage: dict[int,bool] = {}
-        self._window_sfac: dict[int,float]    = {}
+        self._window_sfac: dict[int,float] = {}
         self._window_timeline: dict[int,timeline_gui.Timeline] = {}
+        self._window_timecode_pos: dict[int,str] = {}
 
         self._buttons: dict[Action|tuple[Action,annotation.Event], Button] = {}
         self._add_remove_button(True, Action.Quit)
@@ -150,6 +151,7 @@ class GUI:
             self._window_show_play_percentage[w_id] = False
             self._window_sfac[w_id]             = 1.
             self._window_timeline[w_id]         = None
+            self._window_timecode_pos[w_id]     = 'l'
 
             self._next_window_id += 1
             return w_id
@@ -169,6 +171,7 @@ class GUI:
             self._window_show_play_percentage.pop(window_id)
             self._window_sfac.pop(window_id)
             self._window_timeline.pop(window_id)
+            self._window_timecode_pos.pop(window_id)
 
     def set_allow_pause(self, allow_pause: bool):
         self._allow_pause = allow_pause
@@ -206,6 +209,11 @@ class GUI:
         if window_id is None:
             window_id = self._get_main_window_id()
         self._window_show_controls[window_id] = show_controls
+    def set_timecode_position(self, position, window_id:int = None):
+        if window_id is None:
+            window_id = self._get_main_window_id()
+        assert position in ['l','r'], f"For position, only 'l' and 'r' are understood, not '{position}'"
+        self._window_timecode_pos[window_id] = position
     def set_show_play_percentage(self, show_play_percentage: bool, window_id:int = None):
         if window_id is None:
             window_id = self._get_main_window_id()
@@ -531,14 +539,14 @@ class GUI:
         # draw them, or info item for tooltip
         if self._window_show_controls[w]:
             imgui.set_cursor_pos(((img_space-total_size.x)/2,img_sz[1]-total_size.y))
-            child_size = total_size
+            controls_child_size = total_size
         else:
             txt_sz = imgui.calc_text_size('(?)')
             imgui.set_cursor_pos((img_margin+img_sz[0]-txt_sz.x-2*imgui.get_style().frame_padding.x, img_sz[1]-txt_sz.y-2*imgui.get_style().frame_padding.y))
-            child_size = txt_sz+imgui.ImVec2([x*2 for x in imgui.get_style().frame_padding])
+            controls_child_size = txt_sz+imgui.ImVec2([x*2 for x in imgui.get_style().frame_padding])
         imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
         imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
-        imgui.begin_child("##controls_overlay", size=child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
+        imgui.begin_child("##controls_overlay", size=controls_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
         if not self._window_show_controls[w]:
             imgui.set_cursor_pos(imgui.get_style().frame_padding)
             imgui.text('(?)')
@@ -626,10 +634,19 @@ class GUI:
         if self._window_show_play_percentage[w] and self._last_frame_idx is not None:
             text += f' ({fr_idx/self._last_frame_idx*100:.1f}%)'
         txt_sz = imgui.calc_text_size(text)
-        imgui.set_cursor_pos((img_margin,img_sz[1]-txt_sz.y-2*imgui.get_style().frame_padding.y))
+        overlay_size = txt_sz+imgui.ImVec2([x*2 for x in imgui.get_style().frame_padding])
+        match self._window_timecode_pos[w]:
+            case 'l':
+                x_pos = img_margin
+            case 'r':
+                x_pos = img_margin+img_sz[0]-overlay_size.x
+                if not self._window_show_controls[w]:
+                    x_pos -= controls_child_size.x
+
+        imgui.set_cursor_pos((x_pos,img_sz[1]-overlay_size.y))
         imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
         imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
-        imgui.begin_child("##status_overlay", size=txt_sz+imgui.ImVec2([x*2 for x in imgui.get_style().frame_padding]))
+        imgui.begin_child("##status_overlay", size=overlay_size)
         imgui.set_cursor_pos(imgui.get_style().frame_padding)
         imgui.text(text)
         imgui.end_child()
