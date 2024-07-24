@@ -208,6 +208,8 @@ class PoseEstimator:
         self._detectors[plane].set_board(self._aruco_boards[plane])
         self._detectors[plane].set_intrinsics(self.cam_params)
 
+        self._cache: tuple[Status, dict[str, plane.Pose], dict[str, marker.Pose], dict[str, list[int, Any]], tuple[np.ndarray, int, float]] = None  # self._cache[4][1] is frame number
+
         # check if we can do an optimization of detecting the markers only once for multiple planes (if it makes sense because we have more than one plane)
         aruco_dicts = [self.plane_setups[p]['aruco_dict'] for p in self.planes if 'aruco_dict' in self.plane_setups[p]]
         self._single_detect_pass = len(self.planes)>1 and len(aruco_dicts)==len(self.planes) and len(set(aruco_dicts))==1 and all([self.plane_setups[self.planes[0]]['aruco_params']==self.plane_setups[p]['aruco_params'] for p in self.planes])
@@ -255,18 +257,22 @@ class PoseEstimator:
                int(self.video.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)), \
                    self.video.get_prop(cv2.CAP_PROP_FPS)
 
-    def process_one_frame(self, frame_idx:int = None) -> tuple[Status, dict[str, plane.Pose], dict[str, marker.Pose], dict[str, list[int, Any]], tuple[np.ndarray, int, float]]:
+    def process_one_frame(self, wanted_frame_idx:int = None) -> tuple[Status, dict[str, plane.Pose], dict[str, marker.Pose], dict[str, list[int, Any]], tuple[np.ndarray, int, float]]:
         if self._first_frame and self.has_gui:
             self.gui.set_playing(True)
-        if frame_idx is not None:
-            self.video.seek_frame(frame_idx)
-        should_exit, frame, frame_idx, frame_ts = self.video.read_frame(report_gap=True)
+
+        if wanted_frame_idx is not None and self._cache is not None and self._cache[4][1]==wanted_frame_idx:
+            return self._cache
+
+        should_exit, frame, frame_idx, frame_ts = self.video.read_frame(report_gap=True, wanted_frame_idx=wanted_frame_idx)
+
         if should_exit or \
             (
                 intervals.beyond_last_interval(frame_idx, self.plane_proc_intervals) and \
                 (not self.extra_proc_intervals or intervals.beyond_last_interval(frame_idx, self.extra_proc_intervals))
             ):
-            return Status.Finished, None, None, None, (None, None, None)
+            self._cache = Status.Finished, None, None, None, (None, None, None)
+            return self._cache
         if self._do_report_frames:
             self.video.report_frame()
 
@@ -279,7 +285,8 @@ class PoseEstimator:
             for r,_ in requests:
                 if r=='exit':   # only request we need to handle
                     should_exit = True
-                    return Status.Finished, None, None, None, (None, None, None)
+                    self._cache = Status.Finished, None, None, None, (None, None, None)
+                    return self._cache
 
         # check we're in a current interval, else skip processing
         # NB: have to spool through like this, setting specific frame to read
@@ -292,7 +299,8 @@ class PoseEstimator:
             if self.has_gui:
                 # do update timeline of the viewers
                 self.gui.update_image(None, frame_ts/1000., frame_idx)
-            return Status.Skip, None, None, None, (frame, frame_idx, frame_ts)
+            self._cache = Status.Skip, None, None, None, (frame, frame_idx, frame_ts)
+            return self._cache
 
         pose_out                : dict[str, plane.Pose]     = {}
         individual_marker_out   : dict[str, marker.Pose]    = {}
@@ -334,7 +342,8 @@ class PoseEstimator:
         if self.has_gui:
             self.gui.update_image(frame, frame_ts/1000., frame_idx)
 
-        return Status.Ok, pose_out, individual_marker_out, extra_processing_out, (frame, frame_idx, frame_ts)
+        self._cache = Status.Ok, pose_out, individual_marker_out, extra_processing_out, (frame, frame_idx, frame_ts)
+        return self._cache
 
     def process_video(self) -> tuple[dict[str, list[plane.Pose]], dict[str, list[marker.Pose]], dict[str, list[list[int, Any]]]]:
         poses_out               : dict[str, list[plane.Pose]]       = {p:[] for p in self.planes}
