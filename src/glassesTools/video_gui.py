@@ -104,8 +104,8 @@ class GUI:
         self._action_button_lbls= action_lbl_map.copy()
         self._shortcut_key_map  = shortcut_key_map.copy()
         self._annotate_shortcut_key_map: dict[annotation.Event, imgui.Key] = {}
-        self._annotate_tooltips        : dict[annotation.Event, str] = {}
-        self._annotations_frame: dict[annotation.Event, list[int]] = None
+        self._annotate_tooltips        : dict[annotation.Event, str]       = {}
+        self._annotations_frame        : dict[annotation.Event, list[int]] = None
 
         self._allow_pause = False
         self._allow_seek = False
