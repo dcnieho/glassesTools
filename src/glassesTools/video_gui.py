@@ -10,6 +10,7 @@ import numpy as np
 import functools
 from enum import Enum, auto
 import dataclasses
+from typing import Any
 
 from . import annotation, intervals, platform, timeline_gui, timestamps, utils
 
