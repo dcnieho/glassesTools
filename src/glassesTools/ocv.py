@@ -112,7 +112,7 @@ class CV2VideoReader:
             return False, frame, self.frame_idx, ts_from_list
 
     def _find_closest_idx(self, time: float, times: np.ndarray) -> int:
-        idx = bisect.bisect(tss, time)
+        idx = bisect.bisect(times, time)
         if abs(times[idx-1]-time)<abs(times[idx]-time):
             idx -= 1
         return idx
