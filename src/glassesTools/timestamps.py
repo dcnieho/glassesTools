@@ -3,6 +3,7 @@ import pandas as pd
 import datetime
 import bisect
 import pathlib
+import enum
 
 from . import utils
 
@@ -24,6 +25,11 @@ utils.register_type(utils.CustomTypeEntry(Timestamp,'__Timestamp__',lambda x: x.
 
 
 # for reading video timestamp files
+class Type(enum.Enum):
+    Normal      = enum.auto()
+    Stretched   = enum.auto()
+
+
 class VideoTimestamps:
     def __init__(self, fileName: str|pathlib.Path):
         self.timestamp_dict : dict[int,float] = {}
@@ -39,27 +45,62 @@ class VideoTimestamps:
         self.indices    = df['frame_idx'].to_list()
         self.timestamps = df['timestamp'].to_list()
 
-    def get_timestamp(self, idx: int) -> float:
+        self.timestamp_stretched_dict   : dict[int,float] = None
+        self.timestamps_stretched       : list[float] = None
+        self._ifi_stretched             : float = None
+        self.has_stretched = 'timestamp_stretched' in df.columns
+        if self.has_stretched:
+            self.timestamp_stretched_dict = df.to_dict()['timestamp_stretched']
+            self.timestamps_stretched = df['timestamp_stretched'].to_list()
+
+
+    def get_timestamp(self, idx: int, which: Type=Type.Normal) -> float:
         idx = int(idx)
-        if idx in self.timestamp_dict:
-            return self.timestamp_dict[idx]
+        match which:
+            case Type.Normal:
+                d = self.timestamp_dict
+            case Type.Stretched:
+                assert self.has_stretched, 'stretched timestamps are not available for this video'
+                d = self.timestamp_stretched_dict
+        if idx in d:
+            return d[idx]
         else:
             return -1.
 
-    def find_frame(self, ts: float) -> int:
-        idx = bisect.bisect(self.timestamps, ts)
+    def find_frame(self, ts: float, which: Type=Type.Normal) -> int:
+        match which:
+            case Type.Normal:
+                timestamps = self.timestamps
+            case Type.Stretched:
+                assert self.has_stretched, 'stretched timestamps are not available for this video'
+                timestamps = self.timestamps_stretched
+
+        idx = bisect.bisect(timestamps, ts)
         # return nearest
-        if idx>=len(self.timestamps):
+        if idx>=len(timestamps):
             return self.indices[-1]
-        elif idx>0 and abs(self.timestamps[idx-1]-ts)<abs(self.timestamps[idx]-ts):
+        elif idx>0 and abs(timestamps[idx-1]-ts)<abs(timestamps[idx]-ts):
             return self.indices[idx-1]
         else:
             return self.indices[idx]
 
-    def get_last(self) -> tuple[int,float]:
-        return self.indices[-1], self.timestamps[-1]
+    def get_last(self, which: Type=Type.Normal) -> tuple[int,float]:
+        match which:
+            case Type.Normal:
+                timestamps = self.timestamps
+            case Type.Stretched:
+                assert self.has_stretched, 'stretched timestamps are not available for this video'
+                timestamps = self.timestamps_stretched
+        return self.indices[-1], timestamps[-1]
 
-    def get_IFI(self) -> float:
-        if self._ifi is None:
-            self._ifi = np.mean(np.diff(self.timestamps))
-        return self._ifi
+    def get_IFI(self, which: Type=Type.Normal) -> float:
+        match which:
+            case Type.Normal:
+                if self._ifi is None:
+                    self._ifi = np.mean(np.diff(self.timestamps))
+                return self._ifi
+            case Type.Stretched:
+                assert self.has_stretched, 'stretched timestamps are not available for this video'
+                if self._ifi_stretched is None:
+                    self._ifi_stretched = np.mean(np.diff(self.timestamps_stretched))
+                return self._ifi_stretched
