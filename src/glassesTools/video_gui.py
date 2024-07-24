@@ -111,6 +111,8 @@ class GUI:
         self._allow_seek = False
         self._allow_annotate = False
         self._allow_timeline_zoom = False
+        self._timeline_show_annotation_labels = True
+        self._timeline_show_info_on_hover = True
         self._is_playing = False
         self._requests: list[tuple[str,Any]] = []
 
@@ -232,6 +234,8 @@ class GUI:
             self._window_timeline[window_id].set_allow_annotate(self._allow_annotate)
             self._window_timeline[window_id].set_allow_seek(self._allow_seek)
             self._window_timeline[window_id].set_allow_timeline_zoom(self._allow_timeline_zoom)
+            self._window_timeline[window_id].set_show_annotation_labels(self._timeline_show_annotation_labels)
+            self._window_timeline[window_id].set_show_info_on_hover(self._timeline_show_info_on_hover)
             self._window_timeline[window_id].set_annotation_keys(self._annotate_shortcut_key_map, self._annotate_tooltips)
             if video_ts is not None:
                 last_frame_idx, duration = video_ts.get_last()
@@ -282,10 +286,18 @@ class GUI:
             self._add_remove_button(self._allow_annotate, Action.Annotate_Make, e)
 
     def set_show_annotation_label(self, show_label: bool, window_id:int = None):
+        self._timeline_show_annotation_labels = show_label
         if window_id is None:
             window_id = self._get_main_window_id()
         if self._window_timeline[window_id] is not None:
             self._window_timeline[window_id].set_show_annotation_labels(show_label)
+
+    def set_show_annotation_info_on_hover(self, show_info: bool, window_id:int = None):
+        self._timeline_show_info_on_hover = show_info
+        if window_id is None:
+            window_id = self._get_main_window_id()
+        if self._window_timeline[window_id] is not None:
+            self._window_timeline[window_id].set_show_info_on_hover(show_info)
 
     def set_playing(self, is_playing: bool):
         self._is_playing = is_playing
