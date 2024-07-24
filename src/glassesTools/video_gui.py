@@ -540,6 +540,7 @@ class GUI:
         imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
         imgui.begin_child("##controls_overlay", size=child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
         if not self._window_show_controls[w]:
+            imgui.set_cursor_pos(imgui.get_style().frame_padding)
             imgui.text('(?)')
             if imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
                 text = ''
