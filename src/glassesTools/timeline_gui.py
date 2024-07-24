@@ -33,7 +33,7 @@ def color_brighten(color: imgui.ImColor, amount: float):
 
 
 class Timeline:
-    def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[annotation.Event, list[int]|list[list[int]]] = None):
+    def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[annotation.Event, list[int]] = None):
         self._video_ts = video_ts
         self._duration = self._video_ts.get_last()[1]/1000. # ms -> s
 
