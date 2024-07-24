@@ -3,6 +3,7 @@ import pandas as pd
 import cv2
 import pathlib
 import bisect
+import warnings
 
 
 class CameraParams:
@@ -60,6 +61,7 @@ class CV2VideoReader:
         self.frame_idx = -1
         self._last_good_ts = (-1, -1., -1.)  # frame_idx, ts from opencv, ts from file
         self._is_off_by_one = False
+        self._cache: tuple[bool, np.ndarray, int, float] = None # self._cache[2] is frame index
 
     def __del__(self):
         self.cap.release()
@@ -70,46 +72,60 @@ class CV2VideoReader:
     def set_prop(self, cv2_prop, val):
         return self.cap.set(cv2_prop, val)
 
-    def seek_frame(self, frame_ts):
-        self.cap.set_prop(cv2.CAP_PROP_POS_MSEC, frame_ts)
-        self.frame_idx = self._find_closest_idx(frame_ts, self.ts)
-        self._last_good_ts = (-1, -1., -1.)
-
-    def read_frame(self, report_gap=False) -> tuple[bool, np.ndarray, int, float]:
-        ts0 = self.cap.get(cv2.CAP_PROP_POS_MSEC)
-        ret, frame = self.cap.read()
-        ts1 = self.cap.get(cv2.CAP_PROP_POS_MSEC)
-        self.frame_idx += 1
-
-        # check if this is a stream for which opencv returns timestamps that are one frame off
-        if self.frame_idx==0 and ts0==ts1:
-            self._is_off_by_one = True
-
-        # check if we're done. Can't trust ret==False to indicate we're at end of video, as
-        # it may also return False for some corrupted frames that we can just read past
-        if not ret and (self.frame_idx==0 or self.frame_idx/self.nframes>.99):
-            return True, None, None, None
-
-        # keep going
-        ts_from_list = self.ts[self.frame_idx]
-        if self.frame_idx==1 or ts1>0.:
-            # check for gap, and if there is a gap, fix up frame_idx if needed
-            if self._last_good_ts[0]!=-1 and ts_from_list-self._last_good_ts[2] < ts1-self._last_good_ts[1]-1:  # little bit of leeway (1ms) for precision or mismatched timestamps
-                # we skipped some frames altogether, need to correct current frame_idx
-                t_jump = ts1-self._last_good_ts[1]
-                tss = self.ts-self._last_good_ts[2]
-                # find best matching frame idx so we catch up with the jump
-                self.frame_idx = self._find_closest_idx(t_jump, tss)
-                ts_from_list = self.ts[self.frame_idx]
-                if report_gap and self.frame_idx-self._last_good_ts[0]>1:
-                    print(f'Frame discontinuity detected (jumped from {self._last_good_ts[0]} to {self.frame_idx}), there are probably corrupt frames in your video')
-            self._last_good_ts = (self.frame_idx, ts1, ts_from_list)
-
-        # we might not have a valid frame, but we're not done yet
-        if not ret or frame is None:
-            return False, None,  self.frame_idx, ts_from_list
+    # NB: we seek by spooling, because I found seeking through setting cv2.CAP_PROP_POS_MSEC unreliable
+    def read_frame(self, report_gap=False, wanted_frame_idx:int=None) -> tuple[bool, np.ndarray, int, float]:
+        if wanted_frame_idx!=None:
+            assert wanted_frame_idx>=0 and wanted_frame_idx<self.nframes, f'wanted_frame_idx ({wanted_frame_idx}) out of bounds ([0-{self.nframes-1}])'
         else:
-            return False, frame, self.frame_idx, ts_from_list
+            wanted_frame_idx = self.frame_idx+1
+
+        if self.frame_idx>wanted_frame_idx:
+            warnings.warn(f'Requested frame ({wanted_frame_idx}) was earlier than current position of reader (frame {self.frame_idx}). Impossible to deliver because this video reader strictly advances forward. Returning last read frame', RuntimeWarning)
+            # this condition can only occur if we've already read something and thus have a cache, so this assert should never trigger
+            assert self._cache is not None, f'No cache, unexpected failure mode, contact developer'
+            return self._cache
+        elif self._cache is not None and self._cache[2]==wanted_frame_idx:
+            return self._cache
+
+        while True:
+            ts0 = self.cap.get(cv2.CAP_PROP_POS_MSEC)
+            ret, frame = self.cap.read()
+            ts1 = self.cap.get(cv2.CAP_PROP_POS_MSEC)
+            self.frame_idx += 1
+
+            # check if this is a stream for which opencv returns timestamps that are one frame off
+            if self.frame_idx==0 and ts0==ts1:
+                self._is_off_by_one = True
+
+            # check if we're done. Can't trust ret==False to indicate we're at end of video, as
+            # it may also return False for some corrupted frames that we can just read past
+            if not ret and (self.frame_idx==0 or self.frame_idx/self.nframes>.99):
+                self._cache = True, None, None, None
+                return self._cache
+
+            # keep going
+            ts_from_list = self.ts[self.frame_idx]
+            if self.frame_idx==1 or ts1>0.:
+                # check for gap, and if there is a gap, fix up frame_idx if needed
+                if self._last_good_ts[0]!=-1 and ts_from_list-self._last_good_ts[2] < ts1-self._last_good_ts[1]-1:  # little bit of leeway (1ms) for precision or mismatched timestamps
+                    # we skipped some frames altogether, need to correct current frame_idx
+                    t_jump = ts1-self._last_good_ts[1]
+                    tss = self.ts-self._last_good_ts[2]
+                    # find best matching frame idx so we catch up with the jump
+                    self.frame_idx = self._find_closest_idx(t_jump, tss)
+                    ts_from_list = self.ts[self.frame_idx]
+                    if report_gap and self.frame_idx-self._last_good_ts[0]>1:
+                        print(f'Frame discontinuity detected (jumped from {self._last_good_ts[0]} to {self.frame_idx}), there are probably corrupt frames in your video')
+                self._last_good_ts = (self.frame_idx, ts1, ts_from_list)
+
+            # keep spooling until we arrive at the wanted frame
+            if self.frame_idx==wanted_frame_idx:
+                if not ret or frame is None:
+                    # we might not have a valid frame, but we're not done yet
+                    self._cache = False, None,  self.frame_idx, ts_from_list
+                else:
+                    self._cache = False, frame, self.frame_idx, ts_from_list
+                return self._cache
 
     def _find_closest_idx(self, time: float, times: np.ndarray) -> int:
         idx = bisect.bisect(times, time)
