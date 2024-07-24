@@ -56,7 +56,7 @@ class CV2VideoReader:
         self.cap = cv2.VideoCapture(self.file)
         if not self.cap.isOpened():
             raise RuntimeError('the file "{}" could not be opened'.format(str(self.file)))
-        self.nframes= float(self.cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        self.nframes = len(self.ts)
         self.frame_idx = -1
         self._last_good_ts = (-1, -1., -1.)  # frame_idx, ts from opencv, ts from file
         self._is_off_by_one = False
