@@ -119,7 +119,8 @@ class GUI:
         self._window_flags = int(
                                     imgui.WindowFlags_.no_title_bar |
                                     imgui.WindowFlags_.no_collapse |
-                                    imgui.WindowFlags_.no_scrollbar
+                                    imgui.WindowFlags_.no_scrollbar |
+                                    imgui.WindowFlags_.no_resize        # no resize gripper in window's bottom-right
                                 )
         self._window_visible: dict[int,bool] = {}
         self._window_determine_size: dict[int,bool] = {}
