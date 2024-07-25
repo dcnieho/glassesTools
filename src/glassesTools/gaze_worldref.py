@@ -143,7 +143,7 @@ def from_head(poses: plane.Pose|dict[int, plane.Pose], gazes: gaze_headref.Gaze|
 
 def _from_head_impl(pose: plane.Pose, gaze: gaze_headref.Gaze, camera_params: ocv.CameraParams) -> Gaze:
     gaze_world = Gaze(gaze.timestamp, gaze.frame_idx, gaze.timestamp_ori, gaze.frame_idx_ori, gaze.timestamp_VOR, gaze.frame_idx_VOR, gaze.timestamp_ref, gaze.frame_idx_ref)
-    if pose.pose_N_markers>0:
+    if pose.pose_successful():
         # get transform from ET data's coordinate frame to camera's coordinate frame
         camera_rotation = camera_params.rotation_vec
         camera_position = camera_params.position
@@ -174,15 +174,15 @@ def _from_head_impl(pose: plane.Pose, gaze: gaze_headref.Gaze, camera_params: oc
     # the above method of intersecting video gaze point ray with poster, and usually also very
     # close to binocular gaze point (though for at least one tracker the latter is not the case;
     # the AdHawk has an optional parallax correction using a vergence signal))
-    if pose.homography_N_markers>0:
+    if pose.homography_successful():
         gaze_world.gazePosPlane2D_vidPos_homography = pose.cam_to_plane_homography(gaze.gaze_pos_vid, camera_params)
 
         # get this point in camera space
-        if pose.pose_N_markers>0:
+        if pose.pose_successful():
             gaze_world.gazePosCam_vidPos_homography = pose.world_frame_to_cam(np.append(gaze_world.gazePosPlane2D_vidPos_homography, 0))
 
     # project gaze vectors to reference poster (and draw on video)
-    if not pose.pose_N_markers>0:
+    if not pose.pose_successful():
         # nothing to do anymore
         return gaze_world
 

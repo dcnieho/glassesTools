@@ -112,11 +112,11 @@ class ArUcoDetector():
             drawing.arucoDetectedMarkers(frame, detect_dict['corners'], detect_dict['ids'], sub_pixel_fac=sub_pixel_fac, special_highlight=[detect_dict['recoveredIds'],(255,255,0)])
 
         if show_board_axis:
-            if pose.pose_N_markers>0:
+            if pose.pose_successful():
                 # draw axis indicating plane pose (origin and orientation)
                 drawing.openCVFrameAxis(frame, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, pose.pose_R_vec, pose.pose_T_vec, arm_length, 3, sub_pixel_fac)
 
-            if pose.homography_N_markers>0:
+            if pose.homography_successful():
                 # find where plane origin is expected to be in the image
                 target = pose.plane_to_cam_homography([0., 0.], self._camera_params)
                 # draw target location on image

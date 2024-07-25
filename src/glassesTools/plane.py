@@ -224,6 +224,11 @@ class Pose:
         self._RtMatInv          = None
         self._i_homography_mat  = None
 
+    def pose_successful(self):
+        return self.pose_N_markers>0
+    def homography_successful(self):
+        return self.homography_N_markers>0
+
     def draw_frame_axis(self, img, camera_params: ocv.CameraParams, arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.]):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or not camera_params.has_intrinsics():
             return
@@ -299,9 +304,9 @@ class Pose:
         return transforms.apply_homography(self.homography_mat, *point)
 
     def get_origin_on_image(self, camera_params: ocv.CameraParams) -> np.ndarray:
-        if self.pose_N_markers>0 and camera_params.has_intrinsics():
+        if self.pose_successful() and camera_params.has_intrinsics():
             a = self.plane_to_cam_pose(np.zeros((1,3)), camera_params)
-        elif self.homography_N_markers>0:
+        elif self.homography_successful():
             a = self.plane_to_cam_homography([0., 0.], camera_params)
         else:
             a = np.full((2,), np.nan)
