@@ -102,24 +102,26 @@ class ArUcoDetector():
         pose = self.estimate_pose_and_homography(frame_idx, min_num_markers, corners, ids)
         return pose, {'corners': corners, 'ids': ids, 'rejectedImgPoints': rejectedImgPoints, 'recoveredIds': recoveredIds}
 
-    def visualize(self, frame, pose: plane.Pose, detect_dict, arm_length, sub_pixel_fac = 8, show_rejected_markers = False):
+    def visualize(self, frame, pose: plane.Pose, detect_dict, arm_length, sub_pixel_fac = 8, show_detected_markers = True, show_board_axis = True, show_rejected_markers = False):
         # for debug, can draw rejected markers on frame
         if show_rejected_markers:
             cv2.aruco.drawDetectedMarkers(frame, detect_dict['rejectedImgPoints'], None, borderColor=(211,0,148))
 
         # if any markers were detected, draw where on the frame
-        drawing.arucoDetectedMarkers(frame, detect_dict['corners'], detect_dict['ids'], sub_pixel_fac=sub_pixel_fac, special_highlight=[detect_dict['recoveredIds'],(255,255,0)])
+        if show_detected_markers:
+            drawing.arucoDetectedMarkers(frame, detect_dict['corners'], detect_dict['ids'], sub_pixel_fac=sub_pixel_fac, special_highlight=[detect_dict['recoveredIds'],(255,255,0)])
 
-        if pose.pose_N_markers>0:
-            # draw axis indicating plane pose (origin and orientation)
-            drawing.openCVFrameAxis(frame, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, pose.pose_R_vec, pose.pose_T_vec, arm_length, 3, sub_pixel_fac)
+        if show_board_axis:
+            if pose.pose_N_markers>0:
+                # draw axis indicating plane pose (origin and orientation)
+                drawing.openCVFrameAxis(frame, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, pose.pose_R_vec, pose.pose_T_vec, arm_length, 3, sub_pixel_fac)
 
-        if pose.homography_N_markers>0:
-            # find where plane origin is expected to be in the image
-            target = pose.plane_to_cam_homography([0., 0.], self._camera_params)
-            # draw target location on image
-            if target[0] >= 0 and target[0] < frame.shape[1] and target[1] >= 0 and target[1] < frame.shape[0]:
-                drawing.openCVCircle(frame, target, 3, (0,0,0), -1, sub_pixel_fac)
+            if pose.homography_N_markers>0:
+                # find where plane origin is expected to be in the image
+                target = pose.plane_to_cam_homography([0., 0.], self._camera_params)
+                # draw target location on image
+                if target[0] >= 0 and target[0] < frame.shape[1] and target[1] >= 0 and target[1] < frame.shape[0]:
+                    drawing.openCVCircle(frame, target, 3, (0,0,0), -1, sub_pixel_fac)
 
 
 
@@ -187,9 +189,13 @@ class PoseEstimator:
         self.extra_proc_parameters  : dict[str]                                     = {}
 
         self.gui                    : video_gui.GUI = None
-        self.do_visualize                           = False
         self.has_gui                                = False
+
+        self.do_visualize                           = False
         self.sub_pixel_fac                          = 8
+        self.show_detected_markers                  = True
+        self.show_board_axes                        = True
+        self.show_individual_marker_axes            = True
         self.show_rejected_markers                  = False
 
         self._first_frame       = True
@@ -236,12 +242,10 @@ class PoseEstimator:
         self.extra_proc_intervals[name] = processing_intervals
         self.extra_proc_parameters[name]= func_parameters
 
-    def attach_gui(self, gui: video_gui.GUI, sub_pixel_fac = 8, show_rejected_markers = False, episodes: dict[annotation.Event, list[int]] = None, window_id: int = None):
+    def attach_gui(self, gui: video_gui.GUI, episodes: dict[annotation.Event, list[int]] = None, window_id: int = None):
         self.gui                    = gui
         self.has_gui                = self.gui is not None
         self.do_visualize           = self.has_gui
-        self.sub_pixel_fac          = sub_pixel_fac
-        self.show_rejected_markers  = show_rejected_markers
 
         if self.has_gui:
             self.gui.set_show_timeline(True, self.video_ts, episodes, window_id)
@@ -250,11 +254,8 @@ class PoseEstimator:
         # if False, processing will not stop because last frame with a defined plane or extra processing is reached
         self.allow_early_exit = allow_early_exit
 
-
-    def set_visualize_on_frame(self, do_visualize: bool, sub_pixel_fac = 8, show_rejected_markers = False):
+    def set_visualize_on_frame(self, do_visualize: bool):
         self.do_visualize           = do_visualize
-        self.sub_pixel_fac          = sub_pixel_fac
-        self.show_rejected_markers  = show_rejected_markers
 
     def set_do_report_frames(self, do_report_frames: bool):
         self._do_report_frames = do_report_frames
@@ -328,7 +329,7 @@ class PoseEstimator:
                 pose_out[p] = pose
                 # draw detection and pose, if wanted
                 if self.do_visualize:
-                    self._detectors[p].visualize(frame, pose, detect_dicts[p], self.plane_setups[p]['plane'].marker_size/2, self.sub_pixel_fac, self.show_rejected_markers)
+                    self._detectors[p].visualize(frame, pose, detect_dicts[p], self.plane_setups[p]['plane'].marker_size/2, self.sub_pixel_fac, self.show_detected_markers, self.show_board_axes, self.show_rejected_markers)
 
             # deal with individual markers, if any
             if self.individual_markers and ids is not None:
@@ -342,10 +343,10 @@ class PoseEstimator:
                             _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
                         individual_marker_out[m_id] = pose
                         if self.do_visualize:
-                            if not planes_for_this_frame:
+                            if self.show_detected_markers and not planes_for_this_frame:
                                 # draw the detected marker, wasn't drawn above
                                 drawing.arucoDetectedMarkers(frame, [corners[idx]], ids[idx].reshape((1,1)), sub_pixel_fac=self.sub_pixel_fac)
-                            if self.cam_params.has_intrinsics():
+                            if self.show_individual_marker_axes and self.cam_params.has_intrinsics():
                                 pose.draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['marker_size']/2, self.sub_pixel_fac)
 
         for e in extra_processing_for_this_frame:
