@@ -27,6 +27,9 @@ def to_image_pos(x,y,bbox,img_size,margin=[0,0]):
     pos = [p*s+m for p,s,m in zip(pos,img_size,margin)]
     return pos
 
+def in_bbox(x,y,bbox,margin=0.):
+    pos = to_norm_pos(x,y,bbox)
+    return (pos[0]>=-margin and pos[0]<=1+margin) and (pos[1]>=-margin and pos[1]<=1+margin)
 
 def estimate_homography_known_marker(known: list[marker.Marker], detected_corners, detected_IDs):
     # collect matching corners in image and in world
