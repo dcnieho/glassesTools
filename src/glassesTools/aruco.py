@@ -301,7 +301,7 @@ class PoseEstimator:
         # for VFR video files
         planes_for_this_frame = [p for p in self.planes if intervals.is_in_interval(frame_idx, self.plane_proc_intervals[p])]
         extra_processing_for_this_frame = [e for e in self.extra_proc_functions if intervals.is_in_interval(frame_idx, self.extra_proc_intervals[e])]
-        if frame is None or (not self.proc_individial_markers_all_frames and not planes_for_this_frame and not extra_processing_for_this_frame):
+        if frame is None or (not (self.proc_individial_markers_all_frames and self.individual_markers) and not planes_for_this_frame and not extra_processing_for_this_frame):
             # we don't have a valid frame or nothing to do, continue to next
             if self.has_gui:
                 # do update timeline of the viewers
@@ -312,7 +312,7 @@ class PoseEstimator:
         pose_out                : dict[str, plane.Pose]     = {}
         individual_marker_out   : dict[str, marker.Pose]    = {}
         extra_processing_out    : dict[str, list[int, Any]] = {}
-        if planes_for_this_frame or self.proc_individial_markers_all_frames:
+        if planes_for_this_frame or (self.proc_individial_markers_all_frames and self.individual_markers):
             # detect markers
             detect_dicts = {}
             if self._single_detect_pass or self.individual_markers:
