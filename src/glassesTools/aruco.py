@@ -179,6 +179,7 @@ class PoseEstimator:
 
         self.individual_markers                 : dict[int, dict[str]]  = {}
         self._individual_marker_object_points   : dict[int, np.ndarray] = {}
+        self.proc_individial_markers_all_frames                         = False
 
         self.extra_proc_functions   : dict[str, Callable[[np.ndarray,Any], Any]]    = {}
         self.extra_proc_intervals   : dict[str, list[int]|list[list[int]]]          = {}
@@ -266,11 +267,11 @@ class PoseEstimator:
 
         should_exit, frame, frame_idx, frame_ts = self.video.read_frame(report_gap=True, wanted_frame_idx=wanted_frame_idx)
 
-        if should_exit or \
+        if should_exit or (not self.proc_individial_markers_all_frames and \
             (
                 intervals.beyond_last_interval(frame_idx, self.plane_proc_intervals) and \
                 (not self.extra_proc_intervals or intervals.beyond_last_interval(frame_idx, self.extra_proc_intervals))
-            ):
+            )):
             self._cache = Status.Finished, None, None, None, (None, None, None)
             return self._cache
         if self._do_report_frames:
@@ -294,7 +295,7 @@ class PoseEstimator:
         # for VFR video files
         planes_for_this_frame = [p for p in self.planes if intervals.is_in_interval(frame_idx, self.plane_proc_intervals[p])]
         extra_processing_for_this_frame = [e for e in self.extra_proc_functions if intervals.is_in_interval(frame_idx, self.extra_proc_intervals[e])]
-        if frame is None or (not planes_for_this_frame and not extra_processing_for_this_frame):
+        if frame is None or (not self.proc_individial_markers_all_frames and not planes_for_this_frame and not extra_processing_for_this_frame):
             # we don't have a valid frame or nothing to do, continue to next
             if self.has_gui:
                 # do update timeline of the viewers
@@ -305,12 +306,13 @@ class PoseEstimator:
         pose_out                : dict[str, plane.Pose]     = {}
         individual_marker_out   : dict[str, marker.Pose]    = {}
         extra_processing_out    : dict[str, list[int, Any]] = {}
-        if planes_for_this_frame:
+        if planes_for_this_frame or self.proc_individial_markers_all_frames:
             # detect markers
             detect_dicts = {}
             if self._single_detect_pass or self.individual_markers:
                 corners, ids, rejected_corners = _detect_markers(frame, self._detectors[self.planes[0]]._det)
-                detect_dicts = _refine_for_multiple_planes(frame, corners, ids, rejected_corners, {p:self._detectors[p] for p in planes_for_this_frame}, self.cam_params.camera_mtx, self.cam_params.distort_coeffs)
+                if planes_for_this_frame:
+                    detect_dicts = _refine_for_multiple_planes(frame, corners, ids, rejected_corners, {p:self._detectors[p] for p in planes_for_this_frame}, self.cam_params.camera_mtx, self.cam_params.distort_coeffs)
             else:
                 for p in planes_for_this_frame:
                     detect_dicts[p] = dict(zip(['corners', 'ids', 'rejectedImgPoints', 'recoveredIds'], self._detectors[p].detect_markers(frame, self.plane_setups[p]['min_num_markers'])))
@@ -333,8 +335,12 @@ class PoseEstimator:
                             # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
                             _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
                         individual_marker_out[m_id] = pose
-                        if self.do_visualize and self.cam_params.has_intrinsics():
-                            pose.draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['marker_size']/2, self.sub_pixel_fac)
+                        if self.do_visualize:
+                            if not planes_for_this_frame:
+                                # draw the detected marker, wasn't drawn above
+                                drawing.arucoDetectedMarkers(frame, [corners[idx]], ids[idx].reshape((1,1)), sub_pixel_fac=self.sub_pixel_fac)
+                            if self.cam_params.has_intrinsics():
+                                pose.draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['marker_size']/2, self.sub_pixel_fac)
 
         for e in extra_processing_for_this_frame:
             extra_processing_out[e] = [frame_idx, *self.extra_proc_functions[e](frame,**self.extra_proc_parameters[e])]
