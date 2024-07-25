@@ -176,6 +176,7 @@ class PoseEstimator:
         self._aruco_boards          : dict[str, cv2.aruco.Board]            = {}
         self._detectors             : dict[str, ArUcoDetector]              = {}
         self._single_detect_pass                                            = False
+        self.allow_early_exit                                               = True
 
         self.individual_markers                 : dict[int, dict[str]]  = {}
         self._individual_marker_object_points   : dict[int, np.ndarray] = {}
@@ -245,6 +246,11 @@ class PoseEstimator:
         if self.has_gui:
             self.gui.set_show_timeline(True, self.video_ts, episodes, window_id)
 
+    def set_allow_early_exit(self, allow_early_exit: bool):
+        # if False, processing will not stop because last frame with a defined plane or extra processing is reached
+        self.allow_early_exit = allow_early_exit
+
+
     def set_visualize_on_frame(self, do_visualize: bool, sub_pixel_fac = 8, show_rejected_markers = False):
         self.do_visualize           = do_visualize
         self.sub_pixel_fac          = sub_pixel_fac
@@ -267,7 +273,7 @@ class PoseEstimator:
 
         should_exit, frame, frame_idx, frame_ts = self.video.read_frame(report_gap=True, wanted_frame_idx=wanted_frame_idx)
 
-        if should_exit or (not self.proc_individial_markers_all_frames and \
+        if should_exit or (self.allow_early_exit and not self.proc_individial_markers_all_frames and \
             (
                 intervals.beyond_last_interval(frame_idx, self.plane_proc_intervals) and \
                 (not self.extra_proc_intervals or intervals.beyond_last_interval(frame_idx, self.extra_proc_intervals))
