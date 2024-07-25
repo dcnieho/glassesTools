@@ -93,8 +93,9 @@ def show_visualization(
             if frame_idx in poses[p]:
                 a = poses[p][frame_idx].get_origin_on_image(cam_params)
                 drawing.openCVCircle(frame, a, 3, (0,255,0), -1, sub_pixel_fac)
-                drawing.openCVLine(frame, (a[0],0), (a[0],height), (0,255,0), 1, sub_pixel_fac)
-                drawing.openCVLine(frame, (0,a[1]), (width,a[1]) , (0,255,0), 1, sub_pixel_fac)
+                ll = 20
+                drawing.openCVLine(frame, (a[0],a[1]-ll), (a[0],a[1]+ll), (0,255,0), 1, sub_pixel_fac)
+                drawing.openCVLine(frame, (a[0]-ll,a[1]), (a[0]+ll,a[1]), (0,255,0), 1, sub_pixel_fac)
 
         gui.update_image(frame, frame_ts/1000., frame_idx, window_id = frame_win_id)
 
