@@ -29,10 +29,16 @@ def openCVRectangle(img, p1, p2, color, thickness, sub_pixel_fac):
 def openCVFrameAxis(img, camera_matrix, dist_coeffs, rvec,  tvec,  arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.]):
     # same as the openCV function, but with anti-aliasing for a nicer image if subPixelFac>1
     points = np.vstack((np.zeros((1,3)), arm_length*np.eye(3)))+np.vstack(4*[np.asarray(position)])
-    points = cv2.projectPoints(points, rvec, tvec, camera_matrix, dist_coeffs)[0]
-    openCVLine(img, points[0].flatten(), points[1].flatten(), (0, 0, 255), thickness, sub_pixel_fac)
-    openCVLine(img, points[0].flatten(), points[2].flatten(), (0, 255, 0), thickness, sub_pixel_fac)
-    openCVLine(img, points[0].flatten(), points[3].flatten(), (255, 0, 0), thickness, sub_pixel_fac)
+    cam_points = cv2.projectPoints(points, rvec, tvec, camera_matrix, dist_coeffs)[0]
+    # z-sort them
+    RMat = cv2.Rodrigues(rvec)[0]
+    RtMat = np.hstack((RMat, tvec.reshape(3,1)))
+    world_points = np.matmul(RtMat,np.pad(points[1:,:],((0,0),(0,1)),'constant', constant_values=(1.,1.)).T)
+    order = np.argsort(world_points[-1,:])[::-1]
+    # draw
+    colors = ((0, 0, 255), (0, 255, 0), (255, 0, 0))
+    for i in order:
+        openCVLine(img, cam_points[0].flatten(), cam_points[i+1].flatten(), colors[i], thickness, sub_pixel_fac)
 
 def arucoDetectedMarkers(img,corners,ids,border_color=(0,255,0), draw_IDs = True, sub_pixel_fac=1, special_highlight = []):
     # same as the openCV function, but with anti-aliasing for a (much) nicer image if subPixelFac>1
