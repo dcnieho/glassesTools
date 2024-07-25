@@ -331,6 +331,13 @@ class PoseEstimator:
                 if self.do_visualize:
                     self._detectors[p].visualize(frame, pose, detect_dicts[p], self.plane_setups[p]['plane'].marker_size/2, self.sub_pixel_fac, self.show_detected_markers, self.show_board_axes, self.show_rejected_markers)
 
+            # ensure visualization of detected and rejected markers is honored when self._detectors[p].visualize() above won't be called
+            if not planes_for_this_frame and self.do_visualize:
+                if self.show_rejected_markers:
+                    cv2.aruco.drawDetectedMarkers(frame, rejected_corners, None, borderColor=(211,0,148))
+                if self.show_detected_markers:
+                    drawing.arucoDetectedMarkers(frame, corners, ids, sub_pixel_fac=self.sub_pixel_fac)
+
             # deal with individual markers, if any
             if self.individual_markers and ids is not None:
                 found_markers = np.where([x[0] in self.individual_markers for x in ids])[0]
