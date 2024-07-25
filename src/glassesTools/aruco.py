@@ -187,6 +187,7 @@ class PoseEstimator:
         self.extra_proc_functions   : dict[str, Callable[[np.ndarray,Any], Any]]    = {}
         self.extra_proc_intervals   : dict[str, list[int]|list[list[int]]]          = {}
         self.extra_proc_parameters  : dict[str]                                     = {}
+        self.extra_proc_visualizer  : dict[str, Callable[[np.ndarray,Any], None]]   = {}
 
         self.gui                    : video_gui.GUI = None
         self.has_gui                                = False
@@ -196,6 +197,7 @@ class PoseEstimator:
         self.show_detected_markers                  = True
         self.show_board_axes                        = True
         self.show_individual_marker_axes            = True
+        self.show_sync_func_output                  = True
         self.show_rejected_markers                  = False
 
         self._first_frame       = True
@@ -236,11 +238,13 @@ class PoseEstimator:
                                       name: str,
                                       func: Callable[[np.ndarray,Any], Any],
                                       processing_intervals: list[int]|list[list[int]],
-                                      func_parameters: dict[str]):
+                                      func_parameters: dict[str],
+                                      visualizer: Callable[[np.ndarray, Any], None]):
         assert name not in self.extra_proc_functions, f'Cannot register the extra processing function "{name}", it is already registered'
         self.extra_proc_functions[name] = func
         self.extra_proc_intervals[name] = processing_intervals
         self.extra_proc_parameters[name]= func_parameters
+        self.extra_proc_visualizer[name]= visualizer
 
     def attach_gui(self, gui: video_gui.GUI, episodes: dict[annotation.Event, list[int]] = None, window_id: int = None):
         self.gui                    = gui
@@ -358,6 +362,8 @@ class PoseEstimator:
 
         for e in extra_processing_for_this_frame:
             extra_processing_out[e] = [frame_idx, *self.extra_proc_functions[e](frame,**self.extra_proc_parameters[e])]
+            if self.do_visualize and self.show_sync_func_output and self.extra_proc_visualizer[e]:
+                self.extra_proc_visualizer[e](frame, *extra_processing_out[e])
 
         if self.has_gui:
             self.gui.update_image(frame, frame_ts/1000., frame_idx)
