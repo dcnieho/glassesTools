@@ -31,6 +31,16 @@ def in_bbox(x,y,bbox,margin=0.):
     pos = to_norm_pos(x,y,bbox)
     return (pos[0]>=-margin and pos[0]<=1+margin) and (pos[1]>=-margin and pos[1]<=1+margin)
 
+def dist_from_bbox(x,y,bbox):
+    pos = to_norm_pos(x,y,bbox)
+    if (pos[0]>=0 and pos[0]<=1) and (pos[1]>=0 and pos[1]<=1):
+        return 0.   # inside bbox
+    # compute max distance from edge of bbox
+    dx = pos[0] if pos[0]<0. else pos[0]-1
+    dy = pos[1] if pos[1]<0. else pos[1]-1
+    return abs(max(dx,dy))
+
+
 def estimate_homography_known_marker(known: list[marker.Marker], detected_corners, detected_IDs):
     # collect matching corners in image and in world
     img_points = []
