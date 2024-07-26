@@ -354,9 +354,9 @@ class PoseEstimator:
                             _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
                         individual_marker_out[m_id] = pose
                         if self.do_visualize:
-                            if self.show_detected_markers and not planes_for_this_frame:
+                            if self.show_detected_markers:
                                 # draw the detected marker, wasn't drawn above
-                                drawing.arucoDetectedMarkers(frame, [corners[idx]], ids[idx].reshape((1,1)), sub_pixel_fac=self.sub_pixel_fac)
+                                drawing.arucoDetectedMarkers(frame, [corners[idx]], ids[idx].reshape((1,1)), (0,0,255), sub_pixel_fac=self.sub_pixel_fac)
                             if self.show_individual_marker_axes and self.cam_params.has_intrinsics():
                                 pose.draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['marker_size']/2, self.sub_pixel_fac)
 
