@@ -52,14 +52,15 @@ class ArUcoDetector():
 
     def _estimate_pose_impl(self, objP, imgP):
         # NB: N_markers also flags success of the pose estimation. Also 0 if not successful or not possible (missing intrinsics)
-        N_markers, R_vec, T_vec = 0, None, None
+        N_markers, R_vec, T_vec, reprojection_error = 0, None, None, -1.
         if objP is None or not self._camera_params.has_intrinsics():
-            return N_markers, R_vec, T_vec
+            return N_markers, R_vec, T_vec, reprojection_error
 
-        ok, R_vec, T_vec = cv2.solvePnP(objP, imgP, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, np.empty(1), np.empty(1))
-        if ok:
+        n_solutions, R_vec, T_vec, reprojection_error = \
+            cv2.solvePnPGeneric(objP, imgP, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, np.empty(1), np.empty(1))
+        if n_solutions:
             N_markers = int(objP.shape[0]/4)
-        return N_markers, R_vec, T_vec
+        return N_markers, R_vec[0], T_vec[0], reprojection_error[0][0]
 
     def estimate_homography(self, corners, ids) -> tuple[np.ndarray, bool]:
         objP, imgP = self._match_image_points(corners, ids)
@@ -89,7 +90,7 @@ class ArUcoDetector():
             objP, imgP = self._match_image_points(corners, ids)
 
             # get camera pose
-            pose.pose_N_markers, pose.pose_R_vec, pose.pose_T_vec = \
+            pose.pose_N_markers, pose.pose_R_vec, pose.pose_T_vec, pose.pose_reprojection_error = \
                 self._estimate_pose_impl(objP, imgP)
 
             # also get homography (direct image plane to plane in world transform)

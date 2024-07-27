@@ -195,25 +195,27 @@ class Plane:
 class Pose:
     # description of tsv file used for storage
     _columns_compressed = {'frame_idx':1,
-                           'pose_N_markers': 1, 'pose_R_vec': 3, 'pose_T_vec': 3,
+                           'pose_N_markers': 1, 'pose_reprojection_error': 1, 'pose_R_vec': 3, 'pose_T_vec': 3,
                            'homography_N_markers': 1, 'homography_mat': 9}
     _non_float          = {'frame_idx': int, 'pose_ok': bool, 'pose_N_markers': int, 'homography_N_markers': int}
 
     def __init__(self,
                  frame_idx              : int,
                  pose_N_markers         : int       = 0,
+                 pose_reprojection_error: float     = -1.,
                  pose_R_vec             : np.ndarray= None,
                  pose_T_vec             : np.ndarray= None,
                  homography_N_markers   : int       = 0,
                  homography_mat         : np.ndarray= None):
-        self.frame_idx            : int         = frame_idx
+        self.frame_idx              : int         = frame_idx
         # pose
-        self.pose_N_markers       : int         = pose_N_markers        # number of ArUco markers this pose estimate is based on. 0 if failed
-        self.pose_R_vec           : np.ndarray  = pose_R_vec
-        self.pose_T_vec           : np.ndarray  = pose_T_vec
+        self.pose_N_markers         : int         = pose_N_markers        # number of ArUco markers this pose estimate is based on. 0 if failed
+        self.pose_reprojection_error: float       = pose_reprojection_error
+        self.pose_R_vec             : np.ndarray  = pose_R_vec
+        self.pose_T_vec             : np.ndarray  = pose_T_vec
         # homography
-        self.homography_N_markers : int         = homography_N_markers  # number of ArUco markers this homongraphy estimate is based on. 0 if failed
-        self.homography_mat       : np.ndarray  = homography_mat.reshape(3,3) if homography_mat is not None else homography_mat
+        self.homography_N_markers   : int         = homography_N_markers  # number of ArUco markers this homongraphy estimate is based on. 0 if failed
+        self.homography_mat         : np.ndarray  = homography_mat.reshape(3,3) if homography_mat is not None else homography_mat
 
         # internals
         self._RMat              = None
