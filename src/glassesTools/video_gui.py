@@ -580,15 +580,26 @@ class GUI:
         if self._window_show_controls[w]:
             buttons_x_pos = (img_space-total_size.x)/2
             # check for overlap with status overlay
-            if buttons_x_pos < overlay_x_pos+overlay_size.x:
-                # try moving to just right of the status overlay
-                buttons_x_pos = overlay_x_pos+overlay_size.x+imgui.get_style().frame_padding.x
-            # check we don't go off the screen
-            if buttons_x_pos+total_size.x>img_space:
-                # recenter both overlay and buttons on the image, best we can do
-                overlay_button_width = overlay_size.x+imgui.get_style().frame_padding.x+total_size.x
-                overlay_x_pos = (img_space-overlay_button_width)/2
-                buttons_x_pos = overlay_x_pos+overlay_size.x+imgui.get_style().frame_padding.x
+            if self._window_timecode_pos[w]=='l':
+                if buttons_x_pos < overlay_x_pos+overlay_size.x:
+                    # try moving to just right of the status overlay
+                    buttons_x_pos = overlay_x_pos+overlay_size.x+imgui.get_style().frame_padding.x
+                # check we don't go off the screen
+                if buttons_x_pos+total_size.x>img_space:
+                    # recenter both overlay and buttons on the image, best we can do
+                    overlay_button_width = overlay_size.x+imgui.get_style().frame_padding.x+total_size.x
+                    overlay_x_pos = (img_space-overlay_button_width)/2
+                    buttons_x_pos = overlay_x_pos+overlay_size.x+imgui.get_style().frame_padding.x
+            else:
+                if buttons_x_pos+total_size.x > overlay_x_pos:
+                    # try moving to just left of the status overlay
+                    buttons_x_pos = overlay_x_pos-total_size.x-imgui.get_style().frame_padding.x
+                # check we don't go off the screen
+                if buttons_x_pos < 0:
+                    # recenter both overlay and buttons on the image, best we can do
+                    overlay_button_width = overlay_size.x+imgui.get_style().frame_padding.x+total_size.x
+                    buttons_x_pos = (img_space-overlay_button_width)/2
+                    overlay_x_pos = buttons_x_pos+total_size.x+imgui.get_style().frame_padding.x
             button_cursor_pos = (buttons_x_pos,img_sz[1]-total_size.y)
             controls_child_size = total_size
         else:
