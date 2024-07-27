@@ -332,16 +332,6 @@ class PoseEstimator:
             for p in planes_for_this_frame:
                 pose = self._detectors[p].estimate_pose_and_homography(frame_idx, self.plane_setups[p]['min_num_markers'], detect_dicts[p]['corners'], detect_dicts[p]['ids'])
                 pose_out[p] = pose
-                # draw detection and pose, if wanted
-                if self.do_visualize:
-                    self._detectors[p].visualize(frame, pose, detect_dicts[p], self.plane_setups[p]['plane'].marker_size/2, self.sub_pixel_fac, self.show_detected_markers, self.show_board_axes, self.show_rejected_markers)
-
-            # ensure visualization of detected and rejected markers is honored when self._detectors[p].visualize() above won't be called
-            if not planes_for_this_frame and self.do_visualize:
-                if self.show_rejected_markers:
-                    cv2.aruco.drawDetectedMarkers(frame, rejected_corners, None, borderColor=(211,0,148))
-                if self.show_detected_markers:
-                    drawing.arucoDetectedMarkers(frame, corners, ids, sub_pixel_fac=self.sub_pixel_fac)
 
             # deal with individual markers, if any
             if self.individual_markers and ids is not None:
@@ -354,17 +344,38 @@ class PoseEstimator:
                             # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
                             _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
                         individual_marker_out[m_id] = pose
-                        if self.do_visualize:
-                            if self.show_detected_markers:
-                                # draw the detected marker, wasn't drawn above
-                                drawing.arucoDetectedMarkers(frame, [corners[idx]], ids[idx].reshape((1,1)), (0,0,255), sub_pixel_fac=self.sub_pixel_fac)
-                            if self.show_individual_marker_axes and self.cam_params.has_intrinsics():
-                                pose.draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['marker_size']/2, self.sub_pixel_fac)
 
         for e in extra_processing_for_this_frame:
             extra_processing_out[e] = [frame_idx, *self.extra_proc_functions[e](frame,**self.extra_proc_parameters[e])]
-            if self.do_visualize and self.show_sync_func_output and self.extra_proc_visualizer[e]:
-                self.extra_proc_visualizer[e](frame, *extra_processing_out[e])
+
+        # now that all processing is done, handle visualization, if any
+        if self.do_visualize:
+            for p in planes_for_this_frame:
+                # draw detection and pose, if wanted
+                self._detectors[p].visualize(frame, pose_out[p], detect_dicts[p], self.plane_setups[p]['plane'].marker_size/2, self.sub_pixel_fac, self.show_detected_markers, self.show_board_axes, self.show_rejected_markers)
+
+            # ensure visualization of detected and rejected markers is honored when marker detection
+            # was done but self._detectors[p].visualize() above won't be called because there are no
+            # planes for this frame
+            if not planes_for_this_frame and (self.proc_individial_markers_all_frames or self.individual_markers):
+                if self.show_rejected_markers:
+                    cv2.aruco.drawDetectedMarkers(frame, rejected_corners, None, borderColor=(211,0,148))
+                if self.show_detected_markers:
+                    drawing.arucoDetectedMarkers(frame, corners, ids, sub_pixel_fac=self.sub_pixel_fac)
+
+            # deal with individual markers, if any
+            for m_id in individual_marker_out:
+                if self.show_detected_markers:
+                    # draw the detected marker in a different color
+                    idx = np.where(ids==m_id)[0][0]
+                    drawing.arucoDetectedMarkers(frame, [corners[idx]], ids[idx].reshape((1,1)), (0,0,255), sub_pixel_fac=self.sub_pixel_fac)
+                if self.show_individual_marker_axes and self.cam_params.has_intrinsics():
+                    individual_marker_out[m_id].draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['marker_size']/2, self.sub_pixel_fac)
+
+            # draw output of extra processing functions
+            for e in extra_processing_for_this_frame:
+                if self.show_sync_func_output and self.extra_proc_visualizer[e]:
+                    self.extra_proc_visualizer[e](frame, *extra_processing_out[e])
 
         if self.has_gui:
             self.gui.update_image(frame, frame_ts/1000., frame_idx)
