@@ -336,14 +336,13 @@ class PoseEstimator:
             # deal with individual markers, if any
             if self.individual_markers and ids is not None:
                 found_markers = np.where([x[0] in self.individual_markers for x in ids])[0]
-                if found_markers.size>0:
-                    for idx in found_markers:
-                        m_id = ids[idx][0]
-                        pose = marker.Pose(frame_idx)
-                        if self.cam_params.has_intrinsics():
-                            # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
-                            _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                        individual_marker_out[m_id] = pose
+                for idx in found_markers:
+                    m_id = ids[idx][0]
+                    pose = marker.Pose(frame_idx)
+                    if self.cam_params.has_intrinsics():
+                        # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
+                        _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                    individual_marker_out[m_id] = pose
 
         for e in extra_processing_for_this_frame:
             extra_processing_out[e] = [frame_idx, *self.extra_proc_functions[e](frame,**self.extra_proc_parameters[e])]
