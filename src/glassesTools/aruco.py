@@ -106,7 +106,7 @@ class ArUcoDetector():
     def visualize(self, frame, pose: plane.Pose, detect_dict, arm_length, sub_pixel_fac = 8, show_detected_markers = True, show_board_axis = True, show_rejected_markers = False):
         # for debug, can draw rejected markers on frame
         if show_rejected_markers:
-            cv2.aruco.drawDetectedMarkers(frame, detect_dict['rejectedImgPoints'], None, borderColor=(211,0,148))
+            cv2.aruco.drawDetectedMarkers(frame, detect_dict['rejectedImgPoints'], None, borderColor=(0,0,255))
 
         # if any markers were detected, draw where on the frame
         if show_detected_markers:
@@ -358,7 +358,7 @@ class PoseEstimator:
             # planes for this frame
             if not planes_for_this_frame and (self.proc_individial_markers_all_frames or self.individual_markers):
                 if self.show_rejected_markers:
-                    cv2.aruco.drawDetectedMarkers(frame, rejected_corners, None, borderColor=(211,0,148))
+                    cv2.aruco.drawDetectedMarkers(frame, rejected_corners, None, special=(0,0,255))
                 if self.show_detected_markers:
                     drawing.arucoDetectedMarkers(frame, corners, ids, sub_pixel_fac=self.sub_pixel_fac)
 
