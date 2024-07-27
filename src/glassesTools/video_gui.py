@@ -467,23 +467,27 @@ class GUI:
         # determine window size if needed
         dpi_fac = hello_imgui.dpi_window_size_factor()
         img_sz = np.array([self._frame_size[w][1]*dpi_fac, self._frame_size[w][0]*dpi_fac])
+        tl_height = 0   # calc size of timeline
+        if (tl:=self._window_timeline[w]) is not None:
+            timeline_fixed_elements_height = tl.get_fixed_elements_height()
+            tracks_height = 25*tl.get_num_annotations()*dpi_fac  # 25 pixels per track
+            tl_height = int(timeline_fixed_elements_height+tracks_height)
         if self._window_determine_size[w]:
             win     = glfw_utils.glfw_window_hello_imgui()
             w_bounds= get_current_monitor(*glfw.get_window_pos(win))[1]
             w_bounds= adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
-            tl_height = 0
-            if (tl:=self._window_timeline[w]) is not None:
-                # calc size of timeline and adjust
-                timeline_fixed_elements_height = tl.get_fixed_elements_height()
-                tracks_height = 25*tl.get_num_annotations()*dpi_fac  # 25 pixels per track
-                tl_height = int(timeline_fixed_elements_height+tracks_height)
-                w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_height]
+            w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_height]  # adjust for timeline
             img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz]))
             self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz)])
             img_fit.size = [int(x*self._window_sfac[w]) for x in img_sz]
             if not need_begin_end:
                 glfw.set_window_pos (win, *img_fit.position)
                 glfw.set_window_size(win, img_fit.size[0], img_fit.size[1]+tl_height)
+        elif not need_begin_end:
+            win_sz = imgui.get_content_region_avail()
+            win_sz.y -= tl_height
+            self._window_sfac[w] = min([x/y for x,y in zip(win_sz,img_sz)])
+
 
         if need_begin_end:
             if self._window_determine_size[w]:
@@ -494,6 +498,10 @@ class GUI:
             if not opened:
                 imgui.end()
                 return
+            if not self._window_determine_size[w]:
+                win_sz = imgui.get_content_region_avail()
+                win_sz.y -= tl_height
+                self._window_sfac[w] = min([x/y for x,y in zip(win_sz,img_sz)])
         self._window_determine_size[w] = False
 
         # draw image
