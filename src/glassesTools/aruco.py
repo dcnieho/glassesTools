@@ -103,14 +103,17 @@ class ArUcoDetector():
         pose = self.estimate_pose_and_homography(frame_idx, min_num_markers, corners, ids)
         return pose, {'corners': corners, 'ids': ids, 'rejectedImgPoints': rejectedImgPoints, 'recoveredIds': recoveredIds}
 
-    def visualize(self, frame, pose: plane.Pose, detect_dict, arm_length, sub_pixel_fac = 8, show_detected_markers = True, show_board_axis = True, show_rejected_markers = False):
+    def visualize(self, frame, pose: plane.Pose, detect_dict, arm_length, sub_pixel_fac = 8, show_detected_markers = True, show_board_axis = True, show_rejected_markers = False, special_highlight = None):
+        if special_highlight is None:
+            special_highlight = []
         # for debug, can draw rejected markers on frame
         if show_rejected_markers:
             cv2.aruco.drawDetectedMarkers(frame, detect_dict['rejectedImgPoints'], None, borderColor=(0,0,255))
 
         # if any markers were detected, draw where on the frame
         if show_detected_markers:
-            drawing.arucoDetectedMarkers(frame, detect_dict['corners'], detect_dict['ids'], sub_pixel_fac=sub_pixel_fac, special_highlight=[detect_dict['recoveredIds'],(255,255,0)])
+            special_highlight += [detect_dict['recoveredIds'],(255,255,0)]
+            drawing.arucoDetectedMarkers(frame, detect_dict['corners'], detect_dict['ids'], sub_pixel_fac=sub_pixel_fac, special_highlight=special_highlight)
 
         if show_board_axis:
             if pose.pose_successful():
@@ -177,6 +180,7 @@ class PoseEstimator:
         self.plane_setups           : dict[str, dict[str]]                  = {}
         self.plane_proc_intervals   : dict[str, list[int]|list[list[int]]]  = {}
         self._aruco_boards          : dict[str, cv2.aruco.Board]            = {}
+        self._all_aruco_ids         : set[int]                              = set()
         self._detectors             : dict[str, ArUcoDetector]              = {}
         self._single_detect_pass                                            = False
         self.allow_early_exit                                               = True
@@ -199,6 +203,7 @@ class PoseEstimator:
         self.show_board_axes                        = True
         self.show_individual_marker_axes            = True
         self.show_sync_func_output                  = True
+        self.show_unknown_markers                   = True
         self.show_rejected_markers                  = False
 
         self._first_frame       = True
@@ -215,6 +220,7 @@ class PoseEstimator:
         self.plane_proc_intervals[plane] = processing_intervals
 
         self._aruco_boards[plane]   = planes_setup['plane'].get_aruco_board()
+        self._all_aruco_ids.update(self._aruco_boards[plane].getIds())
         self._detectors[plane]      = ArUcoDetector(self._aruco_boards[plane].getDictionary(), planes_setup['aruco_params'])
         self._detectors[plane].set_board(self._aruco_boards[plane])
         self._detectors[plane].set_intrinsics(self.cam_params)
@@ -234,6 +240,7 @@ class PoseEstimator:
                                                                      [ marker_size/2,  marker_size/2, 0],
                                                                      [ marker_size/2, -marker_size/2, 0],
                                                                      [-marker_size/2, -marker_size/2, 0]])
+        self._all_aruco_ids.add(marker_id)
 
     def register_extra_processing_fun(self,
                                       name: str,
@@ -349,9 +356,26 @@ class PoseEstimator:
 
         # now that all processing is done, handle visualization, if any
         if self.do_visualize:
+            # for visualization purposes, either filter detected markers so only the expected ones
+            # are shown (self.show_unknown_markers==False), or show them in a different color (self.show_unknown_markers==True)
+            special_highlights = None
+            to_highlight = set()
+            for p in detect_dicts:
+                unknown = set(detect_dicts[p]['ids'].flatten())-self._all_aruco_ids
+                if not unknown:
+                    continue
+                if self.show_unknown_markers:
+                    to_highlight |= unknown
+                else:
+                    to_remove = np.where([x[0] in unknown for x in detect_dicts[p]['ids']])[0]
+                    detect_dicts[p]['ids'] = np.delete(detect_dicts[p]['ids'], to_remove, axis=0)
+                    detect_dicts[p]['corners'] = tuple(v for i,v in enumerate(detect_dicts[p]['corners']) if i not in to_remove)
+            if to_highlight:
+                special_highlights = [list(to_highlight), (150,253,253)]
+            # now actually draw them
             for p in planes_for_this_frame:
                 # draw detection and pose, if wanted
-                self._detectors[p].visualize(frame, pose_out[p], detect_dicts[p], self.plane_setups[p]['plane'].marker_size/2, self.sub_pixel_fac, self.show_detected_markers, self.show_board_axes, self.show_rejected_markers)
+                self._detectors[p].visualize(frame, pose_out[p], detect_dicts[p], self.plane_setups[p]['plane'].marker_size/2, self.sub_pixel_fac, self.show_detected_markers, self.show_board_axes, self.show_rejected_markers, special_highlights)
 
             # ensure visualization of detected and rejected markers is honored when marker detection
             # was done but self._detectors[p].visualize() above won't be called because there are no
