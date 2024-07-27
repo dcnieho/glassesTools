@@ -361,6 +361,8 @@ class PoseEstimator:
             special_highlights = None
             to_highlight = set()
             for p in detect_dicts:
+                if detect_dicts[p]['ids'] is None:
+                    continue
                 unknown = set(detect_dicts[p]['ids'].flatten())-self._all_aruco_ids
                 if not unknown:
                     continue
