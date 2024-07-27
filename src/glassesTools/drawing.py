@@ -40,8 +40,11 @@ def openCVFrameAxis(img, camera_matrix, dist_coeffs, rvec,  tvec,  arm_length, t
     for i in order:
         openCVLine(img, cam_points[0].flatten(), cam_points[i+1].flatten(), colors[i], thickness, sub_pixel_fac)
 
-def arucoDetectedMarkers(img,corners,ids,border_color=(0,255,0), draw_IDs = True, sub_pixel_fac=1, special_highlight = []):
+def arucoDetectedMarkers(img,corners,ids,border_color=(0,255,0), draw_IDs = True, sub_pixel_fac=1, special_highlight = None):
+    if special_highlight is None:
+        special_highlight = []
     # same as the openCV function, but with anti-aliasing for a (much) nicer image if subPixelFac>1
+    # and ability to use a different color from some of the markers
     textColor   = [x for x in border_color]
     cornerColor = [x for x in border_color]
     textColor[0]  , textColor[1]   = textColor[1]  , textColor[0]       #   text color just swap B and R
