@@ -509,18 +509,37 @@ class GUI:
         img_space = imgui.get_content_region_avail().x
         img_margin = max((img_space-img_sz[0])/2,0)
         if self._current_frame[w][0] is None:
-            text = 'No image'
-            text_size = imgui.calc_text_size(text)
+            overlay_text = 'No image'
+            text_size = imgui.calc_text_size(overlay_text)
             offset = [(x-y)/2 for x,y in zip(img_sz,text_size)]
             imgui.set_cursor_pos((img_margin+offset[0],offset[1]))
-            imgui.text_colored((1., 0., 0., 1.), text)
+            imgui.text_colored((1., 0., 0., 1.), overlay_text)
             imgui.set_cursor_pos((img_margin,0))
             imgui.dummy(img_sz)
         else:
             imgui.set_cursor_pos((img_margin,0))
             imgui.image(self._texID[w], img_sz)
 
-        # draw action buttons (may be invisible, still submit them for shortcut routing)
+        # prepare for drawing bottom status overlay
+        fr_ts, fr_idx = self._current_frame[w][1:]
+        if fr_ts is not None:
+            overlay_text = f'{utils.format_duration(fr_ts,True)} ({fr_ts:.3f}) [{fr_idx}]'
+        else:
+            overlay_text = f'{fr_idx}'
+        if self._window_show_play_percentage[w] and self._last_frame_idx is not None:
+            overlay_text += f' ({fr_idx/self._last_frame_idx*100:.1f}%)'
+        txt_sz = imgui.calc_text_size(overlay_text)
+        overlay_size = txt_sz+imgui.ImVec2([x*2 for x in imgui.get_style().frame_padding])
+        match self._window_timecode_pos[w]:
+            case 'l':
+                overlay_x_pos = img_margin
+            case 'r':
+                overlay_x_pos = img_margin+img_sz[0]-overlay_size.x
+                if not self._window_show_controls[w]:
+                    overlay_x_pos -= controls_child_size.x
+
+        # prepare for drawing action buttons (may be invisible, still submit
+        # them for shortcut routing)
         # collect buttons in right order
         buttons: list[Button|None] = []
         if self._allow_seek:
@@ -559,25 +578,52 @@ class GUI:
         total_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*imgui.get_style().item_spacing.x, total_button_size.y)
         # draw them, or info item for tooltip
         if self._window_show_controls[w]:
-            imgui.set_cursor_pos(((img_space-total_size.x)/2,img_sz[1]-total_size.y))
+            buttons_x_pos = (img_space-total_size.x)/2
+            # check for overlap with status overlay
+            if buttons_x_pos < overlay_x_pos+overlay_size.x:
+                # try moving to just right of the status overlay
+                buttons_x_pos = overlay_x_pos+overlay_size.x+imgui.get_style().frame_padding.x
+            # check we don't go off the screen
+            if buttons_x_pos+total_size.x>img_space:
+                # recenter both overlay and buttons on the image, best we can do
+                overlay_button_width = overlay_size.x+imgui.get_style().frame_padding.x+total_size.x
+                overlay_x_pos = (img_space-overlay_button_width)/2
+                buttons_x_pos = overlay_x_pos+overlay_size.x+imgui.get_style().frame_padding.x
+            button_cursor_pos = (buttons_x_pos,img_sz[1]-total_size.y)
             controls_child_size = total_size
         else:
             txt_sz = imgui.calc_text_size('(?)')
-            imgui.set_cursor_pos((img_margin+img_sz[0]-txt_sz.x-2*imgui.get_style().frame_padding.x, img_sz[1]-txt_sz.y-2*imgui.get_style().frame_padding.y))
+            button_cursor_pos = (img_margin+img_sz[0]-txt_sz.x-2*imgui.get_style().frame_padding.x, img_sz[1]-txt_sz.y-2*imgui.get_style().frame_padding.y)
             controls_child_size = txt_sz+imgui.ImVec2([x*2 for x in imgui.get_style().frame_padding])
+
+
+        # draw bottom status overlay
+        imgui.set_cursor_pos((overlay_x_pos,img_sz[1]-overlay_size.y))
         imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
         imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
+        imgui.begin_child("##status_overlay", size=overlay_size)
+        imgui.set_cursor_pos(imgui.get_style().frame_padding)
+        imgui.text(overlay_text)
+        imgui.end_child()
+        imgui.pop_style_color()
+        imgui.pop_style_var()
+
+
+        # draw buttons
+        imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
+        imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
+        imgui.set_cursor_pos(button_cursor_pos)
         imgui.begin_child("##controls_overlay", size=controls_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
         if not self._window_show_controls[w]:
             imgui.set_cursor_pos(imgui.get_style().frame_padding)
             imgui.text('(?)')
             if imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
-                text = ''
+                overlay_text = ''
                 for b in buttons:
                     if b is not None:
-                        text += f"'{imgui.get_key_name(b.key)}': {b.tooltip}\n"
-                text = text[:-1]
-                imgui.set_tooltip(text)
+                        overlay_text += f"'{imgui.get_key_name(b.key)}': {b.tooltip}\n"
+                overlay_text = overlay_text[:-1]
+                imgui.set_tooltip(overlay_text)
 
         for b,sz in zip(buttons,button_sizes):
             if b is None:
@@ -642,34 +688,6 @@ class GUI:
             if disable:
                 imgui.end_disabled()
             imgui.same_line()
-        imgui.end_child()
-        imgui.pop_style_color()
-        imgui.pop_style_var()
-
-        # draw bottom status overlay
-        fr_ts, fr_idx = self._current_frame[w][1:]
-        if fr_ts is not None:
-            text = f'{utils.format_duration(fr_ts,True)} ({fr_ts:.3f}) [{fr_idx}]'
-        else:
-            text = f'{fr_idx}'
-        if self._window_show_play_percentage[w] and self._last_frame_idx is not None:
-            text += f' ({fr_idx/self._last_frame_idx*100:.1f}%)'
-        txt_sz = imgui.calc_text_size(text)
-        overlay_size = txt_sz+imgui.ImVec2([x*2 for x in imgui.get_style().frame_padding])
-        match self._window_timecode_pos[w]:
-            case 'l':
-                x_pos = img_margin
-            case 'r':
-                x_pos = img_margin+img_sz[0]-overlay_size.x
-                if not self._window_show_controls[w]:
-                    x_pos -= controls_child_size.x
-
-        imgui.set_cursor_pos((x_pos,img_sz[1]-overlay_size.y))
-        imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
-        imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
-        imgui.begin_child("##status_overlay", size=overlay_size)
-        imgui.set_cursor_pos(imgui.get_style().frame_padding)
-        imgui.text(text)
         imgui.end_child()
         imgui.pop_style_color()
         imgui.pop_style_var()
