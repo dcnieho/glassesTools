@@ -60,7 +60,6 @@ class CV2VideoReader:
         self.nframes = len(self.ts)
         self.frame_idx = -1
         self._last_good_ts = (-1, -1., -1.)  # frame_idx, ts from opencv, ts from file
-        self._is_off_by_one = False
         self._cache: tuple[bool, np.ndarray, int, float] = None # self._cache[2] is frame index
 
     def __del__(self):
@@ -88,14 +87,13 @@ class CV2VideoReader:
             return self._cache
 
         while True:
-            ts0 = self.cap.get(cv2.CAP_PROP_POS_MSEC)
             ret, frame = self.cap.read()
-            ts1 = self.cap.get(cv2.CAP_PROP_POS_MSEC)
+            # get timestamp of this frame according to OpenCV
+            # NB: this timestamp does not take into account edit lists in an mp4
+            # it seems (compare with output of .\ffprobe.exe file.mp4 -select_streams 0 -show_entries frame=pts_time)
+            # which is one of the reasons we provide our own timestamps
+            ocv_ts = self.cap.get(cv2.CAP_PROP_POS_MSEC)
             self.frame_idx += 1
-
-            # check if this is a stream for which opencv returns timestamps that are one frame off
-            if self.frame_idx==0 and ts0==ts1:
-                self._is_off_by_one = True
 
             # check if we're done. Can't trust ret==False to indicate we're at end of video, as
             # it may also return False for some corrupted frames that we can just read past
@@ -105,18 +103,18 @@ class CV2VideoReader:
 
             # keep going
             ts_from_list = self.ts[self.frame_idx]
-            if self.frame_idx==1 or ts1>0.:
+            if self.frame_idx==1 or ocv_ts>0.:
                 # check for gap, and if there is a gap, fix up frame_idx if needed
-                if self._last_good_ts[0]!=-1 and ts_from_list-self._last_good_ts[2] < ts1-self._last_good_ts[1]-1:  # little bit of leeway (1ms) for precision or mismatched timestamps
+                if self._last_good_ts[0]!=-1 and ts_from_list-self._last_good_ts[2] < ocv_ts-self._last_good_ts[1]-1:  # little bit of leeway (1ms) for precision or mismatched timestamps
                     # we skipped some frames altogether, need to correct current frame_idx
-                    t_jump = ts1-self._last_good_ts[1]
-                    tss = self.ts-self._last_good_ts[2]
+                    t_jump = ocv_ts-self._last_good_ts[1]   # compare OpenCV timestamps to get size of jump
+                    tss = self.ts-self._last_good_ts[2]     # apply jump to our own timestamps (so, we're robust to e.g. OpenCV ignoring the edit list)
                     # find best matching frame idx so we catch up with the jump
                     self.frame_idx = self._find_closest_idx(t_jump, tss)
                     ts_from_list = self.ts[self.frame_idx]
                     if report_gap and self.frame_idx-self._last_good_ts[0]>1:
                         print(f'Frame discontinuity detected (jumped from {self._last_good_ts[0]} to {self.frame_idx}), there are probably corrupt frames in your video')
-                self._last_good_ts = (self.frame_idx, ts1, ts_from_list)
+                self._last_good_ts = (self.frame_idx, ocv_ts, ts_from_list)
 
             # keep spooling until we arrive at the wanted frame
             if self.frame_idx==wanted_frame_idx:
