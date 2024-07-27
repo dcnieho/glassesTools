@@ -367,7 +367,7 @@ class PoseEstimator:
                 if self.show_detected_markers:
                     # draw the detected marker in a different color
                     idx = np.where(ids==m_id)[0][0]
-                    drawing.arucoDetectedMarkers(frame, [corners[idx]], ids[idx].reshape((1,1)), (0,0,255), sub_pixel_fac=self.sub_pixel_fac)
+                    drawing.arucoDetectedMarkers(frame, [corners[idx]], ids[idx].reshape((1,1)), sub_pixel_fac=self.sub_pixel_fac, special_highlight=[[m_id],(255,0,255)])
                 if self.show_individual_marker_axes and self.cam_params.has_intrinsics():
                     individual_marker_out[m_id].draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['marker_size']/2, self.sub_pixel_fac)
 
