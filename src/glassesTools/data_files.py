@@ -67,7 +67,7 @@ def read_file(file_name              : str|pathlib.Path,
     dtypes         : dict[str, Any] = object._non_float
 
     # read file and select, if wanted
-    df          = pd.read_csv(file_name, delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **dtypes))
+    df = pd.read_csv(file_name, delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **dtypes))
     if episodes:
         sel = (df[subset_var] >= episodes[0][0]) & (df[subset_var] <= episodes[0][1])
         for e in episodes[1:]:
@@ -100,6 +100,7 @@ def read_file(file_name              : str|pathlib.Path,
 
     # if we have multiple timestamps of frame_idxs, make sure we keep a copy of the original one
     if make_ori_ts_fridx:
+        df = df.copy()  # after the above operation to keep only the columns we want, we're looking at a slice of the larger df. To be able to make changes as we will here, use copy to get a new df with just the expected columns
         # make copies of original
         df['frame_idx_ori'] = df['frame_idx']
         if 'timestamp' in df.columns:
