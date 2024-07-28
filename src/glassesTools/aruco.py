@@ -203,7 +203,7 @@ class PoseEstimator:
         self.show_board_axes                        = True
         self.show_individual_marker_axes            = True
         self.show_sync_func_output                  = True
-        self.show_unknown_markers                   = True
+        self.show_unexpected_markers                = True
         self.show_rejected_markers                  = False
 
         self._first_frame       = True
@@ -358,20 +358,30 @@ class PoseEstimator:
         if self.do_visualize:
             # for visualization purposes, either filter detected markers so only the expected ones
             # are shown (self.show_unknown_markers==False), or show them in a different color (self.show_unknown_markers==True)
-            special_highlights = None
             to_highlight = set()
+            # get expected markers
+            expected = set()
+            if planes_for_this_frame:
+                for p in planes_for_this_frame:
+                    expected.update(self._detectors[p]._board.getIds())
+                for m_id in self.individual_markers:
+                    expected.add(m_id)
+            else:
+                expected = self._all_aruco_ids
+            # filter dicts to find unexpected markers
             for p in detect_dicts:
                 if detect_dicts[p]['ids'] is None:
                     continue
-                unknown = set(detect_dicts[p]['ids'].flatten())-self._all_aruco_ids
-                if not unknown:
+                unexpected = set(detect_dicts[p]['ids'].flatten())-expected
+                if not unexpected:
                     continue
-                if self.show_unknown_markers:
-                    to_highlight |= unknown
+                if self.show_unexpected_markers:
+                    to_highlight |= unexpected
                 else:
-                    to_remove = np.where([x[0] in unknown for x in detect_dicts[p]['ids']])[0]
+                    to_remove = np.where([x[0] in unexpected for x in detect_dicts[p]['ids']])[0]
                     detect_dicts[p]['ids'] = np.delete(detect_dicts[p]['ids'], to_remove, axis=0)
                     detect_dicts[p]['corners'] = tuple(v for i,v in enumerate(detect_dicts[p]['corners']) if i not in to_remove)
+            special_highlights = None
             if to_highlight:
                 special_highlights = [list(to_highlight), (150,253,253)]
             # now actually draw them
