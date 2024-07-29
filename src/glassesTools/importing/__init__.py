@@ -64,7 +64,7 @@ def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker)
 
 
 # single front end to the various device import functions for convenience
-def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.Path = None, device: str | EyeTracker = None, rec_info: Recording = None, copy_scene_video = True, cam_cal_file: str|pathlib.Path=None) -> Recording:
+def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.Path = None, device: str | EyeTracker = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False, cam_cal_file: str|pathlib.Path=None) -> Recording:
     # output_dir is the working directory folder where the export of this recording will be placed
     # should match rec_info.working_directory if both are provided (is checked below)
     # NB: cam_cal_file input is only honored for AdHawk MindLink and SeeTrue STONE recordings
@@ -78,21 +78,21 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
     # do the actual import/pre-process
     match device:
         case EyeTracker.AdHawk_MindLink:
-            rec_info = adhawk_mindlink(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, cam_cal_file=cam_cal_file)
+            rec_info = adhawk_mindlink(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, cam_cal_file=cam_cal_file, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Pupil_Core:
-            rec_info = pupil_core(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
+            rec_info = pupil_core(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Pupil_Invisible:
-            rec_info = pupil_invisible(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
+            rec_info = pupil_invisible(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Pupil_Neon:
-            rec_info = pupil_neon(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
+            rec_info = pupil_neon(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.SeeTrue_STONE:
-            rec_info = SeeTrue_STONE(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, cam_cal_file=cam_cal_file)
+            rec_info = SeeTrue_STONE(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, cam_cal_file=cam_cal_file, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.SMI_ETG:
-            rec_info = SMI_ETG(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
+            rec_info = SMI_ETG(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Tobii_Glasses_2:
-            rec_info = tobii_G2(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
+            rec_info = tobii_G2(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Tobii_Glasses_3:
-            rec_info = tobii_G3(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video)
+            rec_info = tobii_G3(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
 
     return rec_info
 
@@ -152,7 +152,7 @@ def check_device(device: str|EyeTracker, rec_info: Recording):
             device = eyetracker.string_to_enum(rec_info.eye_tracker)
     return device, rec_info
 
-def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame, frame_ts: pd.DataFrame, rec_info: Recording, gaze_fname = 'gazeData.tsv', frame_ts_fname = 'frameTimestamps.tsv', rec_info_fname = Recording.default_json_file_name):
+def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame, frame_ts: pd.DataFrame, rec_info: Recording, gaze_fname = 'gazeData.tsv', frame_ts_fname = 'frameTimestamps.tsv', rec_info_fname = Recording.default_json_file_name, source_dir_as_relative_path = False):
     # write the gaze data to a csv file (polars as that library saves to file waaay faster)
     pl.from_pandas(gaze).write_csv(output_dir / gaze_fname, separator='\t', null_value='nan', float_precision=8)
 
@@ -160,6 +160,8 @@ def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame, frame_ts: pd.DataF
     pl.from_pandas(frame_ts).write_csv(output_dir / frame_ts_fname, separator='\t', float_precision=8)
 
     # store rec info
+    if source_dir_as_relative_path:
+        rec_info.source_directory = pathlib.Path(os.path.relpath(rec_info.source_directory,output_dir))
     rec_info.store_as_json(output_dir / rec_info_fname)
 
 

@@ -19,7 +19,7 @@ from ..eyetracker import EyeTracker
 from .. import video_utils
 
 
-def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, cam_cal_file: str|pathlib.Path=None, copy_scene_video = True) -> Recording:
+def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, cam_cal_file: str|pathlib.Path=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from . import check_folders, _store_data
     # NB: copy_scene_video input argument is ignored, SeeTrue recordings must be transcoded with ffmpeg to be useful
 
@@ -61,7 +61,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
         getCameraHardcoded(output_dir)
 
 
-    _store_data(output_dir, gazeDf, frameTimestamps, rec_info)
+    _store_data(output_dir, gazeDf, frameTimestamps, rec_info, source_dir_as_relative_path=source_dir_as_relative_path)
 
     return rec_info
 

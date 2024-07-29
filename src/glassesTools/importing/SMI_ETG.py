@@ -27,7 +27,7 @@ from ..eyetracker import EyeTracker
 from .. import video_utils
 
 
-def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True) -> Recording:
+def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from . import check_folders, _store_data
     """
     Run all preprocessing steps on SMI data and store in output_dir
@@ -63,7 +63,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
     print('  Prepping gaze data...')
     gazeDf, frameTimestamps = formatGazeData(source_dir, rec_info, sceneVideoDimensions)
 
-    _store_data(output_dir, gazeDf, frameTimestamps, rec_info)
+    _store_data(output_dir, gazeDf, frameTimestamps, rec_info, source_dir_as_relative_path=source_dir_as_relative_path)
 
     return rec_info
 

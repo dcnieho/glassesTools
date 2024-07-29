@@ -51,7 +51,10 @@ class Recording:
     def get_scene_video_path(self):
         vid = self.working_directory / self.scene_video_file
         if not vid.is_file():
-            vid = self.source_directory / self.scene_video_file
+            if not self.source_directory.is_absolute():
+                vid = (self.working_directory / self.source_directory / self.scene_video_file).resolve()
+            else:
+                vid = self.source_directory / self.scene_video_file
         return vid
 
 

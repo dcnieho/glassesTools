@@ -27,7 +27,7 @@ from ..eyetracker import EyeTracker
 from .. import timestamps, video_utils
 
 
-def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True) -> Recording:
+def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from . import check_folders, _store_data
     """
     Run all preprocessing steps on tobii data and store in output_dir
@@ -64,7 +64,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
     print('  Prepping gaze data...')
     gazeDf, frameTimestamps = formatGazeData(output_dir, sceneVideoDimensions, rec_info)
 
-    _store_data(output_dir, gazeDf, frameTimestamps, rec_info)
+    _store_data(output_dir, gazeDf, frameTimestamps, rec_info, source_dir_as_relative_path=source_dir_as_relative_path)
 
     return rec_info
 
