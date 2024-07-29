@@ -2,6 +2,7 @@
 import pathlib
 import os
 import pandas as pd
+import polars as pl
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
@@ -152,11 +153,11 @@ def check_device(device: str|EyeTracker, rec_info: Recording):
     return device, rec_info
 
 def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame, frame_ts: pd.DataFrame, rec_info: Recording, gaze_fname = 'gazeData.tsv', frame_ts_fname = 'frameTimestamps.tsv', rec_info_fname = Recording.default_json_file_name):
-    # write the gaze data to a csv file
-    gaze.to_csv(output_dir / gaze_fname, sep='\t', na_rep='nan', float_format="%.8f")
+    # write the gaze data to a csv file (polars as that library saves to file waaay faster)
+    pl.from_pandas(gaze).write_csv(output_dir / gaze_fname, separator='\t', null_value='nan', float_precision=8)
 
     # also store frame timestamps
-    frame_ts.to_csv(output_dir / frame_ts_fname, sep='\t', float_format="%.8f")
+    pl.from_pandas(frame_ts).write_csv(output_dir / frame_ts_fname, separator='\t', float_precision=8)
 
     # store rec info
     rec_info.store_as_json(output_dir / rec_info_fname)
