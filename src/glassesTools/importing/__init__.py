@@ -162,6 +162,10 @@ def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame, frame_ts: pd.DataF
     # store rec info
     if source_dir_as_relative_path:
         rec_info.source_directory = pathlib.Path(os.path.relpath(rec_info.source_directory,output_dir))
+    # if duration not known, fill it
+    if not rec_info.duration:
+        # make a reasonable estimate of duration
+        rec_info.duration = round(max(gaze.index[-1]-gaze.index[0],frame_ts.timestamp.iat[-1]))
     rec_info.store_as_json(output_dir / rec_info_fname)
 
 
