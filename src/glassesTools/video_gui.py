@@ -160,7 +160,8 @@ class GUI:
             return w_id
 
     def delete_window(self, window_id: int):
-        assert window_id!=0, 'It is not possible to delete the main window'
+        if window_id==0:
+            raise ValueError('It is not possible to delete the main window')
         with self._windows_lock:
             self._windows.pop(window_id)
             self._not_shown_yet.pop(window_id)
@@ -193,7 +194,8 @@ class GUI:
         self._buttons.pop(d_key, None)
         if add: # NB: nothing to do for remove, already removed
             if action==Action.Annotate_Make:
-                assert event is not None, f'Cannot set an annotate action without a provided event'
+                if event is None:
+                    raise ValueError(f'Cannot set an annotate action without a provided event')
                 lbl = event.value
                 tooltip = self._annotate_tooltips[event]
                 key = self._annotate_shortcut_key_map[event]
@@ -215,7 +217,8 @@ class GUI:
     def set_timecode_position(self, position, window_id:int = None):
         if window_id is None:
             window_id = self._get_main_window_id()
-        assert position in ['l','r'], f"For position, only 'l' and 'r' are understood, not '{position}'"
+        if position not in ['l','r']:
+            raise ValueError(f"For position, only 'l' and 'r' are understood, not '{position}'")
         self._window_timecode_pos[window_id] = position
     def set_show_play_percentage(self, show_play_percentage: bool, window_id:int = None):
         if window_id is None:

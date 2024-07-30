@@ -214,7 +214,8 @@ class PoseEstimator:
             self.gui.stop()
 
     def add_plane(self, plane: str, planes_setup: dict[str], processing_intervals: list[int]|list[list[int]] = None):
-        assert plane not in self.planes, f'Cannot register the plane "{plane}", it is already registered'
+        if plane in self.planes:
+            raise ValueError(f'Cannot register the plane "{plane}", it is already registered')
         self.planes.append(plane)
         self.plane_setups[plane] = planes_setup
         self.plane_proc_intervals[plane] = processing_intervals
@@ -232,8 +233,10 @@ class PoseEstimator:
         self._single_detect_pass = len(self.planes)>1 and len(aruco_dicts)==len(self.planes) and len(set(aruco_dicts))==1 and all([self.plane_setups[self.planes[0]]['aruco_params']==self.plane_setups[p]['aruco_params'] for p in self.planes])
 
     def add_individual_marker(self, marker_id: int, marker_setup):
-        assert self._single_detect_pass or len(self.planes)==1, "Detecting and reporting individual markers is only supported when there is a single plane, or all planes have identical ArUco setup"
-        assert marker_id not in self.individual_markers, f'Cannot register the individual marker with id {marker_id}, it is already registered'
+        if not self._single_detect_pass and len(self.planes)!=1:
+            raise ValueError("Detecting and reporting individual markers is only supported when there is a single plane, or all planes have identical ArUco setup")
+        if marker_id in self.individual_markers:
+            raise ValueError(f'Cannot register the individual marker with id {marker_id}, it is already registered')
         self.individual_markers[marker_id] = marker_setup
         marker_size = self.individual_markers[marker_id]['marker_size']
         self._individual_marker_object_points[marker_id] = np.array([[-marker_size/2,  marker_size/2, 0],
@@ -248,7 +251,8 @@ class PoseEstimator:
                                       processing_intervals: list[int]|list[list[int]],
                                       func_parameters: dict[str],
                                       visualizer: Callable[[np.ndarray, Any], None]):
-        assert name not in self.extra_proc_functions, f'Cannot register the extra processing function "{name}", it is already registered'
+        if name in self.extra_proc_functions:
+            raise ValueError(f'Cannot register the extra processing function "{name}", it is already registered')
         self.extra_proc_functions[name] = func
         self.extra_proc_intervals[name] = processing_intervals
         self.extra_proc_parameters[name]= func_parameters

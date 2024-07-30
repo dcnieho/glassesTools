@@ -68,7 +68,8 @@ class Plane:
     def get_ref_image(self, im_size: int=None, as_RGB=False) -> np.ndarray:
         if im_size is None:
             im_size = self._ref_image_size
-        assert isinstance(im_size,int), f'width input should be an int, not {type(im_size)}'
+        if not isinstance(im_size,int):
+            raise TypeError(f'width input should be an int, not {type(im_size)}')
         # check we have the image, if not, add to cache
         if im_size not in self._ref_image_cache:
             scale = float(im_size)/self._ref_image_size
@@ -98,7 +99,8 @@ class Plane:
             marker_pos = markers
         else:
             marker_pos = data_files.read_coord_file(markers, package_to_read_from)
-        assert marker_pos is not None, f"No markers could be read from the file {markers}, check it exists and contains markers"
+        if marker_pos is None:
+            raise RuntimeError(f"No markers could be read from the file {markers}, check it exists and contains markers")
 
         # turn into marker objects
         marker_pos.x *= marker_pos_scale_fac

@@ -23,7 +23,8 @@ def get_frame_timestamps_from_video(vid_file):
         boxes       = iso.Mp4File(str(vid_file))
         summary     = boxes.get_summary()
         vid_tracks  = [t for t in summary['track_list'] if t['media_type']=='video']
-        assert len(vid_tracks)==1, f"File has {len(vid_tracks)} video tracks (more than one), not supported"
+        if len(vid_tracks)!=1:
+            raise RuntimeError(f"File has {len(vid_tracks)} video tracks (more than one), not supported")
         # 1. find mdat box
         moov        = boxes.children[[i for i,x in enumerate(boxes.children) if x.type=='moov'][0]]
         # 2. get global/movie time scale
@@ -31,7 +32,8 @@ def get_frame_timestamps_from_video(vid_file):
         # 3. find video track boxes
         trak_idxs   = [i for i,x in enumerate(moov.children) if x.type=='trak']
         trak_idxs   = [x for i,x in enumerate(trak_idxs) if summary['track_list'][i]['media_type']=='video']
-        assert len(trak_idxs)==1
+        if len(trak_idxs)!=1:
+            raise RuntimeError(f"File has {len(vid_tracks)} video tracks (more than one), not supported")
         trak        = moov.children[trak_idxs[0]]
         # 4. get mdia box
         mdia        = trak.children[[i for i,x in enumerate(trak.children) if x.type=='mdia'][0]]

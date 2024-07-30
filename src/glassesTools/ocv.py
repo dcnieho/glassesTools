@@ -74,14 +74,16 @@ class CV2VideoReader:
     # NB: we seek by spooling, because I found seeking through setting cv2.CAP_PROP_POS_MSEC unreliable
     def read_frame(self, report_gap=False, wanted_frame_idx:int=None) -> tuple[bool, np.ndarray, int, float]:
         if wanted_frame_idx!=None:
-            assert wanted_frame_idx>=0 and wanted_frame_idx<self.nframes, f'wanted_frame_idx ({wanted_frame_idx}) out of bounds ([0-{self.nframes-1}])'
+            if wanted_frame_idx<0 or wanted_frame_idx>=self.nframes:
+                raise ValueError(f'wanted_frame_idx ({wanted_frame_idx}) out of bounds ([0-{self.nframes-1}])')
         else:
             wanted_frame_idx = self.frame_idx+1
 
         if self.frame_idx>wanted_frame_idx:
             warnings.warn(f'Requested frame ({wanted_frame_idx}) was earlier than current position of reader (frame {self.frame_idx}). Impossible to deliver because this video reader strictly advances forward. Returning last read frame', RuntimeWarning)
-            # this condition can only occur if we've already read something and thus have a cache, so this assert should never trigger
-            assert self._cache is not None, f'No cache, unexpected failure mode, contact developer'
+            # this condition can only occur if we've already read something and thus have a cache, so this check should never trigger
+            if self._cache is None:
+                raise RuntimeError(f'No cache, unexpected failure mode, contact developer')
             return self._cache
         elif self._cache is not None and self._cache[2]==wanted_frame_idx:
             return self._cache

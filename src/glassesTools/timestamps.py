@@ -60,7 +60,8 @@ class VideoTimestamps:
             case Type.Normal:
                 d = self.timestamp_dict
             case Type.Stretched:
-                assert self.has_stretched, 'stretched timestamps are not available for this video'
+                if not self.has_stretched:
+                    raise RuntimeError('stretched timestamps are not available for this video')
                 d = self.timestamp_stretched_dict
         if idx in d:
             return d[idx]
@@ -72,7 +73,8 @@ class VideoTimestamps:
             case Type.Normal:
                 timestamps = self.timestamps
             case Type.Stretched:
-                assert self.has_stretched, 'stretched timestamps are not available for this video'
+                if not self.has_stretched:
+                    raise RuntimeError('stretched timestamps are not available for this video')
                 timestamps = self.timestamps_stretched
 
         idx = bisect.bisect(timestamps, ts)
@@ -89,7 +91,8 @@ class VideoTimestamps:
             case Type.Normal:
                 timestamps = self.timestamps
             case Type.Stretched:
-                assert self.has_stretched, 'stretched timestamps are not available for this video'
+                if not self.has_stretched:
+                    raise RuntimeError('stretched timestamps are not available for this video')
                 timestamps = self.timestamps_stretched
         return self.indices[-1], timestamps[-1]
 
@@ -100,7 +103,8 @@ class VideoTimestamps:
                     self._ifi = np.mean(np.diff(self.timestamps))
                 return self._ifi
             case Type.Stretched:
-                assert self.has_stretched, 'stretched timestamps are not available for this video'
+                if not self.has_stretched:
+                    raise RuntimeError('stretched timestamps are not available for this video')
                 if self._ifi_stretched is None:
                     self._ifi_stretched = np.mean(np.diff(self.timestamps_stretched))
                 return self._ifi_stretched

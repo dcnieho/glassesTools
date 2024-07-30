@@ -117,7 +117,8 @@ def read_file(file_name              : str|pathlib.Path,
                 df['timestamp'] = df[_get_col_name_with_suffix('timestamp',suf)]
             copied = True
             break
-        assert copied, "None of the specified suffixes were found, can't continue"
+        if not copied:
+            raise ValueError("None of the specified suffixes were found, can't continue")
 
     if as_list_dict:
         obj_list = [object(**kwargs) for kwargs in df.to_dict(orient='records')]
