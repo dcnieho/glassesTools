@@ -14,17 +14,17 @@ from .SMI_ETG import preprocessData as SMI_ETG
 from .tobii_G2 import preprocessData as tobii_G2
 from .tobii_G3 import preprocessData as tobii_G3
 
-def pupil_core(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True) -> Recording:
+def pupil_core(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from .pupilLabs import preprocessData
-    return preprocessData(output_dir, 'Pupil Core', source_dir, rec_info, copy_scene_video)
+    return preprocessData(output_dir, EyeTracker.Pupil_Core, source_dir, rec_info, copy_scene_video, source_dir_as_relative_path)
 
-def pupil_invisible(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True) -> Recording:
+def pupil_invisible(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from .pupilLabs import preprocessData
-    return preprocessData(output_dir, 'Pupil Invisible', source_dir, rec_info, copy_scene_video)
+    return preprocessData(output_dir, EyeTracker.Pupil_Invisible, source_dir, rec_info, copy_scene_video, source_dir_as_relative_path)
 
-def pupil_neon(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True) -> Recording:
+def pupil_neon(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from .pupilLabs import preprocessData
-    return preprocessData(output_dir, 'Pupil Neon', source_dir, rec_info, copy_scene_video)
+    return preprocessData(output_dir, EyeTracker.Pupil_Neon, source_dir, rec_info, copy_scene_video, source_dir_as_relative_path)
 
 
 def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker) -> list[Recording]:
