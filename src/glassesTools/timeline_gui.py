@@ -1,4 +1,8 @@
-from imgui_bundle import imgui, hello_imgui, icons_fontawesome_6 as ifa6
+try:
+    from imgui_bundle import imgui, hello_imgui, icons_fontawesome_6 as ifa6
+except ImportError:
+    raise ImportError('imgui_bundle (or one of its dependencies) is not installed, GUI functionality is not available. You must install glassesTools with the [GUI] extra if you wish to use the GUI.')
+
 import math
 import numpy as np
 from typing import Any

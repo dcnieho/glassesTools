@@ -2,7 +2,7 @@ try:
     from imgui_bundle import imgui, implot, immapp, hello_imgui, glfw_utils
     import glfw
 except ImportError:
-    raise ImportError('imgui_bundle (or one of its dependencies) is not installed, GUI functionality is not available')
+    raise ImportError('imgui_bundle (or one of its dependencies) is not installed, GUI functionality is not available. You must install glassesTools with the [GUI] extra if you wish to use the GUI.')
 
 import threading
 import numpy as np
