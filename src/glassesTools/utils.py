@@ -3,6 +3,7 @@ import json
 import pathlib
 import dataclasses
 import typing
+import types
 import numpy as np
 import os
 import colorsys
@@ -91,3 +92,9 @@ def fast_scandir(dirname):
     for dirname in list(subfolders):
         subfolders.extend(fast_scandir(dirname))
     return subfolders
+
+def unpack_none_union(annotation):
+    if isinstance(annotation,types.UnionType) and (args:=typing.get_args(annotation))[-1]==types.NoneType:
+        return typing.Union[args[:-1]]
+    else:
+        return annotation
