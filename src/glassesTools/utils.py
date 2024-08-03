@@ -65,6 +65,7 @@ CUSTOM_TYPE_REGISTRY = []
 def register_type(entry: CustomTypeEntry):
     CUSTOM_TYPE_REGISTRY.append(entry)
 register_type(CustomTypeEntry(pathlib.Path,'pathlib.Path',str,lambda x: pathlib.Path(x)))
+register_type(CustomTypeEntry(set,'builtin.set',list,lambda x: set(x)))
 
 class CustomTypeEncoder(json.JSONEncoder):
     def default(self, obj):
