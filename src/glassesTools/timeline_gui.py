@@ -35,6 +35,10 @@ def color_brighten(color: imgui.ImColor, amount: float):
     return imgui.ImColor(1. - (1. - color.value.x) * amount, 1. - (1. - color.value.y) * amount,
                          1. - (1. - color.value.z) * amount, color.value.w)
 
+def color_darken(color: imgui.ImColor, amount: float):
+    amount = 1. / (1. + amount)
+    return imgui.ImColor(color.value.x * amount, color.value.y * amount, color.value.z * amount)
+
 
 class Timeline:
     def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[annotation.Event, list[int]] = None):
