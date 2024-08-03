@@ -3,9 +3,13 @@ import pandas as pd
 import cv2
 import pathlib
 import math
+import typing
 
 from . import data_files, drawing, marker, ocv
 
+class Coordinate(typing.NamedTuple):
+    x: float
+    y: float
 
 class Plane:
     default_ref_image_name = 'reference_image.png'
@@ -13,7 +17,7 @@ class Plane:
     def __init__(self,
                  markers                : str|pathlib.Path|pd.DataFrame,                            # if str or Path: file from which to read markers. Else direction N_markerx4 array. Should contain centers of markers
                  marker_size            : float,                                                    # in "unit" units
-                 plane_size             : tuple[float, float],                                      # in "unit" units
+                 plane_size             : Coordinate,                                               # in "unit" units
 
                  aruco_dict                                             = cv2.aruco.DICT_4X4_250,
                  marker_border_bits                                     = 1,
@@ -28,7 +32,7 @@ class Plane:
         # marker positions
         self.markers            : dict[int,marker.Marker]   = {}
         self.plane_size                                     = plane_size
-        self.bbox               : list[float]               = [0., 0., self.plane_size[0], self.plane_size[1]]
+        self.bbox               : list[float]               = [0., 0., self.plane_size.x, self.plane_size.y]
 
         # marker specs
         self.aruco_dict                                     = cv2.aruco.getPredefinedDictionary(aruco_dict)
@@ -54,16 +58,16 @@ class Plane:
         self._ref_image_size                                = ref_image_size
         self._ref_image_cache   : dict[int, np.ndarray]     = {ref_image_size: img}
 
-    def set_origin(self, origin: tuple[float, float]):
+    def set_origin(self, origin: Coordinate):
         # set origin of plane. Origin location is on current (not original) plane
-        # so set_origin([5., 0.]) three times in a row shifts the origin rightward by 15 units
+        # so set_origin((5., 0.)) three times in a row shifts the origin rightward by 15 units
         for i in self.markers:
             self.markers[i].shift(-np.array(origin))
 
-        self.bbox[0] -= origin[0]
-        self.bbox[2] -= origin[0]
-        self.bbox[1] -= origin[1]
-        self.bbox[3] -= origin[1]
+        self.bbox[0] -= origin.x
+        self.bbox[2] -= origin.x
+        self.bbox[1] -= origin.y
+        self.bbox[3] -= origin.y
 
     def get_ref_image(self, im_size: int=None, as_RGB=False) -> np.ndarray:
         if im_size is None:
