@@ -8,8 +8,8 @@ import typing
 from . import data_files, drawing, marker, ocv
 
 class Coordinate(typing.NamedTuple):
-    x: float
-    y: float
+    x: float = 0.
+    y: float = 0.
 
 class Plane:
     default_ref_image_name = 'reference_image.png'
