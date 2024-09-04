@@ -19,8 +19,6 @@ def show_visualization(
     # open video
     video_ts        = timestamps.VideoTimestamps(frame_timestamp_file)
     cap             = ocv.CV2VideoReader(in_video, video_ts.timestamps)
-    width           = cap.get_prop(cv2.CAP_PROP_FRAME_WIDTH)
-    height          = cap.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)
     cam_params      = ocv.CameraParams.read_from_file(camera_calibration_file)
 
     # flatten if needed
