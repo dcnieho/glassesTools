@@ -46,7 +46,7 @@ class ArUcoDetector():
     def _match_image_points(self, corners, ids):
         return self._board.matchImagePoints(corners, ids) # -> objP, imgP
 
-    def estimate_pose(self, corners, ids) -> tuple[int, np.ndarray, np.ndarray]:
+    def estimate_pose(self, corners, ids) -> tuple[int, np.ndarray, np.ndarray, float]:
         objP, imgP = self._match_image_points(corners, ids)
         return self._estimate_pose_impl(objP, imgP)
 
