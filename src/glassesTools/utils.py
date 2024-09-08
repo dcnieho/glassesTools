@@ -86,7 +86,7 @@ def cartesian_product(*arrays):
     return (np.stack(np.meshgrid(*arrays), axis=-1).reshape(-1, ndim))
 
 
-def fast_scandir(dirname):
+def fast_scandir(dirname) -> list[pathlib.Path]:
     if not dirname.is_dir():
         return []
     subfolders= [pathlib.Path(f.path) for f in os.scandir(dirname) if f.is_dir()]
