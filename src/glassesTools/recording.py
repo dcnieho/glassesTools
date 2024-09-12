@@ -40,7 +40,7 @@ class Recording:
             json.dump(to_dump, f, cls=utils.CustomTypeEncoder, indent=2)
 
     @staticmethod
-    def load_from_json(path: str | pathlib.Path):
+    def load_from_json(path: str | pathlib.Path) -> 'Recording':
         path = pathlib.Path(path)
         if path.is_dir():
             path /= Recording.default_json_file_name
@@ -48,7 +48,7 @@ class Recording:
             return Recording(**json.load(f, object_hook=utils.json_reconstitute), working_directory=path.parent)
 
 
-    def get_scene_video_path(self):
+    def get_scene_video_path(self) -> pathlib.Path:
         vid = self.working_directory / self.scene_video_file
         if not vid.is_file():
             if not self.source_directory.is_absolute():
@@ -58,7 +58,7 @@ class Recording:
         return vid
 
 
-def find_recordings(paths: list[pathlib.Path], eye_tracker: EyeTracker):
+def find_recordings(paths: list[pathlib.Path], eye_tracker: EyeTracker) -> list[Recording]:
     from . import importing
     all_recs = []
     for p in paths:
