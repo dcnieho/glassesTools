@@ -1,7 +1,7 @@
 import pathlib
-import cv2
 
-from . import annotation, drawing, gaze_headref, gaze_worldref, intervals, ocv, plane, timestamps, video_gui
+from .. import annotation, drawing, gaze_headref, gaze_worldref, intervals, ocv, plane, timestamps
+from . import video_player
 
 
 def show_visualization(
@@ -9,7 +9,7 @@ def show_visualization(
         planes: dict[str, plane.Plane], poses: dict[str, dict[int, plane.Pose]],
         head_gazes: dict[int, list[gaze_headref.Gaze]], plane_gazes: dict[str, dict[int, list[gaze_worldref.Gaze]]],
         annotations: dict[annotation.Event, list[list[int]]],
-        gui: video_gui.GUI, frame_win_id: int, show_planes: bool, show_only_intervals: bool, sub_pixel_fac: int
+        gui: video_player.GUI, frame_win_id: int, show_planes: bool, show_only_intervals: bool, sub_pixel_fac: int
     ):
     in_video                = pathlib.Path(in_video)
     frame_timestamp_file    = pathlib.Path(frame_timestamp_file)

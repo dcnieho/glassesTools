@@ -4,7 +4,8 @@ import pathlib
 from typing import Any, Callable
 from enum import Enum, auto
 
-from . import annotation, drawing, intervals, marker, ocv, plane, timestamps, video_gui
+from . import annotation, drawing, intervals, marker, ocv, plane, timestamps
+from .gui import video_player
 
 
 
@@ -194,17 +195,17 @@ class PoseEstimator:
         self.extra_proc_parameters  : dict[str]                                     = {}
         self.extra_proc_visualizer  : dict[str, Callable[[np.ndarray,Any], None]]   = {}
 
-        self.gui                    : video_gui.GUI = None
-        self.has_gui                                = False
+        self.gui                    : video_player.GUI  = None
+        self.has_gui                                    = False
 
-        self.do_visualize                           = False
-        self.sub_pixel_fac                          = 8
-        self.show_detected_markers                  = True
-        self.show_board_axes                        = True
-        self.show_individual_marker_axes            = True
-        self.show_sync_func_output                  = True
-        self.show_unexpected_markers                = True
-        self.show_rejected_markers                  = False
+        self.do_visualize                               = False
+        self.sub_pixel_fac                              = 8
+        self.show_detected_markers                      = True
+        self.show_board_axes                            = True
+        self.show_individual_marker_axes                = True
+        self.show_sync_func_output                      = True
+        self.show_unexpected_markers                    = True
+        self.show_rejected_markers                      = False
 
         self._first_frame       = True
         self._do_report_frames  = True
@@ -258,7 +259,7 @@ class PoseEstimator:
         self.extra_proc_parameters[name]= func_parameters
         self.extra_proc_visualizer[name]= visualizer
 
-    def attach_gui(self, gui: video_gui.GUI, episodes: dict[annotation.Event, list[int]] = None, window_id: int = None):
+    def attach_gui(self, gui: video_player.GUI, episodes: dict[annotation.Event, list[int]] = None, window_id: int = None):
         self.gui                    = gui
         self.has_gui                = self.gui is not None
         self.do_visualize           = self.has_gui

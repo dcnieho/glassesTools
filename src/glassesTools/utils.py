@@ -100,3 +100,23 @@ def unpack_none_union(annotation: typing.Type) -> tuple[typing.Type, bool]:
         return typing.Union[args[:-1]], True
     else:
         return annotation, False
+
+
+def set_all(inp: dict[int, bool], value, subset: list[int] = None, predicate: typing.Callable[[int], bool] = None):
+    if subset is None:
+        subset = (r for r in inp)
+    for r in subset:
+        if not predicate or predicate(r):
+            inp[r] = value
+
+
+def trim_str(text: str, length=None, till_newline=True, newline_ellipsis=False):
+    if text and till_newline:
+        temp = text.splitlines()
+        if temp:
+            text = temp[0]
+        if len(temp)>1 and newline_ellipsis:
+            text += '..'
+    if length:
+        text = (text[:length-2] + '..') if len(text) > length else text
+    return text

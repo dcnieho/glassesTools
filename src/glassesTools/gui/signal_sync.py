@@ -7,7 +7,8 @@ except ImportError:
 import threading
 import numpy as np
 
-from . import gaze_headref, video_gui
+from .. import gaze_headref
+from . import utils
 
 class TargetPos:
     def __init__(self, timestamp: float, frame_idx: int, cam_pos: np.ndarray):
@@ -128,8 +129,8 @@ class GUI:
         # check we should do some initializing (do this now, can't be done in post_init during the first frame)
         if self._should_init:
             win     = glfw_utils.glfw_window_hello_imgui()
-            w_bounds= video_gui.get_current_monitor(*glfw.get_window_pos(win))[1]
-            w_bounds= video_gui.adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
+            w_bounds= utils.get_current_monitor(*glfw.get_window_pos(win))[1]
+            w_bounds= utils.adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
             glfw.set_window_pos (win, *w_bounds.position)
             glfw.set_window_size(win, *w_bounds.size)
             self._should_init = False

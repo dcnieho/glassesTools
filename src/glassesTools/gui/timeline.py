@@ -8,7 +8,7 @@ import numpy as np
 from typing import Any
 from matplotlib import ticker
 
-from . import annotation, timestamps, utils
+from .. import annotation, timestamps, utils
 
 def _color_u32_replace_alpha(color: int, alpha: float) -> int:
     col = imgui.ImVec4(*imgui.get_style_color_vec4(color)) # make copy so we don't change the original!

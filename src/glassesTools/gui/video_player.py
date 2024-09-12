@@ -12,7 +12,8 @@ from enum import Enum, auto
 import dataclasses
 from typing import Any
 
-from . import annotation, intervals, platform, timeline_gui, timestamps, utils
+from .. import annotation, intervals, timestamps, utils
+from . import timeline, utils as gui_utils
 
 class Action(Enum):
     Back_Time       = auto()
@@ -130,7 +131,7 @@ class GUI:
         self._window_show_controls: dict[int,bool] = {}
         self._window_show_play_percentage: dict[int,bool] = {}
         self._window_sfac: dict[int,float] = {}
-        self._window_timeline: dict[int,timeline_gui.Timeline] = {}
+        self._window_timeline: dict[int,timeline.Timeline] = {}
         self._window_timecode_pos: dict[int,str] = {}
 
         self._buttons: dict[Action|tuple[Action,annotation.Event], Button] = {}
@@ -233,7 +234,7 @@ class GUI:
             window_id = self._get_main_window_id()
 
         if show_timeline:
-            self._window_timeline[window_id] = timeline_gui.Timeline(video_ts, annotations)
+            self._window_timeline[window_id] = timeline.Timeline(video_ts, annotations)
             self._window_timeline[window_id].set_allow_annotate(self._allow_annotate)
             self._window_timeline[window_id].set_allow_seek(self._allow_seek)
             self._window_timeline[window_id].set_allow_timeline_zoom(self._allow_timeline_zoom)
@@ -477,8 +478,8 @@ class GUI:
             tl_height = int(timeline_fixed_elements_height+tracks_height)
         if self._window_determine_size[w]:
             win     = glfw_utils.glfw_window_hello_imgui()
-            w_bounds= get_current_monitor(*glfw.get_window_pos(win))[1]
-            w_bounds= adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
+            w_bounds= gui_utils.get_current_monitor(*glfw.get_window_pos(win))[1]
+            w_bounds= gui_utils.adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
             w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_height]  # adjust for timeline
             img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz]))
             self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz)])
@@ -663,12 +664,12 @@ class GUI:
             if self._window_show_controls[w]:
                 if b.color is not None:
                     but_alphas = [imgui.get_style_color_vec4(b)[3] for b in [imgui.Col_.button, imgui.Col_.button_hovered, imgui.Col_.button_active]]
-                    imgui.push_style_color(imgui.Col_.button,         timeline_gui.color_replace_alpha(b.color,but_alphas[0]).value)
-                    imgui.push_style_color(imgui.Col_.button_hovered, timeline_gui.color_replace_alpha(timeline_gui.color_brighten(b.color, .15),but_alphas[1]).value)
-                    imgui.push_style_color(imgui.Col_.button_active,  timeline_gui.color_replace_alpha(timeline_gui.color_brighten(b.color, .9 ),but_alphas[2]).value)
+                    imgui.push_style_color(imgui.Col_.button,         timeline.color_replace_alpha(b.color,but_alphas[0]).value)
+                    imgui.push_style_color(imgui.Col_.button_hovered, timeline.color_replace_alpha(timeline.color_brighten(b.color, .15),but_alphas[1]).value)
+                    imgui.push_style_color(imgui.Col_.button_active,  timeline.color_replace_alpha(timeline.color_brighten(b.color, .9 ),but_alphas[2]).value)
                     text_contrast_ratio = 1 / 1.57
                     text_color = imgui.ImColor(imgui.get_style_color_vec4(imgui.Col_.text))
-                    imgui.push_style_color(imgui.Col_.text  ,         timeline_gui.color_adjust_contrast(text_color,text_contrast_ratio,b.color).value)
+                    imgui.push_style_color(imgui.Col_.text  ,         timeline.color_adjust_contrast(text_color,text_contrast_ratio,b.color).value)
                 activated = imgui.button(lbl, size=sz)
                 if b.color is not None:
                     imgui.pop_style_color(4)
@@ -717,57 +718,3 @@ class GUI:
             imgui.pop_style_var()
             imgui.end()
 
-def get_current_monitor(wx, wy, ww=None, wh=None):
-    # so we always return something sensible
-    monitor = glfw.get_primary_monitor()
-    bounds  = get_monitor_work_area(monitor)
-    bestoverlap = 0
-    for mon in glfw.get_monitors():
-        m_bounds = get_monitor_work_area(mon)
-
-        if ww is None or wh is None:
-            # check if monitor contains (wx,wy)
-            if m_bounds.contains([wx, wy]):
-                return mon, m_bounds
-        else:
-            # check overlap of window with monitor
-            mx = m_bounds.position[0]
-            my = m_bounds.position[0]
-            mw = m_bounds.size[0]
-            mh = m_bounds.size[1]
-            overlap = \
-                max(0, min(wx + ww, mx + mw) - max(wx, mx)) * \
-                max(0, min(wy + wh, my + mh) - max(wy, my))
-
-            if bestoverlap < overlap:
-                bestoverlap = overlap
-                monitor = mon
-                bounds = m_bounds
-
-    return monitor, bounds
-
-def get_monitor_work_area(monitor):
-    monitor_area = glfw.get_monitor_workarea(monitor)
-    return hello_imgui.ScreenBounds(monitor_area[:2], monitor_area[2:])
-
-def adjust_bounds_for_framesize(w_bounds, frame_size):
-    if platform.os==platform.Os.Windows:
-        pos = [
-            w_bounds.position[0],
-            w_bounds.position[1] + frame_size[1]
-        ]
-        size = [
-            w_bounds.size[0],
-            w_bounds.size[1] - frame_size[1]
-        ]
-    else:
-        pos = [
-            w_bounds.position[0] + frame_size[0],
-            w_bounds.position[1] + frame_size[1],
-        ]
-        size = [
-            w_bounds.size[0] - (frame_size[0]+frame_size[2]),
-            w_bounds.size[1] - (frame_size[1]+frame_size[3])
-        ]
-
-    return hello_imgui.ScreenBounds(pos, size)
