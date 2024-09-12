@@ -1,16 +1,13 @@
-try:
-    from imgui_bundle import imgui, immapp, hello_imgui, glfw_utils, icons_fontawesome_6 as ifa6
-    import glfw
-    import OpenGL.GL as gl
-except ImportError:
-    raise ImportError('imgui_bundle (or one of its dependencies) is not installed, GUI functionality is not available. You must install glassesTools with the [GUI] extra if you wish to use the GUI.')
-
 import threading
 import numpy as np
 import functools
 from enum import Enum, auto
 import dataclasses
 from typing import Any
+
+from imgui_bundle import imgui, immapp, hello_imgui, glfw_utils, icons_fontawesome_6 as ifa6
+import glfw
+import OpenGL.GL as gl
 
 from .. import annotation, intervals, timestamps, utils
 from . import timeline, utils as gui_utils

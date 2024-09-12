@@ -1,11 +1,10 @@
 import pathlib
 import typing
-from imgui_bundle import hello_imgui, imgui, icons_fontawesome_6 as ifa6, imspinner
 import sys
 import natsort
 import threading
 from dataclasses import dataclass
-from typing import Any, Callable
+from imgui_bundle import hello_imgui, imgui, icons_fontawesome_6 as ifa6, imspinner
 
 from .. import file_actions, file_action_provider as fap, utils
 from . import msg_box, utils as gui_utils
@@ -86,10 +85,10 @@ class FilePicker:
 
         self.allow_multiple = allow_multiple
         self._is_dir_picker = False
-        self.predicate_selectable: Callable[[int], bool] = None
+        self.predicate_selectable: typing.Callable[[int], bool] = None
         self.set_is_dir_picker(dir_picker)
         self._show_only_dirs = False
-        self.predicate_showable: Callable[[int], bool] = None
+        self.predicate_showable: typing.Callable[[int], bool] = None
         self.set_show_only_dirs(self._is_dir_picker)   # by default, a dir picker only shows dirs
 
         self.loc: pathlib.Path = None
@@ -98,7 +97,7 @@ class FilePicker:
         self.select_when_loaded: list[pathlib.Path] = None
         self.history: list[str|pathlib.Path] = []
         self.history_loc = -1
-        self.path_bar_popup: dict[str,Any] = {}
+        self.path_bar_popup: dict[str,typing.Any] = {}
         self.default_flags = custom_popup_flags or FilePicker.default_flags
         self.platform_is_windows = sys.platform.startswith("win")
 

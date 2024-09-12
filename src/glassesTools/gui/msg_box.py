@@ -1,6 +1,6 @@
 from typing import Callable
-from imgui_bundle import hello_imgui, imgui, icons_fontawesome_6 as ifa6
 from enum import Enum, auto
+from imgui_bundle import hello_imgui, imgui, icons_fontawesome_6 as ifa6
 
 from . import utils
 
