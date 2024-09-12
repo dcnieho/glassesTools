@@ -4,7 +4,7 @@ import cv2
 import pathlib
 import typing
 
-from . import data_files, drawing, gaze_headref, ocv, plane, transforms
+from . import data_files, drawing, gaze_headref, ocv, plane
 
 class Gaze:
     # description of tsv file used for storage
