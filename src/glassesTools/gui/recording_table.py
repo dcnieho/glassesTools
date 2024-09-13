@@ -32,20 +32,14 @@ class RecordingTable():
         extra_columns: list[ColumnSpec] = None,
         item_context_callback: typing.Callable[[int], bool] = None,
         empty_context_callback: typing.Callable[[],None] = None,
-        item_remove_callback: typing.Callable[[int], None] = None,
-        use_icons_fontawesome_6 = True
+        item_remove_callback: typing.Callable[[int], None] = None
         ):
 
         self.recordings = recordings
         self.selected_recordings = selected_recordings
 
         self._columns: list[ColumnSpec] = []
-        self.use_icons_fontawesome_6 = use_icons_fontawesome_6
-        if self.use_icons_fontawesome_6:
-            # using the glassesValidator font
-            col_names = "󰄵 Selector", "󰖠 Eye Tracker", "󰌖 Name", "󰀓 Participant", "󰨸 Project", "󰁫 Duration", "󱛡 Recording Start", "󰷎 Working Directory", "󰮟 Source Directory", "󰆙 Firmware Version", "󰁱 Glasses Serial", "󰁱 Recording Unit Serial", "󰆙 Recording Software Version", "󰁱 Scene Camera Serial"
-        else:
-            col_names = "󰄵 Selector", "󰖠 Eye Tracker", "󰌖 Name", "󰀓 Participant", "󰨸 Project", "󰁫 Duration", "󱛡 Recording Start", "󰷎 Working Directory", "󰮟 Source Directory", "󰆙 Firmware Version", "󰁱 Glasses Serial", "󰁱 Recording Unit Serial", "󰆙 Recording Software Version", "󰁱 Scene Camera Serial"
+        col_names = ifa6.ICON_FA_SQUARE_CHECK+" Selector", ifa6.ICON_FA_EYE+" Eye Tracker", ifa6.ICON_FA_SIGNATURE+" Name", ifa6.ICON_FA_USER_TIE+" Participant", ifa6.ICON_FA_CLIPBOARD+" Project", ifa6.ICON_FA_STOPWATCH+" Duration", ifa6.ICON_FA_CLOCK+" Recording Start", ifa6.ICON_FA_FOLDER+" Working Directory", ifa6.ICON_FA_FOLDER+" Source Directory", ifa6.ICON_FA_TAGS+" Firmware Version", ifa6.ICON_FA_BARCODE+" Glasses Serial", ifa6.ICON_FA_BARCODE+" Recording Unit Serial", ifa6.ICON_FA_TAGS+" Recording Software Version", ifa6.ICON_FA_BARCODE+" Scene Camera Serial"
         i_def_col = 0
         i_col = 0
         extra_columns_pos = [x.position for x in extra_columns] if extra_columns else []
@@ -254,8 +248,8 @@ class RecordingTable():
                         imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0.)
                         imgui.push_style_var(imgui.StyleVar_.frame_padding    , (0.,0.))
                         imgui.push_style_var(imgui.StyleVar_.item_spacing     , (0.,cell_padding_y))
-                        # make selectable completely transparen
                         if override_color:
+                            # make selectable completely transparent
                             imgui.push_style_color(imgui.Col_.header_active , (0., 0., 0., 0.))
                             imgui.push_style_color(imgui.Col_.header        , (0., 0., 0., 0.))
                             imgui.push_style_color(imgui.Col_.header_hovered, (0., 0., 0., 0.))
@@ -291,11 +285,7 @@ class RecordingTable():
                         checkbox_hovered = imgui.is_item_hovered()
                     elif self._columns[c_idx].header_lbl=="Name":
                         if self.item_remove_callback:
-                            if self.use_icons_fontawesome_6:
-                                icon = ifa6.ICON_FA_TRASH_CAN
-                            else:
-                                icon = '󰩺'
-                            if imgui.button(f"{icon}##{iid}_remove"):
+                            if imgui.button(ifa6.ICON_FA_TRASH_CAN+f"##{iid}_remove"):
                                 self.item_remove_callback(iid)
                                 self.require_sort = True
                             remove_button_hovered = imgui.is_item_hovered()
