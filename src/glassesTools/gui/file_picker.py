@@ -91,6 +91,9 @@ class FilePicker:
         self.predicate_showable: typing.Callable[[int], bool] = None
         self.set_show_only_dirs(self._is_dir_picker)   # by default, a dir picker only shows dirs
 
+        self.accent_color: tuple[float] = None
+        self.bg_color: tuple[float] = None
+
         self.loc: pathlib.Path = None
         self.refreshing = False
         self.new_loc = False
@@ -117,6 +120,10 @@ class FilePicker:
             self.predicate_showable = lambda iid: self.items[iid].is_dir
         else:
             self.predicate_showable = None
+
+    def set_draw_parameters(self, accent_color: tuple[float] = None, bg_color: tuple[float] = None):
+        self.accent_color = accent_color
+        self.bg_color = bg_color
 
     def _is_root(self, path: str|pathlib.Path):
         is_root = False
@@ -683,7 +690,7 @@ class FilePicker:
                 # Setup
                 checkbox_width = frame_height-2*imgui.get_style().frame_padding.y
                 if self.allow_multiple:
-                    imgui.table_setup_column("Selector", imgui.TableColumnFlags_.no_hide | imgui.TableColumnFlags_.no_sort | imgui.TableColumnFlags_.no_resize | imgui.TableColumnFlags_.no_reorder, init_width_or_weight=checkbox_width)  # 0
+                    imgui.table_setup_column("Selector", imgui.TableColumnFlags_.no_hide | imgui.TableColumnFlags_.no_sort | imgui.TableColumnFlags_.no_resize | imgui.TableColumnFlags_.no_reorder | imgui.TableColumnFlags_.no_header_label, init_width_or_weight=checkbox_width)  # 0
                 imgui.table_setup_column("Name", imgui.TableColumnFlags_.width_stretch | imgui.TableColumnFlags_.default_sort | imgui.TableColumnFlags_.no_hide)  # 1
                 imgui.table_setup_column("Date created", imgui.TableColumnFlags_.default_hide)  # 2
                 imgui.table_setup_column("Date modified")  # 3
@@ -696,11 +703,11 @@ class FilePicker:
                     self.sort_items(sort_specs)
 
                     # Headers
-                    imgui.table_next_row(imgui.TableRowFlags_.headers)
-                    # checkbox column: reflects whether all, some or none of visible recordings are selected, and allows selecting all or none
-                    num_selected = sum([self.selected[iid] for iid in self.selected])
+                    imgui.table_headers_row()
+                    # set up checkbox column: reflects whether all, some or none of visible items are selected, and allows selecting all or none
                     if self.allow_multiple:
                         imgui.table_set_column_index(0)
+                        num_selected = sum([self.selected[iid] for iid in self.selected])
                         # determine state
                         if self.predicate_selectable:
                             num_items = sum([self.predicate_selectable(iid) for iid in self.items])
@@ -725,12 +732,14 @@ class FilePicker:
                         if clicked:
                             utils.set_all(self.selected, new_state, subset=self.sorted_items, predicate=self.predicate_selectable)
 
-                    for i in range(5):
-                        imgui.table_set_column_index(i+self.allow_multiple)
-                        imgui.table_header(imgui.table_get_column_name(i+self.allow_multiple))
-
 
                     # Loop rows
+                    override_color = self.accent_color is not None and self.bg_color is not None
+                    if override_color:
+                        a=.4
+                        style_selected_row = (*tuple(a*x+(1-a)*y for x,y in zip(self.accent_color[:3],self.bg_color[:3])), 1.)
+                        a=.2
+                        style_hovered_row  = (*tuple(a*x+(1-a)*y for x,y in zip(self.accent_color[:3],self.bg_color[:3])), 1.)
                     any_selectable_clicked = False
                     new_loc = None
                     last_y = None
@@ -769,9 +778,21 @@ class FilePicker:
                                     imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0.)
                                     imgui.push_style_var(imgui.StyleVar_.frame_padding    , (0.,0.))
                                     imgui.push_style_var(imgui.StyleVar_.item_spacing     , (0.,cell_padding_y))
+                                    if override_color:
+                                        # make selectable completely transparent
+                                        imgui.push_style_color(imgui.Col_.header_active , (0., 0., 0., 0.))
+                                        imgui.push_style_color(imgui.Col_.header        , (0., 0., 0., 0.))
+                                        imgui.push_style_color(imgui.Col_.header_hovered, (0., 0., 0., 0.))
                                     selectable_clicked, selectable_out = imgui.selectable(f"##{iid}_hitbox", self.selected[iid], flags=imgui.SelectableFlags_.span_all_columns|imgui.SelectableFlags_.allow_overlap|imgui.internal.SelectableFlagsPrivate_.select_on_click, size=(0,frame_height+cell_padding_y))
-                                    imgui.set_cursor_pos_y(cur_pos_y)   # instead of imgui.same_line(), we just need this part of its effect
+                                    # instead override table row background color
+                                    if override_color:
+                                        if selectable_out:
+                                            imgui.table_set_bg_color(imgui.TableBgTarget_.row_bg0, imgui.color_convert_float4_to_u32(style_selected_row))
+                                        elif imgui.is_item_hovered():
+                                            imgui.table_set_bg_color(imgui.TableBgTarget_.row_bg0, imgui.color_convert_float4_to_u32(style_hovered_row))
+                                        imgui.pop_style_color(3)
                                     imgui.pop_style_var(3)
+                                    imgui.set_cursor_pos_y(cur_pos_y)   # instead of imgui.same_line(), we just need this part of its effect
                                     selectable_right_clicked, _ = gui_utils.handle_item_hitbox_events(iid, self.selected, context_menu=lambda _: self._item_context_menu([iid for iid in self.sorted_items if self.selected[iid]]) if has_context_menu else None)
                                     has_drawn_hitbox = True
 
