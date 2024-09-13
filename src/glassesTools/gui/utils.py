@@ -3,7 +3,7 @@ import functools
 import sys
 import traceback
 from typing import Any, Callable
-from imgui_bundle import imgui, hello_imgui
+from imgui_bundle import imgui, hello_imgui, icons_fontawesome_6 as ifa6
 import glfw
 
 from . import msg_box
