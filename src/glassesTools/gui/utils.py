@@ -20,7 +20,7 @@ def get_traceback(*exc_info: list):
 
 def draw_tooltip(hover_text):
     imgui.begin_tooltip()
-    imgui.push_text_wrap_pos(min(imgui.get_font_size() * 35, imgui.io.display_size.x))
+    imgui.push_text_wrap_pos(min(imgui.get_font_size() * 35, imgui.get_io().display_size.x))
     imgui.text_unformatted(hover_text)
     imgui.pop_text_wrap_pos()
     imgui.end_tooltip()
