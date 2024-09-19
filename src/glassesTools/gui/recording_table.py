@@ -202,7 +202,7 @@ class RecordingTable():
 
                     if multi_selected_state==0:
                         imgui.internal.push_item_flag(imgui.internal.ItemFlags_.mixed_value, True)
-                    clicked, new_state = imgui.checkbox(f"##header_checkbox{extra}", multi_selected_state==1, frame_size=(0,0), do_vertical_align=False)
+                    clicked, new_state = gui_utils.my_checkbox("##header_checkbox", multi_selected_state==1, frame_size=(0,0), do_vertical_align=False)
                     if multi_selected_state==0:
                         imgui.internal.pop_item_flag()
 
@@ -242,7 +242,7 @@ class RecordingTable():
                         # or checkbox on the row will still be correctly detected.
                         # this is super finicky, but works. The below together with using a height of frame_height+cell_padding_y
                         # makes the table row only cell_padding_y/2 longer. The whole row is highlighted correctly
-                        cell_padding_y = imgui.style.cell_padding.y
+                        cell_padding_y = imgui.get_style().cell_padding.y
                         cur_pos_y = imgui.get_cursor_pos_y()
                         imgui.set_cursor_pos_y(cur_pos_y - cell_padding_y/2)
                         imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0.)
@@ -270,8 +270,8 @@ class RecordingTable():
                     if num_columns_drawn==1:
                         # (Invisible) button because it aligns the following draw calls to center vertically
                         imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0.)
-                        imgui.push_style_var(imgui.StyleVar_.frame_padding    , (0.,imgui.style.frame_padding.y))
-                        imgui.push_style_var(imgui.StyleVar_.item_spacing     , (0.,imgui.style.item_spacing.y))
+                        imgui.push_style_var(imgui.StyleVar_.frame_padding    , (0.,imgui.get_style().frame_padding.y))
+                        imgui.push_style_var(imgui.StyleVar_.item_spacing     , (0.,imgui.get_style().item_spacing.y))
                         imgui.push_style_color(imgui.Col_.button, (0.,0.,0.,0.))
                         imgui.button(f"##{iid}_id", size=(imgui.FLT_MIN, 0))
                         imgui.pop_style_color()
@@ -281,7 +281,7 @@ class RecordingTable():
 
                     if c_idx==0:
                         # Selector
-                        checkbox_clicked, checkbox_out = imgui.checkbox(f"##{iid}_selected", self.selected_recordings[iid], frame_size=(0,0))
+                        checkbox_clicked, checkbox_out = gui_utils.my_checkbox(f"##{iid}_selected", self.selected_recordings[iid], frame_size=(0,0))
                         checkbox_hovered = imgui.is_item_hovered()
                     elif self._columns[c_idx].header_lbl=="Name":
                         if self.item_remove_callback:
@@ -313,11 +313,11 @@ class RecordingTable():
             # deselect all, and if right click, show popup
             # check mouse is below bottom of last drawn row so that clicking on the one pixel empty space between selectables
             # does not cause everything to unselect or popup to open
-            if imgui.is_item_clicked(imgui.MouseButton_.left) and not any_selectable_clicked and imgui.io.mouse_pos.y>last_y:  # NB: table header is not signalled by is_item_clicked(), so this works correctly
+            if imgui.is_item_clicked(imgui.MouseButton_.left) and not any_selectable_clicked and imgui.get_io().mouse_pos.y>last_y:  # NB: table header is not signalled by is_item_clicked(), so this works correctly
                 utils.set_all(self.selected_recordings, False)
 
             # show menu when right-clicking the empty space
-            if self.empty_context_callback and imgui.io.mouse_pos.y>last_y and imgui.begin_popup_context_item("##recording_list_context",popup_flags=imgui.PopupFlags_.mouse_button_right | imgui.PopupFlags_.no_open_over_existing_popup):
+            if self.empty_context_callback and imgui.get_io().mouse_pos.y>last_y and imgui.begin_popup_context_item("##recording_list_context",popup_flags=imgui.PopupFlags_.mouse_button_right | imgui.PopupFlags_.no_open_over_existing_popup):
                 utils.set_all(self.selected_recordings, False)  # deselect on right mouse click as well
                 self.empty_context_callback()
                 imgui.end_popup()
@@ -336,7 +336,7 @@ class RecordingTable():
             self._eye_tracker_label_width += 2 * x_padding
         if align:
             imgui.begin_group()
-            imgui.set_cursor_pos_y(imgui.get_cursor_pos_y() + imgui.style.frame_padding.y)
+            imgui.set_cursor_pos_y(imgui.get_cursor_pos_y() + imgui.get_style().frame_padding.y)
 
         # prep for drawing widget: determine its size and position and see if visible
         iid         = imgui.get_id(rec.eye_tracker.value)
@@ -348,9 +348,9 @@ class RecordingTable():
         # if visible
         if imgui.internal.item_add(bb, iid):
             # draw frame
-            imgui.internal.render_frame(bb.min, bb.max, imgui.color_convert_float4_to_u32(rec.eye_tracker.color), True, imgui.style.frame_rounding)
+            imgui.internal.render_frame(bb.min, bb.max, imgui.color_convert_float4_to_u32(rec.eye_tracker.color), True, imgui.get_style().frame_rounding)
             # draw text on top
-            imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), rec.eye_tracker.value, None, label_size, imgui.style.button_text_align, bb)
+            imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), rec.eye_tracker.value, None, label_size, imgui.get_style().button_text_align, bb)
 
         if align:
             imgui.end_group()
