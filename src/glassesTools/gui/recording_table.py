@@ -189,7 +189,7 @@ class RecordingTable():
                 imgui.table_set_column_index(c_idx)
                 if c_idx==0:  # checkbox column: reflects whether all, some or none of visible recordings are selected, and allows selecting all or none
                     # get state
-                    num_selected = sum([self.selected_recordings[id] for id in self.sorted_recordings_ids])
+                    num_selected = sum([self.selected_recordings[iid] for iid in self.sorted_recordings_ids])
                     if num_selected==0:
                         # none selected
                         multi_selected_state = -1
