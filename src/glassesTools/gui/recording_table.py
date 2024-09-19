@@ -339,7 +339,7 @@ class RecordingTable():
             imgui.set_cursor_pos_y(imgui.get_cursor_pos_y() + imgui.style.frame_padding.y)
 
         # prep for drawing widget: determine its size and position and see if visible
-        iid         = imgui.get_id(f"{rec.eye_tracker.value}##{rec.id}_type")
+        iid         = imgui.get_id(rec.eye_tracker.value)
         label_size  = imgui.calc_text_size(rec.eye_tracker.value)
         size        = imgui.ImVec2(self._eye_tracker_label_width, label_size.y)
         pos         = imgui.get_cursor_screen_pos()
