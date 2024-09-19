@@ -222,6 +222,12 @@ def my_checkbox(label: str, state: bool, frame_size: tuple=None, frame_padding_o
         imgui.pop_style_color(3)
     return result
 
+def my_combo(*args, **kwargs):
+    imgui.push_style_color(imgui.Col_.button, imgui.get_style().color_(imgui.Col_.button_hovered))
+    result = imgui.combo(*args, **kwargs)
+    imgui.pop_style_color()
+    return result
+
 
 def get_current_monitor(wx, wy, ww=None, wh=None):
     # so we always return something sensible
