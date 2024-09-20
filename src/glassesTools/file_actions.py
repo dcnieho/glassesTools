@@ -35,6 +35,7 @@ def _error_check_non0_is_error(result, func, args):
 def _error_check_0_is_error(result, func, args):
     if not result:
         raise ctypes.WinError(ctypes.get_last_error())
+    return result
 
 SHGFP_TYPE_CURRENT  = 0     # Get current, not default value
 CSIDL_DESKTOP       = 0
