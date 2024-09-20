@@ -28,7 +28,7 @@ class ColumnSpec(typing.NamedTuple):
 class RecordingTable():
     def __init__(self,
                  recordings: dict[int, recording.Recording],
-        selected_recordings: dict[int, bool],
+        selected_recordings: dict[int, bool]|None,
         extra_columns: list[ColumnSpec] = None,
         item_context_callback: typing.Callable[[int], bool] = None,
         empty_context_callback: typing.Callable[[],None] = None,
@@ -37,9 +37,15 @@ class RecordingTable():
 
         self.recordings = recordings
         self.selected_recordings = selected_recordings
+        self.has_selected_recordings = self.selected_recordings is not None
+        if not self.has_selected_recordings:
+            # make an internal one
+            self.selected_recordings = {i:False for i in self.recordings}
 
         self._columns: list[ColumnSpec] = []
-        col_names = ifa6.ICON_FA_SQUARE_CHECK+" Selector", ifa6.ICON_FA_EYE+" Eye Tracker", ifa6.ICON_FA_SIGNATURE+" Name", ifa6.ICON_FA_USER_TIE+" Participant", ifa6.ICON_FA_CLIPBOARD+" Project", ifa6.ICON_FA_STOPWATCH+" Duration", ifa6.ICON_FA_CLOCK+" Recording Start", ifa6.ICON_FA_FOLDER+" Working Directory", ifa6.ICON_FA_FOLDER+" Source Directory", ifa6.ICON_FA_TAGS+" Firmware Version", ifa6.ICON_FA_BARCODE+" Glasses Serial", ifa6.ICON_FA_BARCODE+" Recording Unit Serial", ifa6.ICON_FA_TAGS+" Recording Software Version", ifa6.ICON_FA_BARCODE+" Scene Camera Serial"
+        col_names = ifa6.ICON_FA_EYE+" Eye Tracker", ifa6.ICON_FA_SIGNATURE+" Name", ifa6.ICON_FA_USER_TIE+" Participant", ifa6.ICON_FA_CLIPBOARD+" Project", ifa6.ICON_FA_STOPWATCH+" Duration", ifa6.ICON_FA_CLOCK+" Recording Start", ifa6.ICON_FA_FOLDER+" Working Directory", ifa6.ICON_FA_FOLDER+" Source Directory", ifa6.ICON_FA_TAGS+" Firmware Version", ifa6.ICON_FA_BARCODE+" Glasses Serial", ifa6.ICON_FA_BARCODE+" Recording Unit Serial", ifa6.ICON_FA_TAGS+" Recording Software Version", ifa6.ICON_FA_BARCODE+" Scene Camera Serial"
+        if self.has_selected_recordings:
+            col_names = (ifa6.ICON_FA_SQUARE_CHECK+" Selector",)+col_names
         i_def_col = 0
         i_col = 0
         extra_columns_pos = [x.position for x in extra_columns] if extra_columns else []
@@ -159,6 +165,9 @@ class RecordingTable():
             if (num_recordings := len(self.recordings)) != self._num_recordings:
                 self._num_recordings = num_recordings
                 self.require_sort = True
+                if not self.has_selected_recordings:
+                    new_recs = set(self.recordings.keys())-set(self.selected_recordings.keys())
+                    self.selected_recordings |= {i:False for i in new_recs}
             frame_height = imgui.get_frame_height()
 
             # Setup
@@ -166,7 +175,7 @@ class RecordingTable():
             has_angled_headers = False
             for c_idx in range(len(self._columns)):
                 col = self._columns[c_idx]
-                if c_idx==0:
+                if c_idx==0 and self.has_selected_recordings:
                     imgui.table_setup_column(col.name, col.flags, init_width_or_weight=checkbox_width)
                 else:
                     imgui.table_setup_column(col.name, col.flags)
@@ -196,7 +205,7 @@ class RecordingTable():
             for c_idx in range(len(self._columns)):
                 if not imgui.table_set_column_index(c_idx):
                     continue
-                if c_idx==0:  # checkbox column: reflects whether all, some or none of visible recordings are selected, and allows selecting all or none
+                if c_idx==0 and self.has_selected_recordings:  # checkbox column: reflects whether all, some or none of visible recordings are selected, and allows selecting all or none
                     # get state
                     num_selected = sum([self.selected_recordings[iid] for iid in self.sorted_recordings_ids])
                     if num_selected==0:
@@ -291,7 +300,8 @@ class RecordingTable():
 
                         imgui.same_line()
 
-                    if c_idx==0:
+                    checkbox_clicked, checkbox_out = False, False
+                    if c_idx==0 and self.has_selected_recordings:
                         # Selector
                         checkbox_clicked, checkbox_out = gui_utils.my_checkbox(f"##{iid}_selected", self.selected_recordings[iid], frame_size=(0,0))
                         checkbox_hovered = imgui.is_item_hovered()
