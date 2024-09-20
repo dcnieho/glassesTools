@@ -268,6 +268,7 @@ class RecordingTable():
                 checkbox_clicked, checkbox_hovered, checkbox_out = False, False, False
                 remove_button_hovered = False
                 has_drawn_hitbox = False
+                should_remove_item = False
                 for c_idx in range(len(self._columns)):
                     if not (imgui.table_get_column_flags(c_idx) & imgui.TableColumnFlags_.is_enabled):
                         continue
@@ -323,14 +324,18 @@ class RecordingTable():
                     elif self._columns[c_idx].header_lbl=="Name":
                         if self.item_remove_callback:
                             if imgui.button(ifa6.ICON_FA_TRASH_CAN+f"##{iid}_remove"):
-                                self.item_remove_callback(iid)
-                                self.require_sort = True
+                                should_remove_item = True
                             remove_button_hovered = imgui.is_item_hovered()
                             imgui.same_line()
                         self.draw_recording_name_text(self.get_rec_fun(self.recordings[iid]), accent_color if style_color_recording_name else None)
                     else:
                         self._columns[c_idx].display_func(self.recordings[iid])
                     num_columns_drawn+=1
+
+                # handle item removal
+                if should_remove_item:
+                    self.item_remove_callback(iid)
+                    self.require_sort = True
 
                 # handle selection logic
                 # NB: the part of this logic that has to do with right-clicks is in handle_recording_hitbox_events()
