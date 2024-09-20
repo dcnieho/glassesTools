@@ -30,6 +30,7 @@ class RecordingTable():
                  recordings: dict[int, recording.Recording],
         selected_recordings: dict[int, bool]|None,
         extra_columns: list[ColumnSpec] = None,
+        get_rec_fun: typing.Callable[[typing.Any], recording.Recording] = None,
         item_context_callback: typing.Callable[[int], bool] = None,
         empty_context_callback: typing.Callable[[],None] = None,
         item_remove_callback: typing.Callable[[int], None] = None
@@ -48,6 +49,7 @@ class RecordingTable():
         self.item_context_callback  = item_context_callback
         self.empty_context_callback = empty_context_callback
         self.item_remove_callback   = item_remove_callback
+        self.get_rec_fun            = get_rec_fun if get_rec_fun else lambda rec: rec
 
         self.sorted_recordings_ids: list[int] = []
         self.last_clicked_id: int = None
@@ -105,47 +107,47 @@ class RecordingTable():
                 sort_key_func= None
             case "Eye Tracker":
                 flags = imgui.TableColumnFlags_.no_resize
-                display_func = lambda rec: self.draw_eye_tracker_widget(rec, align=True)
-                sort_key_func= lambda iid: self.recordings[iid].eye_tracker.value
+                display_func = lambda rec: self.draw_eye_tracker_widget(self.get_rec_fun(rec), align=True)
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).eye_tracker.value
             case "Name":
                 flags = imgui.TableColumnFlags_.default_sort | imgui.TableColumnFlags_.no_hide | imgui.TableColumnFlags_.no_resize
                 display_func = None # special case
-                sort_key_func= lambda iid: self.recordings[iid].name.lower()
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).name.lower()
             case "Participant":
                 flags = imgui.TableColumnFlags_.no_resize
-                display_func = lambda rec: imgui.text(rec.participant or "Unknown")
-                sort_key_func= lambda iid: self.recordings[iid].participant.lower()
+                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).participant or "Unknown")
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).participant.lower()
             case "Project":
-                display_func = lambda rec: imgui.text(rec.project or "Unknown")
-                sort_key_func= lambda iid: self.recordings[iid].project.lower()
+                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).project or "Unknown")
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).project.lower()
             case "Duration":
                 flags = imgui.TableColumnFlags_.no_resize
-                display_func = lambda rec: imgui.text("Unknown" if (d:=rec.duration) is None else str(datetime.timedelta(seconds=d//1000)))
-                sort_key_func= lambda iid: 0 if (d:=self.recordings[iid].duration) is None else d
+                display_func = lambda rec: imgui.text("Unknown" if (d:=self.get_rec_fun(rec).duration) is None else str(datetime.timedelta(seconds=d//1000)))
+                sort_key_func= lambda iid: 0 if (d:=self.get_rec_fun(self.recordings[iid]).duration) is None else d
             case "Recording Start":
-                display_func = lambda rec: imgui.text(rec.start_time.display or "Unknown")
-                sort_key_func= lambda iid: self.recordings[iid].start_time.value
+                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).start_time.display or "Unknown")
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).start_time.value
             case "Working Directory":
-                display_func = lambda rec: self.draw_working_directory(rec)
-                sort_key_func= lambda iid: self.recordings[iid].working_directory.name.lower()
+                display_func = lambda rec: self.draw_working_directory(self.get_rec_fun(rec))
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).working_directory.name.lower()
             case "Source Directory":
-                display_func = lambda rec: self.draw_source_directory(rec)
-                sort_key_func= lambda iid: str(self.recordings[iid].source_directory).lower()
+                display_func = lambda rec: self.draw_source_directory(self.get_rec_fun(rec))
+                sort_key_func= lambda iid: str(self.get_rec_fun(self.recordings[iid]).source_directory).lower()
             case "Firmware Version":
-                display_func = lambda rec: imgui.text(rec.firmware_version or "Unknown")
-                sort_key_func= lambda iid: self.recordings[iid].firmware_version.lower()
+                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).firmware_version or "Unknown")
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).firmware_version.lower()
             case "Glasses Serial":
-                display_func = lambda rec: imgui.text(rec.glasses_serial or "Unknown")
-                sort_key_func= lambda iid: self.recordings[iid].glasses_serial.lower()
+                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).glasses_serial or "Unknown")
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).glasses_serial.lower()
             case "Recording Unit Serial":
-                display_func = lambda rec: imgui.text(rec.recording_unit_serial or "Unknown")
-                sort_key_func= lambda iid: self.recordings[iid].recording_unit_serial.lower()
+                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).recording_unit_serial or "Unknown")
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).recording_unit_serial.lower()
             case "Recording Software Version":
-                display_func = lambda rec: imgui.text(rec.recording_software_version or "Unknown")
-                sort_key_func= lambda iid: self.recordings[iid].recording_software_version.lower()
+                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).recording_software_version or "Unknown")
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).recording_software_version.lower()
             case "Scene Camera Serial":
-                display_func = lambda rec: imgui.text(rec.scene_camera_serial or "Unknown")
-                sort_key_func= lambda iid: self.recordings[iid].scene_camera_serial.lower()
+                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).scene_camera_serial or "Unknown")
+                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).scene_camera_serial.lower()
             case _:
                 raise NotImplementedError()
 
@@ -261,7 +263,6 @@ class RecordingTable():
             for iid in self.sorted_recordings_ids:
                 imgui.table_next_row()
 
-                recording = self.recordings[iid]
                 num_columns_drawn = 0
                 selectable_clicked = False
                 checkbox_clicked, checkbox_hovered, checkbox_out = False, False, False
@@ -326,9 +327,9 @@ class RecordingTable():
                                 self.require_sort = True
                             remove_button_hovered = imgui.is_item_hovered()
                             imgui.same_line()
-                        self.draw_recording_name_text(recording, accent_color if style_color_recording_name else None)
+                        self.draw_recording_name_text(self.get_rec_fun(self.recordings[iid]), accent_color if style_color_recording_name else None)
                     else:
-                        self._columns[c_idx].display_func(recording)
+                        self._columns[c_idx].display_func(self.recordings[iid])
                     num_columns_drawn+=1
 
                 # handle selection logic
@@ -428,7 +429,7 @@ class RecordingTable():
             if self.filter_box_text:
                 search = self.filter_box_text.lower()
                 def key(iid):
-                    recording = self.recordings[iid]
+                    recording = self.get_rec_fun(self.recordings[iid])
                     return \
                         search in recording.eye_tracker.value.lower() or \
                         search in recording.name.lower() or \
