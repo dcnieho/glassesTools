@@ -165,10 +165,10 @@ class RecordingTable():
             checkbox_width = frame_height
             for c_idx in range(len(self._columns)):
                 col = self._columns[c_idx]
-                extra = {}
                 if c_idx==0:
-                    extra['init_width_or_weight'] = checkbox_width
-                imgui.table_setup_column(col.name, col.flags, **extra)
+                    imgui.table_setup_column(col.name, col.flags, init_width_or_weight=checkbox_width)
+                else:
+                    imgui.table_setup_column(col.name, col.flags)
 
             imgui.table_setup_scroll_freeze(1, 1)  # Sticky column headers and selector row
 
