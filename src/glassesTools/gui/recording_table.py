@@ -163,14 +163,20 @@ class RecordingTable():
 
             # Setup
             checkbox_width = frame_height
+            has_angled_headers = False
             for c_idx in range(len(self._columns)):
                 col = self._columns[c_idx]
                 if c_idx==0:
                     imgui.table_setup_column(col.name, col.flags, init_width_or_weight=checkbox_width)
                 else:
                     imgui.table_setup_column(col.name, col.flags)
+                has_angled_headers = has_angled_headers or (col.flags & imgui.TableColumnFlags_.angled_header)
 
-            imgui.table_setup_scroll_freeze(1, 1)  # Sticky column headers and selector row
+            # Sticky column headers and selector row
+            if has_angled_headers:
+                imgui.table_setup_scroll_freeze(1, 2)
+            else:
+                imgui.table_setup_scroll_freeze(1, 1)
 
             # Sorting
             sort_specs = imgui.table_get_sort_specs()
@@ -184,9 +190,12 @@ class RecordingTable():
                         self.selected_recordings[iid] = False
 
             # Headers
+            if has_angled_headers:
+                imgui.table_angled_headers_row()
             imgui.table_next_row(imgui.TableRowFlags_.headers)
             for c_idx in range(len(self._columns)):
-                imgui.table_set_column_index(c_idx)
+                if not imgui.table_set_column_index(c_idx):
+                    continue
                 if c_idx==0:  # checkbox column: reflects whether all, some or none of visible recordings are selected, and allows selecting all or none
                     # get state
                     num_selected = sum([self.selected_recordings[iid] for iid in self.sorted_recordings_ids])
@@ -209,7 +218,10 @@ class RecordingTable():
                     if clicked:
                         utils.set_all(self.selected_recordings, new_state, subset = self.sorted_recordings_ids)
                 else:
-                    imgui.table_header(self._columns[c_idx].header_lbl)
+                    column_name = self._columns[c_idx].header_lbl
+                    if imgui.table_get_column_flags(c_idx) & imgui.TableColumnFlags_.no_header_label:
+                        column_name = '##'+column_name
+                    imgui.table_header(column_name)
 
             # Loop rows
             override_color = accent_color is not None and bg_color is not None
