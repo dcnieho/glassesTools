@@ -43,25 +43,11 @@ class RecordingTable():
             self.selected_recordings = {i:False for i in self.recordings}
 
         self._columns: list[ColumnSpec] = []
-        col_names = ifa6.ICON_FA_EYE+" Eye Tracker", ifa6.ICON_FA_SIGNATURE+" Name", ifa6.ICON_FA_USER_TIE+" Participant", ifa6.ICON_FA_CLIPBOARD+" Project", ifa6.ICON_FA_STOPWATCH+" Duration", ifa6.ICON_FA_CLOCK+" Recording Start", ifa6.ICON_FA_FOLDER+" Working Directory", ifa6.ICON_FA_FOLDER+" Source Directory", ifa6.ICON_FA_TAGS+" Firmware Version", ifa6.ICON_FA_BARCODE+" Glasses Serial", ifa6.ICON_FA_BARCODE+" Recording Unit Serial", ifa6.ICON_FA_TAGS+" Recording Software Version", ifa6.ICON_FA_BARCODE+" Scene Camera Serial"
-        if self.has_selected_recordings:
-            col_names = (ifa6.ICON_FA_SQUARE_CHECK+" Selector",)+col_names
-        i_def_col = 0
-        i_col = 0
-        extra_columns_pos = [x.position for x in extra_columns] if extra_columns else []
-        while True:
-            if i_col in extra_columns_pos:
-                self._columns.append(extra_columns[extra_columns_pos.index(i_col)])
-            else:
-                if i_def_col>=len(col_names):
-                    break
-                self._columns.append(self._get_column(col_names[i_def_col], i_col))
-                i_def_col += 1
-            i_col += 1
+        self.build_columns(extra_columns)
 
-        self.item_context_callback: typing.Callable = item_context_callback
+        self.item_context_callback  = item_context_callback
         self.empty_context_callback = empty_context_callback
-        self.item_remove_callback: typing.Callable = item_remove_callback
+        self.item_remove_callback   = item_remove_callback
 
         self.sorted_recordings_ids: list[int] = []
         self.last_clicked_id: int = None
@@ -84,6 +70,29 @@ class RecordingTable():
             imgui.TableFlags_.no_host_extend_y |
             imgui.TableFlags_.no_borders_in_body_until_resize
         )
+
+    def build_columns(self, extra_columns: list[ColumnSpec] = None):
+        col_names = ifa6.ICON_FA_EYE+" Eye Tracker", ifa6.ICON_FA_SIGNATURE+" Name", ifa6.ICON_FA_USER_TIE+" Participant", ifa6.ICON_FA_CLIPBOARD+" Project", ifa6.ICON_FA_STOPWATCH+" Duration", ifa6.ICON_FA_CLOCK+" Recording Start", ifa6.ICON_FA_FOLDER+" Working Directory", ifa6.ICON_FA_FOLDER+" Source Directory", ifa6.ICON_FA_TAGS+" Firmware Version", ifa6.ICON_FA_BARCODE+" Glasses Serial", ifa6.ICON_FA_BARCODE+" Recording Unit Serial", ifa6.ICON_FA_TAGS+" Recording Software Version", ifa6.ICON_FA_BARCODE+" Scene Camera Serial"
+        if self.has_selected_recordings:
+            col_names = (ifa6.ICON_FA_SQUARE_CHECK+" Selector",)+col_names
+        i_def_col = 0
+        i_col = 0
+        extra_columns_pos = [x.position for x in extra_columns] if extra_columns else []
+        has_user_default_sort = False if extra_columns is None else any(((e.flags & imgui.TableColumnFlags_.default_sort) for e in extra_columns))
+        self._columns = []
+        while True:
+            if i_col in extra_columns_pos:
+                self._columns.append(extra_columns[extra_columns_pos.index(i_col)])
+            else:
+                if i_def_col>=len(col_names):
+                    break
+                col = self._get_column(col_names[i_def_col], i_col)
+                if has_user_default_sort:
+                    # ensure default sort is not set
+                    col = col._replace(flags=col.flags & ~imgui.TableColumnFlags_.default_sort)
+                self._columns.append(col)
+                i_def_col += 1
+            i_col += 1
 
     def _get_column(self, name: str, position: int):
         flags = imgui.TableColumnFlags_.default_hide | imgui.TableColumnFlags_.no_resize    # most columns use this one
