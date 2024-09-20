@@ -55,6 +55,8 @@ class RecordingTable():
         self.filters: list[Filter] = []
         self.filter_box_text: str = ""
 
+        self._last_y = None
+
         self._num_recordings = len(self.recordings)
         self._eye_tracker_label_width: float = None
         self.table_flags: int = (
@@ -165,11 +167,15 @@ class RecordingTable():
     def set_local_item_remover(self):
         self.item_remove_callback = self.remove_recording
 
-    def draw(self, accent_color: tuple[float] = None, bg_color: tuple[float] = None, style_color_recording_name: bool = False):
+    def draw(self, accent_color: tuple[float] = None, bg_color: tuple[float] = None, style_color_recording_name: bool = False, limit_outer_size: bool = False):
+        outer_size = imgui.ImVec2(0,0)
+        if limit_outer_size and self._last_y is not None:
+            outer_size.y = self._last_y+imgui.get_style().item_spacing.y
         if imgui.begin_table(
             f"##recording_list",
             columns=len(self._columns),
-            flags=self.table_flags
+            flags=self.table_flags,
+            outer_size=outer_size
         ):
             if (num_recordings := len(self.recordings)) != self._num_recordings:
                 self._num_recordings = num_recordings
@@ -336,18 +342,19 @@ class RecordingTable():
                     overlayed_clicked=checkbox_clicked, new_overlayed_state=checkbox_out
                     )
 
-            last_y = imgui.get_cursor_screen_pos().y
+            self._last_y = imgui.get_cursor_pos().y
+            last_cursor_y = imgui.get_cursor_screen_pos().y
             imgui.end_table()
 
             # handle click in table area outside header+contents:
             # deselect all, and if right click, show popup
             # check mouse is below bottom of last drawn row so that clicking on the one pixel empty space between selectables
             # does not cause everything to unselect or popup to open
-            if imgui.is_item_clicked(imgui.MouseButton_.left) and not any_selectable_clicked and imgui.get_io().mouse_pos.y>last_y:  # NB: table header is not signalled by is_item_clicked(), so this works correctly
+            if imgui.is_item_clicked(imgui.MouseButton_.left) and not any_selectable_clicked and imgui.get_io().mouse_pos.y>last_cursor_y:  # NB: table header is not signalled by is_item_clicked(), so this works correctly
                 utils.set_all(self.selected_recordings, False)
 
             # show menu when right-clicking the empty space
-            if self.empty_context_callback and imgui.get_io().mouse_pos.y>last_y and imgui.begin_popup_context_item("##recording_list_context",popup_flags=imgui.PopupFlags_.mouse_button_right | imgui.PopupFlags_.no_open_over_existing_popup):
+            if self.empty_context_callback and imgui.get_io().mouse_pos.y>last_cursor_y and imgui.begin_popup_context_item("##recording_list_context",popup_flags=imgui.PopupFlags_.mouse_button_right | imgui.PopupFlags_.no_open_over_existing_popup):
                 utils.set_all(self.selected_recordings, False)  # deselect on right mouse click as well
                 self.empty_context_callback()
                 imgui.end_popup()
