@@ -249,7 +249,7 @@ class RecordingTable():
                 recording = self.recordings[iid]
                 num_columns_drawn = 0
                 selectable_clicked = False
-                checkbox_clicked, checkbox_hovered = False, False
+                checkbox_clicked, checkbox_hovered, checkbox_out = False, False, False
                 remove_button_hovered = False
                 has_drawn_hitbox = False
                 for c_idx in range(len(self._columns)):
@@ -300,7 +300,6 @@ class RecordingTable():
 
                         imgui.same_line()
 
-                    checkbox_clicked, checkbox_out = False, False
                     if c_idx==0 and self.has_selected_recordings:
                         # Selector
                         checkbox_clicked, checkbox_out = gui_utils.my_checkbox(f"##{iid}_selected", self.selected_recordings[iid], frame_size=(0,0))
