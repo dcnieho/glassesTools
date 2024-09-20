@@ -23,7 +23,7 @@ class ColumnSpec(typing.NamedTuple):
     flags: int
     display_func:  typing.Callable[[recording.Recording],None]
     sort_key_func: typing.Callable[[int],typing.Any]
-    header_lbl: str|None=None   # if set, different string than name is used for the column header
+    header_lbl: str|None=None   # if set, different string than name is used for the column header. Works only for non-angled headers
 
 class RecordingTable():
     def __init__(self,
@@ -236,7 +236,7 @@ class RecordingTable():
                     if clicked:
                         utils.set_all(self.selected_recordings, new_state, subset = self.sorted_recordings_ids)
                 else:
-                    column_name = self._columns[c_idx].header_lbl
+                    column_name = self._columns[c_idx].header_lbl if self._columns[c_idx].header_lbl is not None else self._columns[c_idx].name
                     if imgui.table_get_column_flags(c_idx) & imgui.TableColumnFlags_.no_header_label:
                         column_name = '##'+column_name
                     imgui.table_header(column_name)
