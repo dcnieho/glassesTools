@@ -242,9 +242,9 @@ def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> tupl
     convert the livedata.json file to a pandas dataframe
     """
     # dicts to store sync points
-    vtsSync  = list()       # scene video timestamp sync
-    evtsSync = list()       # eye video timestamp sync (only if eye video was recorded)
-    df = pd.DataFrame()     # empty dataframe to write data to
+    vtsSync : list[tuple[int,int]]          = []    # scene video timestamp sync
+    evtsSync: list[tuple[int,int]]          = []    # eye video timestamp sync (only if eye video was recorded)
+    gazeData: dict[int, dict[str, float]]   = {}    # gaze data
 
     with open(jsonFile, 'r') as file:
         entries = json.loads('[' + file.read().replace('\n', ',')[:-1] + ']')
@@ -266,32 +266,37 @@ def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> tupl
             evtsSync.append((entry['ts'], entry['evts'] if not isError else math.nan))
             continue
 
-        # if this json object contains "eye" data (e.g. pupil info)
+        # contains eye or gaze position data
+        if not any((x in entry.keys() for x in ['eye', 'gp', 'gp3'])):
+            # ignore anything else
+            continue
+        if entry['ts'] not in gazeData:
+            gazeData[entry['ts']] = {}
+
         if 'eye' in entry.keys():
+            # this json object contains "eye" data (e.g. pupil info)
             which_eye = entry['eye'][:1]
             if 'pc' in entry.keys():
                 # origin of gaze vector is the pupil center
-                df.loc[entry['ts'], 'gaze_ori_'+which_eye+'_x'] = entry['pc'][0] if not isError else math.nan
-                df.loc[entry['ts'], 'gaze_ori_'+which_eye+'_y'] = entry['pc'][1] if not isError else math.nan
-                df.loc[entry['ts'], 'gaze_ori_'+which_eye+'_z'] = entry['pc'][2] if not isError else math.nan
+                gazeData[entry['ts']]['gaze_ori_'+which_eye+'_x'] = entry['pc'][0] if not isError else math.nan
+                gazeData[entry['ts']]['gaze_ori_'+which_eye+'_x'] = entry['pc'][0] if not isError else math.nan
+                gazeData[entry['ts']]['gaze_ori_'+which_eye+'_y'] = entry['pc'][1] if not isError else math.nan
+                gazeData[entry['ts']]['gaze_ori_'+which_eye+'_z'] = entry['pc'][2] if not isError else math.nan
             elif 'pd' in entry.keys():
-                df.loc[entry['ts'], 'pup_diam_'+which_eye] = entry['pd'] if not isError else math.nan
+                gazeData[entry['ts']]['pup_diam_'+which_eye] = entry['pd'] if not isError else math.nan
             elif 'gd' in entry.keys():
-                df.loc[entry['ts'], 'gaze_dir_'+which_eye+'_x'] = entry['gd'][0] if not isError else math.nan
-                df.loc[entry['ts'], 'gaze_dir_'+which_eye+'_y'] = entry['gd'][1] if not isError else math.nan
-                df.loc[entry['ts'], 'gaze_dir_'+which_eye+'_z'] = entry['gd'][2] if not isError else math.nan
+                gazeData[entry['ts']]['gaze_dir_'+which_eye+'_x'] = entry['gd'][0] if not isError else math.nan
+                gazeData[entry['ts']]['gaze_dir_'+which_eye+'_y'] = entry['gd'][1] if not isError else math.nan
+                gazeData[entry['ts']]['gaze_dir_'+which_eye+'_z'] = entry['gd'][2] if not isError else math.nan
 
         # otherwise it contains gaze position data
-        else:
-            if 'gp' in entry.keys():
-                df.loc[entry['ts'], 'gaze_pos_vid_x'] = entry['gp'][0]*sceneVideoDimensions[0] if not isError else math.nan
-                df.loc[entry['ts'], 'gaze_pos_vid_y'] = entry['gp'][1]*sceneVideoDimensions[1] if not isError else math.nan
-            elif 'gp3' in entry.keys():
-                df.loc[entry['ts'], 'gaze_pos_3d_x'] = entry['gp3'][0] if not isError else math.nan
-                df.loc[entry['ts'], 'gaze_pos_3d_y'] = entry['gp3'][1] if not isError else math.nan
-                df.loc[entry['ts'], 'gaze_pos_3d_z'] = entry['gp3'][2] if not isError else math.nan
-
-        # ignore anything else
+        elif 'gp' in entry.keys():
+            gazeData[entry['ts']]['gaze_pos_vid_x'] = entry['gp'][0]*sceneVideoDimensions[0] if not isError else math.nan
+            gazeData[entry['ts']]['gaze_pos_vid_y'] = entry['gp'][1]*sceneVideoDimensions[1] if not isError else math.nan
+        elif 'gp3' in entry.keys():
+            gazeData[entry['ts']]['gaze_pos_3d_x'] = entry['gp3'][0] if not isError else math.nan
+            gazeData[entry['ts']]['gaze_pos_3d_y'] = entry['gp3'][1] if not isError else math.nan
+            gazeData[entry['ts']]['gaze_pos_3d_z'] = entry['gp3'][2] if not isError else math.nan
 
     # find out t0. Do the same as GlassesViewer so timestamps are compatible
     # that is t0 is at timestamp of last video start (scene or eye)
@@ -305,7 +310,8 @@ def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> tupl
     # get timestamp offset for scene video
     scene_video_ts_offset = (t0s[0]-t0) / 1000.0
 
-    # convert timestamps from us to ms
+    # put gaze data into dataframe, convert timestamps from us to ms
+    df = pd.DataFrame.from_dict(gazeData, orient='index')
     df.index = (df.index - t0) / 1000.0
 
     # json no longer needed, remove
