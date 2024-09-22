@@ -154,10 +154,10 @@ def check_device(device: str|EyeTracker, rec_info: Recording):
 
 def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame, frame_ts: pd.DataFrame, rec_info: Recording, gaze_fname = 'gazeData.tsv', frame_ts_fname = 'frameTimestamps.tsv', rec_info_fname = Recording.default_json_file_name, source_dir_as_relative_path = False):
     # write the gaze data to a csv file (polars as that library saves to file waaay faster)
-    pl.from_pandas(gaze).write_csv(output_dir / gaze_fname, separator='\t', null_value='nan', float_precision=8)
+    pl.from_pandas(gaze,include_index=True).write_csv(output_dir / gaze_fname, separator='\t', null_value='nan', float_precision=8)
 
     # also store frame timestamps
-    pl.from_pandas(frame_ts).write_csv(output_dir / frame_ts_fname, separator='\t', float_precision=8)
+    pl.from_pandas(frame_ts,include_index=True).write_csv(output_dir / frame_ts_fname, separator='\t', float_precision=8)
 
     # store rec info
     if source_dir_as_relative_path:
