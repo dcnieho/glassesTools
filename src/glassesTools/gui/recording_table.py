@@ -43,13 +43,12 @@ class RecordingTable():
             # make an internal one
             self.selected_recordings = {i:False for i in self.recordings}
 
-        self._columns: list[ColumnSpec] = []
-        self.build_columns(extra_columns)
-
         self.item_context_callback  = item_context_callback
         self.empty_context_callback = empty_context_callback
         self.item_remove_callback   = item_remove_callback
-        self.get_rec_fun            = get_rec_fun if get_rec_fun else lambda rec: rec
+        self.get_rec_fun            = lambda rec: rec
+        if get_rec_fun is not None:
+            self.get_rec_fun        = get_rec_fun
 
         self.sorted_recordings_ids: list[int] = []
         self.last_clicked_id: int = None
@@ -58,6 +57,9 @@ class RecordingTable():
         self.filter_box_text: str = ""
 
         self._last_y = None
+
+        self._columns: list[ColumnSpec] = []
+        self.build_columns(extra_columns)
 
         self._num_recordings = len(self.recordings)
         self._eye_tracker_label_width: float = None
@@ -292,7 +294,7 @@ class RecordingTable():
                             imgui.push_style_color(imgui.Col_.header        , (0., 0., 0., 0.))
                             imgui.push_style_color(imgui.Col_.header_hovered, (0., 0., 0., 0.))
                         selectable_clicked, selectable_out = imgui.selectable(f"##{iid}_hitbox", self.selected_recordings[iid], flags=imgui.SelectableFlags_.span_all_columns|imgui.SelectableFlags_.allow_overlap|imgui.internal.SelectableFlagsPrivate_.select_on_click, size=(0,frame_height+cell_padding_y))
-                        # instead override table row background color
+                        # instead override table row background color, if wanted
                         if override_color:
                             if selectable_out:
                                 imgui.table_set_bg_color(imgui.TableBgTarget_.row_bg0, imgui.color_convert_float4_to_u32(style_selected_row))
