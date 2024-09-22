@@ -10,7 +10,7 @@ from .. import eyetracker, recording, utils
 
 @dataclasses.dataclass
 class Filter:
-    fun: typing.Callable[[recording.Recording], bool]
+    fun: typing.Callable[[int|str, recording.Recording], bool]
     invert = False
     id: int = dataclasses.field(init=False)
 
@@ -27,8 +27,8 @@ class ColumnSpec(typing.NamedTuple):
 
 class RecordingTable():
     def __init__(self,
-                 recordings: dict[int, recording.Recording],
-        selected_recordings: dict[int, bool]|None,
+                 recordings: dict[int|str, recording.Recording],
+        selected_recordings: dict[int|str, bool]|None,
         extra_columns: list[ColumnSpec] = None,
         get_rec_fun: typing.Callable[[typing.Any], recording.Recording] = None,
         item_context_callback: typing.Callable[[int], bool] = None,
@@ -41,7 +41,7 @@ class RecordingTable():
         self.has_selected_recordings = self.selected_recordings is not None
         if not self.has_selected_recordings:
             # make an internal one
-            self.selected_recordings = {i:False for i in self.recordings}
+            self.selected_recordings = {iid:False for iid in self.recordings}
 
         self.item_context_callback  = item_context_callback
         self.empty_context_callback = empty_context_callback
@@ -155,8 +155,8 @@ class RecordingTable():
 
         return ColumnSpec(position, name, flags, display_func, sort_key_func, name[2:])
 
-    def add_filter(self, filter):
-        self.filters.append(filter)
+    def add_filter(self, filt: Filter):
+        self.filters.append(filt)
         self.require_sort = True
 
     def remove_filter(self, iid):
@@ -186,7 +186,7 @@ class RecordingTable():
                 self.require_sort = True
                 if not self.has_selected_recordings:
                     new_recs = set(self.recordings.keys())-set(self.selected_recordings.keys())
-                    self.selected_recordings |= {i:False for i in new_recs}
+                    self.selected_recordings |= {iid:False for iid in new_recs}
             frame_height = imgui.get_frame_height()
 
             # Setup
@@ -367,7 +367,7 @@ class RecordingTable():
                 self.empty_context_callback()
                 imgui.end_popup()
 
-    def remove_recording(self, iid: int):
+    def remove_recording(self, iid: int|str):
         del self.recordings[iid]
         del self.selected_recordings[iid]
 
@@ -423,7 +423,7 @@ class RecordingTable():
 
     def sort_and_filter_recordings(self, sort_specs_in: imgui.TableSortSpecs):
         if sort_specs_in.specs_dirty or self.require_sort:
-            ids = list(self.recordings)
+            ids = list(self.recordings.keys())
             sort_specs = [sort_specs_in.get_specs(i) for i in range(sort_specs_in.specs_count)]
             for sort_spec in reversed(sort_specs):
                 key = self._columns[sort_spec.column_index].sort_key_func
