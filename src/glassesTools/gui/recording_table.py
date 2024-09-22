@@ -430,7 +430,7 @@ class RecordingTable():
                 ids.sort(key=key, reverse=sort_spec.get_sort_direction()==imgui.SortDirection.descending)
             self.sorted_recordings_ids = ids
             for flt in self.filters:
-                key = lambda iid: flt.invert != flt.fun(self.recordings[iid])
+                key = lambda iid: flt.invert != flt.fun(iid, self.recordings[iid])
                 if key is not None:
                     self.sorted_recordings_ids = list(filter(key, self.sorted_recordings_ids))
             if self.filter_box_text:
