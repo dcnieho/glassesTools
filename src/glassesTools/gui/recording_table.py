@@ -50,6 +50,9 @@ class RecordingTable():
         if get_rec_fun is not None:
             self.get_rec_fun        = get_rec_fun
 
+        self.is_drag_drop_source    = False
+        self.drag_drop_id           = None
+
         self.sorted_recordings_ids: list[int] = []
         self.last_clicked_id: int = None
         self.require_sort: bool = True
@@ -154,6 +157,9 @@ class RecordingTable():
                 raise NotImplementedError()
 
         return ColumnSpec(position, name, flags, display_func, sort_key_func, name[2:])
+
+    def set_act_as_drag_drop_source(self, enabled: bool):
+        self.is_drag_drop_source = enabled
 
     def add_filter(self, filt: Filter):
         self.filters.append(filt)
@@ -262,6 +268,7 @@ class RecordingTable():
             if self.sorted_recordings_ids and self.last_clicked_id not in self.sorted_recordings_ids:
                 # default to topmost if last_clicked unknown, or no longer on screen due to filter
                 self.last_clicked_id = self.sorted_recordings_ids[0]
+            submitted_drag_drop = False
             for iid in self.sorted_recordings_ids:
                 imgui.table_next_row()
 
@@ -302,6 +309,19 @@ class RecordingTable():
                                 imgui.table_set_bg_color(imgui.TableBgTarget_.row_bg0, imgui.color_convert_float4_to_u32(style_hovered_row))
                             imgui.pop_style_color(3)
                         imgui.pop_style_var(3)
+                        # act as drag/drop source, if wanted
+                        if self.is_drag_drop_source and imgui.begin_drag_drop_source(imgui.DragDropFlags_.payload_auto_expire):
+                            # Set payload to carry the index of our item (in python, the payload is an int)
+                            self.drag_drop_id = dd_id = iid
+                            if not isinstance(iid,int):
+                                dd_id = -1
+
+                            imgui.set_drag_drop_payload_py_id("RECORDING", dd_id)
+                            submitted_drag_drop = True
+                            # Display preview
+                            imgui.text(self.get_rec_fun(self.recordings[iid]).name)
+                            imgui.end_drag_drop_source()
+
                         imgui.set_cursor_pos_y(cur_pos_y)   # instead of imgui.same_line(), we just need this part of its effect
                         selectable_right_clicked, selectables_edited = gui_utils.handle_item_hitbox_events(iid, self.selected_recordings, self.item_context_callback)
                         self.require_sort |= selectables_edited
@@ -353,6 +373,9 @@ class RecordingTable():
             self._last_y = imgui.get_cursor_pos().y
             last_cursor_y = imgui.get_cursor_screen_pos().y
             imgui.end_table()
+
+            if not submitted_drag_drop:
+                self.drag_drop_id = None
 
             # handle click in table area outside header+contents:
             # deselect all, and if right click, show popup
