@@ -64,7 +64,6 @@ class RecordingTable():
         self._columns: list[ColumnSpec] = []
         self.build_columns(extra_columns)
 
-        self._num_recordings = len(self.recordings)
         self._eye_tracker_label_width: float = None
         self.table_flags: int = (
             imgui.TableFlags_.scroll_x |
@@ -187,11 +186,9 @@ class RecordingTable():
             flags=self.table_flags,
             outer_size=outer_size
         ):
-            if (num_recordings := len(self.recordings)) != self._num_recordings:
-                self._num_recordings = num_recordings
+            if (rs:=set(self.recordings.keys())) != (rss:= set(self.selected_recordings.keys())):
                 self.require_sort = True
-                if not self.has_selected_recordings:
-                    new_recs = set(self.recordings.keys())-set(self.selected_recordings.keys())
+                if not self.has_selected_recordings and (new_recs := rs-rss):
                     self.selected_recordings |= {iid:False for iid in new_recs}
             frame_height = imgui.get_frame_height()
 
