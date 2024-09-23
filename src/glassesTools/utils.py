@@ -106,7 +106,7 @@ def set_all(inp: dict[int, bool], value, subset: list[int] = None, predicate: ty
     if subset is None:
         subset = (r for r in inp)
     for r in subset:
-        if not predicate or predicate(r):
+        if r in inp and (not predicate or predicate(r)):
             inp[r] = value
 
 
