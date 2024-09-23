@@ -52,6 +52,7 @@ class RecordingTable:
         self.get_rec_fun            = lambda rec: rec
         if get_rec_fun is not None:
             self.get_rec_fun        = get_rec_fun
+        self.dont_show_empty        = False
 
         self.is_drag_drop_source    = False
         self.drag_drop_id           = None
@@ -180,6 +181,11 @@ class RecordingTable:
         self.item_remove_callback = self.remove_recording
 
     def draw(self, accent_color: tuple[float] = None, bg_color: tuple[float] = None, style_color_recording_name: bool = False, limit_outer_size: bool = False):
+        if self.dont_show_empty:
+            with self.recordings_lock:
+                if not self.recordings:
+                    imgui.text_wrapped('There are no recordings')
+                    return
         outer_size = imgui.ImVec2(0,0)
         if limit_outer_size and self._last_y is not None:
             outer_size.y = self._last_y+imgui.get_style().item_spacing.y
