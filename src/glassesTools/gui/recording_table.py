@@ -1,6 +1,7 @@
 import dataclasses
 import datetime
 import typing
+import threading
 from imgui_bundle import imgui, icons_fontawesome_6 as ifa6
 
 from . import utils as gui_utils
@@ -25,9 +26,10 @@ class ColumnSpec(typing.NamedTuple):
     sort_key_func: typing.Callable[[int],typing.Any]
     header_lbl: str|None=None   # if set, different string than name is used for the column header. Works only for non-angled headers
 
-class RecordingTable():
+class RecordingTable:
     def __init__(self,
                  recordings: dict[int|str, recording.Recording],
+            recordings_lock: threading.Lock,
         selected_recordings: dict[int|str, bool]|None,
         extra_columns: list[ColumnSpec] = None,
         get_rec_fun: typing.Callable[[typing.Any], recording.Recording] = None,
@@ -37,6 +39,7 @@ class RecordingTable():
         ):
 
         self.recordings = recordings
+        self.recordings_lock = recordings_lock
         self.selected_recordings = selected_recordings
         self.has_selected_recordings = self.selected_recordings is not None
         if not self.has_selected_recordings:
@@ -186,10 +189,6 @@ class RecordingTable():
             flags=self.table_flags,
             outer_size=outer_size
         ):
-            if (rs:=set(self.recordings.keys())) != (rss:= set(self.selected_recordings.keys())):
-                self.require_sort = True
-                if not self.has_selected_recordings and (new_recs := rs-rss):
-                    self.selected_recordings |= {iid:False for iid in new_recs}
             frame_height = imgui.get_frame_height()
 
             # Setup
@@ -208,187 +207,193 @@ class RecordingTable():
             n_col_freeze = 1 if self.has_selected_recordings else 0
             imgui.table_setup_scroll_freeze(n_col_freeze, n_row_freeze)
 
-            # Sorting
-            sort_specs = imgui.table_get_sort_specs()
-            sorted_recordings_ids_len = len(self.sorted_recordings_ids)
-            self.sort_and_filter_recordings(sort_specs)
-            if len(self.sorted_recordings_ids) < sorted_recordings_ids_len:
-                # we've just filtered out some recordings from view. Deselect those
-                # NB: will also be triggered when removing an item, doesn't matter
-                for iid in self.recordings:
-                    if iid not in self.sorted_recordings_ids:
-                        self.selected_recordings[iid] = False
-
-            # Headers
-            if has_angled_headers:
-                imgui.table_angled_headers_row()
-            imgui.table_next_row(imgui.TableRowFlags_.headers)
-            for c_idx in range(len(self._columns)):
-                if not imgui.table_set_column_index(c_idx):
-                    continue
-                if c_idx==0 and self.has_selected_recordings:  # checkbox column: reflects whether all, some or none of visible recordings are selected, and allows selecting all or none
-                    # get state
-                    num_selected = sum([self.selected_recordings[iid] for iid in self.sorted_recordings_ids])
-                    if num_selected==0:
-                        # none selected
-                        multi_selected_state = -1
-                    elif num_selected==len(self.sorted_recordings_ids):
-                        # all selected
-                        multi_selected_state = 1
-                    else:
-                        # some selected
-                        multi_selected_state = 0
-
-                    if multi_selected_state==0:
-                        imgui.internal.push_item_flag(imgui.internal.ItemFlags_.mixed_value, True)
-                    clicked, new_state = gui_utils.my_checkbox("##header_checkbox", multi_selected_state==1, frame_size=(0,0), do_vertical_align=False)
-                    if multi_selected_state==0:
-                        imgui.internal.pop_item_flag()
-
-                    if clicked:
-                        utils.set_all(self.selected_recordings, new_state, subset = self.sorted_recordings_ids)
-                else:
-                    column_name = self._columns[c_idx].header_lbl if self._columns[c_idx].header_lbl is not None else self._columns[c_idx].name
-                    if imgui.table_get_column_flags(c_idx) & imgui.TableColumnFlags_.no_header_label:
-                        column_name = '##'+column_name
-                    imgui.table_header(column_name)
-
-            # Loop rows
-            override_color = accent_color is not None and bg_color is not None
-            if override_color:
-                a=.4
-                style_selected_row = (*tuple(a*x+(1-a)*y for x,y in zip(accent_color[:3],bg_color[:3])), 1.)
-                a=.2
-                style_hovered_row  = (*tuple(a*x+(1-a)*y for x,y in zip(accent_color[:3],bg_color[:3])), 1.)
-            any_selectable_clicked = False
-            if self.sorted_recordings_ids and self.last_clicked_id not in self.sorted_recordings_ids:
-                # default to topmost if last_clicked unknown, or no longer on screen due to filter
-                self.last_clicked_id = self.sorted_recordings_ids[0]
-            submitted_drag_drop = False
-            for iid in self.sorted_recordings_ids:
-                imgui.table_next_row()
-
-                num_columns_drawn = 0
-                selectable_clicked = False
-                checkbox_clicked, checkbox_hovered, checkbox_out = False, False, False
-                remove_button_hovered = False
-                has_drawn_hitbox = False
-                should_remove_item = False
-                for c_idx in range(len(self._columns)):
-                    if not (imgui.table_get_column_flags(c_idx) & imgui.TableColumnFlags_.is_enabled):
-                        continue
-                    imgui.table_set_column_index(c_idx)
-
-                    # Row hitbox
-                    if not has_drawn_hitbox:
-                        # hitbox needs to be drawn before anything else on the row so that, together with imgui.set_item_allow_overlap(), hovering button
-                        # or checkbox on the row will still be correctly detected.
-                        # this is super finicky, but works. The below together with using a height of frame_height+cell_padding_y
-                        # makes the table row only cell_padding_y/2 longer. The whole row is highlighted correctly
-                        cell_padding_y = imgui.get_style().cell_padding.y
-                        cur_pos_y = imgui.get_cursor_pos_y()
-                        imgui.set_cursor_pos_y(cur_pos_y - cell_padding_y/2)
-                        imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0.)
-                        imgui.push_style_var(imgui.StyleVar_.frame_padding    , (0.,0.))
-                        imgui.push_style_var(imgui.StyleVar_.item_spacing     , (0.,cell_padding_y))
-                        if override_color:
-                            # make selectable completely transparent
-                            imgui.push_style_color(imgui.Col_.header_active , (0., 0., 0., 0.))
-                            imgui.push_style_color(imgui.Col_.header        , (0., 0., 0., 0.))
-                            imgui.push_style_color(imgui.Col_.header_hovered, (0., 0., 0., 0.))
-                        selectable_clicked, selectable_out = imgui.selectable(f"##{iid}_hitbox", self.selected_recordings[iid], flags=imgui.SelectableFlags_.span_all_columns|imgui.SelectableFlags_.allow_overlap|imgui.internal.SelectableFlagsPrivate_.select_on_click, size=(0,frame_height+cell_padding_y))
-                        # instead override table row background color, if wanted
-                        if override_color:
-                            if selectable_out:
-                                imgui.table_set_bg_color(imgui.TableBgTarget_.row_bg0, imgui.color_convert_float4_to_u32(style_selected_row))
-                            elif imgui.is_item_hovered():
-                                imgui.table_set_bg_color(imgui.TableBgTarget_.row_bg0, imgui.color_convert_float4_to_u32(style_hovered_row))
-                            imgui.pop_style_color(3)
-                        imgui.pop_style_var(3)
-                        # act as drag/drop source, if wanted
-                        if self.is_drag_drop_source and imgui.begin_drag_drop_source(imgui.DragDropFlags_.payload_auto_expire):
-                            # Set payload to carry the index of our item (in python, the payload is an int)
-                            self.drag_drop_id = dd_id = iid
-                            if not isinstance(iid,int):
-                                dd_id = -1
-
-                            imgui.set_drag_drop_payload_py_id("RECORDING", dd_id)
-                            submitted_drag_drop = True
-                            # Display preview
-                            imgui.text(self.get_rec_fun(self.recordings[iid]).name)
-                            imgui.end_drag_drop_source()
-
-                        imgui.set_cursor_pos_y(cur_pos_y)   # instead of imgui.same_line(), we just need this part of its effect
-                        selectable_right_clicked, selectables_edited = gui_utils.handle_item_hitbox_events(iid, self.selected_recordings, self.item_context_callback)
-                        self.require_sort |= selectables_edited
-                        has_drawn_hitbox = True
-
-                    if num_columns_drawn==1:
-                        # (Invisible) button because it aligns the following draw calls to center vertically
-                        imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0.)
-                        imgui.push_style_var(imgui.StyleVar_.frame_padding    , (0.,imgui.get_style().frame_padding.y))
-                        imgui.push_style_var(imgui.StyleVar_.item_spacing     , (0.,imgui.get_style().item_spacing.y))
-                        imgui.push_style_color(imgui.Col_.button, (0.,0.,0.,0.))
-                        imgui.button(f"##{iid}_id", size=(imgui.FLT_MIN, 0))
-                        imgui.pop_style_color()
-                        imgui.pop_style_var(3)
-
-                        imgui.same_line()
-
-                    if c_idx==0 and self.has_selected_recordings:
-                        # Selector
-                        checkbox_clicked, checkbox_out = gui_utils.my_checkbox(f"##{iid}_selected", self.selected_recordings[iid], frame_size=(0,0))
-                        checkbox_hovered = imgui.is_item_hovered()
-                    elif self._columns[c_idx].header_lbl=="Name":
-                        if self.item_remove_callback:
-                            if imgui.button(ifa6.ICON_FA_TRASH_CAN+f"##{iid}_remove"):
-                                should_remove_item = True
-                            remove_button_hovered = imgui.is_item_hovered()
-                            imgui.same_line()
-                        self.draw_recording_name_text(self.get_rec_fun(self.recordings[iid]), accent_color if style_color_recording_name else None)
-                    else:
-                        self._columns[c_idx].display_func(self.recordings[iid])
-                    num_columns_drawn+=1
-
-                # handle item removal
-                if should_remove_item:
-                    self.item_remove_callback(iid)
+            with self.recordings_lock:
+                if (rs:=set(self.recordings.keys())) != (rss:= set(self.selected_recordings.keys())) or rs!=set(self.sorted_recordings_ids):
                     self.require_sort = True
+                    if (new_recs := rs-rss):
+                        self.selected_recordings |= {iid:False for iid in new_recs}
 
-                # handle selection logic
-                # NB: the part of this logic that has to do with right-clicks is in handle_recording_hitbox_events()
-                # NB: any_selectable_clicked is just for handling clicks not on any recording
-                any_selectable_clicked = any_selectable_clicked or selectable_clicked or selectable_right_clicked
+                # Sorting
+                sort_specs = imgui.table_get_sort_specs()
+                sorted_recordings_ids_len = len(self.sorted_recordings_ids)
+                self.sort_and_filter_recordings(sort_specs)
+                if len(self.sorted_recordings_ids) < sorted_recordings_ids_len:
+                    # we've just filtered out some recordings from view. Deselect those
+                    # NB: will also be triggered when removing an item, doesn't matter
+                    for iid in self.recordings:
+                        if iid not in self.sorted_recordings_ids:
+                            self.selected_recordings[iid] = False
 
-                self.last_clicked_id = gui_utils.selectable_item_logic(
-                    iid, self.selected_recordings, self.last_clicked_id, self.sorted_recordings_ids,
-                    selectable_clicked, selectable_out, overlayed_hovered=checkbox_hovered or remove_button_hovered,
-                    overlayed_clicked=checkbox_clicked, new_overlayed_state=checkbox_out
-                    )
+                # Headers
+                if has_angled_headers:
+                    imgui.table_angled_headers_row()
+                imgui.table_next_row(imgui.TableRowFlags_.headers)
+                for c_idx in range(len(self._columns)):
+                    if not imgui.table_set_column_index(c_idx):
+                        continue
+                    if c_idx==0 and self.has_selected_recordings:  # checkbox column: reflects whether all, some or none of visible recordings are selected, and allows selecting all or none
+                        # get state
+                        num_selected = sum([self.selected_recordings[iid] for iid in self.sorted_recordings_ids])
+                        if num_selected==0:
+                            # none selected
+                            multi_selected_state = -1
+                        elif num_selected==len(self.sorted_recordings_ids):
+                            # all selected
+                            multi_selected_state = 1
+                        else:
+                            # some selected
+                            multi_selected_state = 0
 
-            self._last_y = imgui.get_cursor_pos().y
-            last_cursor_y = imgui.get_cursor_screen_pos().y
-            imgui.end_table()
+                        if multi_selected_state==0:
+                            imgui.internal.push_item_flag(imgui.internal.ItemFlags_.mixed_value, True)
+                        clicked, new_state = gui_utils.my_checkbox("##header_checkbox", multi_selected_state==1, frame_size=(0,0), do_vertical_align=False)
+                        if multi_selected_state==0:
+                            imgui.internal.pop_item_flag()
 
-            if not submitted_drag_drop:
-                self.drag_drop_id = None
+                        if clicked:
+                            utils.set_all(self.selected_recordings, new_state, subset = self.sorted_recordings_ids)
+                    else:
+                        column_name = self._columns[c_idx].header_lbl if self._columns[c_idx].header_lbl is not None else self._columns[c_idx].name
+                        if imgui.table_get_column_flags(c_idx) & imgui.TableColumnFlags_.no_header_label:
+                            column_name = '##'+column_name
+                        imgui.table_header(column_name)
 
-            # handle click in table area outside header+contents:
-            # deselect all, and if right click, show popup
-            # check mouse is below bottom of last drawn row so that clicking on the one pixel empty space between selectables
-            # does not cause everything to unselect or popup to open
-            if imgui.is_item_clicked(imgui.MouseButton_.left) and not any_selectable_clicked and imgui.get_io().mouse_pos.y>last_cursor_y:  # NB: table header is not signalled by is_item_clicked(), so this works correctly
-                utils.set_all(self.selected_recordings, False)
+                # Loop rows
+                override_color = accent_color is not None and bg_color is not None
+                if override_color:
+                    a=.4
+                    style_selected_row = (*tuple(a*x+(1-a)*y for x,y in zip(accent_color[:3],bg_color[:3])), 1.)
+                    a=.2
+                    style_hovered_row  = (*tuple(a*x+(1-a)*y for x,y in zip(accent_color[:3],bg_color[:3])), 1.)
+                any_selectable_clicked = False
+                if self.sorted_recordings_ids and self.last_clicked_id not in self.sorted_recordings_ids:
+                    # default to topmost if last_clicked unknown, or no longer on screen due to filter
+                    self.last_clicked_id = self.sorted_recordings_ids[0]
+                submitted_drag_drop = False
+                for iid in self.sorted_recordings_ids:
+                    imgui.table_next_row()
 
-            # show menu when right-clicking the empty space
-            if self.empty_context_callback and imgui.get_io().mouse_pos.y>last_cursor_y and imgui.begin_popup_context_item("##recording_list_context",popup_flags=imgui.PopupFlags_.mouse_button_right | imgui.PopupFlags_.no_open_over_existing_popup):
-                utils.set_all(self.selected_recordings, False)  # deselect on right mouse click as well
-                self.empty_context_callback()
-                imgui.end_popup()
+                    num_columns_drawn = 0
+                    selectable_clicked = False
+                    checkbox_clicked, checkbox_hovered, checkbox_out = False, False, False
+                    remove_button_hovered = False
+                    has_drawn_hitbox = False
+                    should_remove_item = False
+                    for c_idx in range(len(self._columns)):
+                        if not (imgui.table_get_column_flags(c_idx) & imgui.TableColumnFlags_.is_enabled):
+                            continue
+                        imgui.table_set_column_index(c_idx)
+
+                        # Row hitbox
+                        if not has_drawn_hitbox:
+                            # hitbox needs to be drawn before anything else on the row so that, together with imgui.set_item_allow_overlap(), hovering button
+                            # or checkbox on the row will still be correctly detected.
+                            # this is super finicky, but works. The below together with using a height of frame_height+cell_padding_y
+                            # makes the table row only cell_padding_y/2 longer. The whole row is highlighted correctly
+                            cell_padding_y = imgui.get_style().cell_padding.y
+                            cur_pos_y = imgui.get_cursor_pos_y()
+                            imgui.set_cursor_pos_y(cur_pos_y - cell_padding_y/2)
+                            imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0.)
+                            imgui.push_style_var(imgui.StyleVar_.frame_padding    , (0.,0.))
+                            imgui.push_style_var(imgui.StyleVar_.item_spacing     , (0.,cell_padding_y))
+                            if override_color:
+                                # make selectable completely transparent
+                                imgui.push_style_color(imgui.Col_.header_active , (0., 0., 0., 0.))
+                                imgui.push_style_color(imgui.Col_.header        , (0., 0., 0., 0.))
+                                imgui.push_style_color(imgui.Col_.header_hovered, (0., 0., 0., 0.))
+                            selectable_clicked, selectable_out = imgui.selectable(f"##{iid}_hitbox", self.selected_recordings[iid], flags=imgui.SelectableFlags_.span_all_columns|imgui.SelectableFlags_.allow_overlap|imgui.internal.SelectableFlagsPrivate_.select_on_click, size=(0,frame_height+cell_padding_y))
+                            # instead override table row background color, if wanted
+                            if override_color:
+                                if selectable_out:
+                                    imgui.table_set_bg_color(imgui.TableBgTarget_.row_bg0, imgui.color_convert_float4_to_u32(style_selected_row))
+                                elif imgui.is_item_hovered():
+                                    imgui.table_set_bg_color(imgui.TableBgTarget_.row_bg0, imgui.color_convert_float4_to_u32(style_hovered_row))
+                                imgui.pop_style_color(3)
+                            imgui.pop_style_var(3)
+                            # act as drag/drop source, if wanted
+                            if self.is_drag_drop_source and imgui.begin_drag_drop_source(imgui.DragDropFlags_.payload_auto_expire):
+                                # Set payload to carry the index of our item (in python, the payload is an int)
+                                self.drag_drop_id = dd_id = iid
+                                if not isinstance(iid,int):
+                                    dd_id = -1
+
+                                imgui.set_drag_drop_payload_py_id("RECORDING", dd_id)
+                                submitted_drag_drop = True
+                                # Display preview
+                                imgui.text(self.get_rec_fun(self.recordings[iid]).name)
+                                imgui.end_drag_drop_source()
+
+                            imgui.set_cursor_pos_y(cur_pos_y)   # instead of imgui.same_line(), we just need this part of its effect
+                            selectable_right_clicked, selectables_edited = gui_utils.handle_item_hitbox_events(iid, self.selected_recordings, self.item_context_callback)
+                            self.require_sort |= selectables_edited
+                            has_drawn_hitbox = True
+
+                        if num_columns_drawn==1:
+                            # (Invisible) button because it aligns the following draw calls to center vertically
+                            imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0.)
+                            imgui.push_style_var(imgui.StyleVar_.frame_padding    , (0.,imgui.get_style().frame_padding.y))
+                            imgui.push_style_var(imgui.StyleVar_.item_spacing     , (0.,imgui.get_style().item_spacing.y))
+                            imgui.push_style_color(imgui.Col_.button, (0.,0.,0.,0.))
+                            imgui.button(f"##{iid}_id", size=(imgui.FLT_MIN, 0))
+                            imgui.pop_style_color()
+                            imgui.pop_style_var(3)
+
+                            imgui.same_line()
+
+                        if c_idx==0 and self.has_selected_recordings:
+                            # Selector
+                            checkbox_clicked, checkbox_out = gui_utils.my_checkbox(f"##{iid}_selected", self.selected_recordings[iid], frame_size=(0,0))
+                            checkbox_hovered = imgui.is_item_hovered()
+                        elif self._columns[c_idx].header_lbl=="Name":
+                            if self.item_remove_callback:
+                                if imgui.button(ifa6.ICON_FA_TRASH_CAN+f"##{iid}_remove"):
+                                    should_remove_item = True
+                                remove_button_hovered = imgui.is_item_hovered()
+                                imgui.same_line()
+                            self.draw_recording_name_text(self.get_rec_fun(self.recordings[iid]), accent_color if style_color_recording_name else None)
+                        else:
+                            self._columns[c_idx].display_func(self.recordings[iid])
+                        num_columns_drawn+=1
+
+                    # handle item removal
+                    if should_remove_item:
+                        self.item_remove_callback(iid)
+                        self.require_sort = True
+
+                    # handle selection logic
+                    # NB: the part of this logic that has to do with right-clicks is in handle_recording_hitbox_events()
+                    # NB: any_selectable_clicked is just for handling clicks not on any recording
+                    any_selectable_clicked = any_selectable_clicked or selectable_clicked or selectable_right_clicked
+
+                    self.last_clicked_id = gui_utils.selectable_item_logic(
+                        iid, self.selected_recordings, self.last_clicked_id, self.sorted_recordings_ids,
+                        selectable_clicked, selectable_out, overlayed_hovered=checkbox_hovered or remove_button_hovered,
+                        overlayed_clicked=checkbox_clicked, new_overlayed_state=checkbox_out
+                        )
+
+                self._last_y = imgui.get_cursor_pos().y
+                last_cursor_y = imgui.get_cursor_screen_pos().y
+                imgui.end_table()
+
+                if not submitted_drag_drop:
+                    self.drag_drop_id = None
+
+                # handle click in table area outside header+contents:
+                # deselect all, and if right click, show popup
+                # check mouse is below bottom of last drawn row so that clicking on the one pixel empty space between selectables
+                # does not cause everything to unselect or popup to open
+                if imgui.is_item_clicked(imgui.MouseButton_.left) and not any_selectable_clicked and imgui.get_io().mouse_pos.y>last_cursor_y:  # NB: table header is not signalled by is_item_clicked(), so this works correctly
+                    utils.set_all(self.selected_recordings, False)
+
+                # show menu when right-clicking the empty space
+                if self.empty_context_callback and imgui.get_io().mouse_pos.y>last_cursor_y and imgui.begin_popup_context_item("##recording_list_context",popup_flags=imgui.PopupFlags_.mouse_button_right | imgui.PopupFlags_.no_open_over_existing_popup):
+                    utils.set_all(self.selected_recordings, False)  # deselect on right mouse click as well
+                    self.empty_context_callback()
+                    imgui.end_popup()
 
     def remove_recording(self, iid: int|str):
-        del self.recordings[iid]
-        del self.selected_recordings[iid]
+        self.recordings.pop(iid,None)
+        self.selected_recordings.pop(iid,None)
 
     def draw_eye_tracker_widget(self, rec: recording.Recording, align=False):
         imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0)
