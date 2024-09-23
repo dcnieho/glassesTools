@@ -5,7 +5,7 @@ import threading
 from imgui_bundle import imgui, icons_fontawesome_6 as ifa6
 
 from . import utils as gui_utils
-from .. import eyetracker, recording, utils
+from .. import camera_recording, eyetracker, recording, utils
 
 
 
@@ -22,17 +22,17 @@ class ColumnSpec(typing.NamedTuple):
     position: int
     name: str
     flags: int
-    display_func:  typing.Callable[[recording.Recording],None]
+    display_func:  typing.Callable[[recording.Recording|camera_recording.Recording],None]
     sort_key_func: typing.Callable[[int],typing.Any]
     header_lbl: str|None=None   # if set, different string than name is used for the column header. Works only for non-angled headers
 
 class RecordingTable:
     def __init__(self,
-                 recordings: dict[int|str, recording.Recording],
+                 recordings: dict[int|str, recording.Recording|camera_recording.Recording],
             recordings_lock: threading.Lock,
         selected_recordings: dict[int|str, bool]|None,
         extra_columns: list[ColumnSpec] = None,
-        get_rec_fun: typing.Callable[[typing.Any], recording.Recording] = None,
+        get_rec_fun: typing.Callable[[typing.Any], recording.Recording|camera_recording.Recording] = None,
         item_context_callback: typing.Callable[[int], bool] = None,
         empty_context_callback: typing.Callable[[],None] = None,
         item_remove_callback: typing.Callable[[int], None] = None
@@ -85,7 +85,7 @@ class RecordingTable:
         )
 
     def build_columns(self, extra_columns: list[ColumnSpec] = None):
-        col_names = ifa6.ICON_FA_EYE+" Eye Tracker", ifa6.ICON_FA_SIGNATURE+" Name", ifa6.ICON_FA_USER_TIE+" Participant", ifa6.ICON_FA_CLIPBOARD+" Project", ifa6.ICON_FA_STOPWATCH+" Duration", ifa6.ICON_FA_CLOCK+" Recording Start", ifa6.ICON_FA_FOLDER+" Working Directory", ifa6.ICON_FA_FOLDER+" Source Directory", ifa6.ICON_FA_TAGS+" Firmware Version", ifa6.ICON_FA_BARCODE+" Glasses Serial", ifa6.ICON_FA_BARCODE+" Recording Unit Serial", ifa6.ICON_FA_TAGS+" Recording Software Version", ifa6.ICON_FA_BARCODE+" Scene Camera Serial"
+        col_names = ifa6.ICON_FA_EYE+" Eye Tracker", ifa6.ICON_FA_SIGNATURE+" Name", ifa6.ICON_FA_USER_TIE+" Participant", ifa6.ICON_FA_CLIPBOARD+" Project", ifa6.ICON_FA_STOPWATCH+" Duration", ifa6.ICON_FA_CLOCK+" Recording Start", ifa6.ICON_FA_FOLDER+" Working Directory", ifa6.ICON_FA_FOLDER+" Source Directory", ifa6.ICON_FA_TAGS+" Firmware Version", ifa6.ICON_FA_BARCODE+" Glasses Serial", ifa6.ICON_FA_BARCODE+" Recording Unit Serial", ifa6.ICON_FA_TAGS+" Recording Software Version", ifa6.ICON_FA_BARCODE+" Scene Camera Serial", ifa6.ICON_FA_CAMERA+" Video File"
         if self.has_selected_recordings:
             col_names = (ifa6.ICON_FA_SQUARE_CHECK+" Selector",)+col_names
         i_def_col = 0
@@ -117,25 +117,25 @@ class RecordingTable:
             case "Eye Tracker":
                 flags = imgui.TableColumnFlags_.no_resize
                 display_func = lambda rec: self.draw_eye_tracker_widget(self.get_rec_fun(rec), align=True)
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).eye_tracker.value
+                sort_key_func= lambda iid: (r.eye_tracker.value if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'Camera').lower()
             case "Name":
                 flags = imgui.TableColumnFlags_.default_sort | imgui.TableColumnFlags_.no_hide | imgui.TableColumnFlags_.no_resize
                 display_func = None # special case
                 sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).name.lower()
             case "Participant":
                 flags = imgui.TableColumnFlags_.no_resize
-                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).participant or "Unknown")
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).participant.lower()
+                display_func = lambda rec: imgui.text(r.participant or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
+                sort_key_func= lambda iid: (r.participant if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
             case "Project":
-                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).project or "Unknown")
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).project.lower()
+                display_func = lambda rec: imgui.text(r.project or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
+                sort_key_func= lambda iid: (r.project if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
             case "Duration":
                 flags = imgui.TableColumnFlags_.no_resize
                 display_func = lambda rec: imgui.text("Unknown" if (d:=self.get_rec_fun(rec).duration) is None else str(datetime.timedelta(seconds=d//1000)))
                 sort_key_func= lambda iid: 0 if (d:=self.get_rec_fun(self.recordings[iid]).duration) is None else d
             case "Recording Start":
-                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).start_time.display or "Unknown")
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).start_time.value
+                display_func = lambda rec: imgui.text(r.start_time.display or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
+                sort_key_func= lambda iid: r.start_time.value if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 0
             case "Working Directory":
                 display_func = lambda rec: self.draw_working_directory(self.get_rec_fun(rec))
                 sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).working_directory.name.lower()
@@ -143,20 +143,23 @@ class RecordingTable:
                 display_func = lambda rec: self.draw_source_directory(self.get_rec_fun(rec))
                 sort_key_func= lambda iid: str(self.get_rec_fun(self.recordings[iid]).source_directory).lower()
             case "Firmware Version":
-                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).firmware_version or "Unknown")
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).firmware_version.lower()
+                display_func = lambda rec: imgui.text(r.firmware_version or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
+                sort_key_func= lambda iid: (r.firmware_version if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
             case "Glasses Serial":
-                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).glasses_serial or "Unknown")
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).glasses_serial.lower()
+                display_func = lambda rec: imgui.text(r.glasses_serial or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
+                sort_key_func= lambda iid: (r.glasses_serial if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
             case "Recording Unit Serial":
-                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).recording_unit_serial or "Unknown")
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).recording_unit_serial.lower()
+                display_func = lambda rec: imgui.text(r.recording_unit_serial or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
+                sort_key_func= lambda iid: (r.recording_unit_serial if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
             case "Recording Software Version":
-                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).recording_software_version or "Unknown")
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).recording_software_version.lower()
+                display_func = lambda rec: imgui.text(r.recording_software_version or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
+                sort_key_func= lambda iid: (r.recording_software_version if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
             case "Scene Camera Serial":
-                display_func = lambda rec: imgui.text(self.get_rec_fun(rec).scene_camera_serial or "Unknown")
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).scene_camera_serial.lower()
+                display_func = lambda rec: imgui.text(r.scene_camera_serial or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
+                sort_key_func= lambda iid: (r.scene_camera_serial if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
+            case "Video File":
+                display_func = lambda rec: imgui.text((r.scene_video_file if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else r.video_file) or "Unknown")
+                sort_key_func= lambda iid: (r.scene_video_file if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else r.video_file).lower()
             case _:
                 raise NotImplementedError()
 
@@ -405,7 +408,7 @@ class RecordingTable:
         self.recordings.pop(iid,None)
         self.selected_recordings.pop(iid,None)
 
-    def draw_eye_tracker_widget(self, rec: recording.Recording, align=False):
+    def draw_eye_tracker_widget(self, rec: recording.Recording|camera_recording.Recording, align=False):
         imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0)
         x_padding = 4
         if self._eye_tracker_label_width is None:
@@ -418,8 +421,15 @@ class RecordingTable:
             imgui.set_cursor_pos_y(imgui.get_cursor_pos_y() + imgui.get_style().frame_padding.y)
 
         # prep for drawing widget: determine its size and position and see if visible
-        iid         = imgui.get_id(rec.eye_tracker.value)
-        label_size  = imgui.calc_text_size(rec.eye_tracker.value)
+        if isinstance(rec, recording.Recording):
+            et          = rec.eye_tracker.value
+            clr         = rec.eye_tracker.color
+        else:
+            # camera recording
+            et          = 'Camera'
+            clr         = (.7, .7, .7, 1.)
+        iid         = imgui.get_id(et)
+        label_size  = imgui.calc_text_size(et)
         size        = imgui.ImVec2(self._eye_tracker_label_width, label_size.y)
         pos         = imgui.get_cursor_screen_pos()
         bb          = imgui.internal.ImRect(pos, (pos.x+size.x, pos.y+size.y))
@@ -427,23 +437,23 @@ class RecordingTable:
         # if visible
         if imgui.internal.item_add(bb, iid):
             # draw frame
-            imgui.internal.render_frame(bb.min, bb.max, imgui.color_convert_float4_to_u32(rec.eye_tracker.color), True, imgui.get_style().frame_rounding)
+            imgui.internal.render_frame(bb.min, bb.max, imgui.color_convert_float4_to_u32(clr), True, imgui.get_style().frame_rounding)
             # draw text on top
             imgui.push_style_color(imgui.Col_.text, (1., 1., 1., 1.))
-            imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), rec.eye_tracker.value, None, label_size, imgui.get_style().button_text_align, bb)
+            imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), et, None, label_size, imgui.get_style().button_text_align, bb)
             imgui.pop_style_color()
 
         if align:
             imgui.end_group()
         imgui.pop_style_var()
 
-    def draw_recording_name_text(self, rec: recording.Recording, accent_color: tuple[float] = None):
+    def draw_recording_name_text(self, rec: recording.Recording|camera_recording.Recording, accent_color: tuple[float] = None):
         if accent_color is not None:
             imgui.text_colored(accent_color, rec.name)
         else:
             imgui.text(rec.name)
 
-    def draw_working_directory(self, rec: recording.Recording):
+    def draw_working_directory(self, rec: recording.Recording|camera_recording.Recording):
         imgui.text(rec.working_directory.name if rec.working_directory else "Unknown")
         if imgui.is_item_hovered():
             if rec.working_directory and rec.working_directory.is_dir():
@@ -452,7 +462,7 @@ class RecordingTable:
                 text = 'Working directory not created yet'
             gui_utils.draw_tooltip(text)
 
-    def draw_source_directory(self, rec: recording.Recording):
+    def draw_source_directory(self, rec: recording.Recording|camera_recording.Recording):
         imgui.text(rec.source_directory.stem or "Unknown")
         if rec.source_directory and imgui.is_item_hovered():
             gui_utils.draw_tooltip(str(rec.source_directory))
