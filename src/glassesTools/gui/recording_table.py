@@ -64,6 +64,7 @@ class RecordingTable:
         self.filter_box_text: str = ""
 
         self._last_y = None
+        self._has_scroll_x = None
 
         self._columns: list[ColumnSpec] = []
         self.build_columns(extra_columns)
@@ -189,6 +190,8 @@ class RecordingTable:
         outer_size = imgui.ImVec2(0,0)
         if limit_outer_size and self._last_y is not None:
             outer_size.y = self._last_y+imgui.get_style().item_spacing.y
+            if self._has_scroll_x:
+                outer_size.y += imgui.get_style().scrollbar_size
         if imgui.begin_table(
             f"##recording_list",
             columns=len(self._columns),
@@ -378,6 +381,7 @@ class RecordingTable:
                         )
 
                 self._last_y = imgui.get_cursor_pos().y
+                self._has_scroll_x = imgui.get_current_context().current_window.scrollbar_x
                 last_cursor_y = imgui.get_cursor_screen_pos().y
                 imgui.end_table()
 
