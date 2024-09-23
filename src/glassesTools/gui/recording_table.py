@@ -414,7 +414,9 @@ class RecordingTable():
             # draw frame
             imgui.internal.render_frame(bb.min, bb.max, imgui.color_convert_float4_to_u32(rec.eye_tracker.color), True, imgui.get_style().frame_rounding)
             # draw text on top
+            imgui.push_style_color(imgui.Col_.text, (1., 1., 1., 1.))
             imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), rec.eye_tracker.value, None, label_size, imgui.get_style().button_text_align, bb)
+            imgui.pop_style_color()
 
         if align:
             imgui.end_group()
