@@ -204,10 +204,9 @@ class RecordingTable():
                 has_angled_headers = has_angled_headers or (col.flags & imgui.TableColumnFlags_.angled_header)
 
             # Sticky column headers and selector row
-            if has_angled_headers:
-                imgui.table_setup_scroll_freeze(1, 2)
-            else:
-                imgui.table_setup_scroll_freeze(1, 1)
+            n_row_freeze = 2 if has_angled_headers else 1
+            n_col_freeze = 1 if self.has_selected_recordings else 0
+            imgui.table_setup_scroll_freeze(n_col_freeze, n_row_freeze)
 
             # Sorting
             sort_specs = imgui.table_get_sort_specs()
