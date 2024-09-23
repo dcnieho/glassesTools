@@ -482,12 +482,18 @@ class RecordingTable:
             if self.filter_box_text:
                 search = self.filter_box_text.lower()
                 def key(iid):
-                    recording = self.get_rec_fun(self.recordings[iid])
-                    return \
-                        search in recording.eye_tracker.value.lower() or \
-                        search in recording.name.lower() or \
-                        search in recording.participant.lower() or \
-                        search in recording.project.lower()
+                    rec = self.get_rec_fun(self.recordings[iid])
+                    if isinstance(rec, recording.Recording):
+                        return \
+                            search in rec.eye_tracker.value.lower() or \
+                            search in rec.name.lower() or \
+                            search in rec.participant.lower() or \
+                            search in rec.project.lower()
+                    else:
+                        return \
+                            search in 'camera' or \
+                            search in rec.name.lower() or \
+                            search in rec.video_file.lower()
                 self.sorted_recordings_ids = list(filter(key, self.sorted_recordings_ids))
             sort_specs_in.specs_dirty = False
             self.require_sort = False
