@@ -67,6 +67,7 @@ class RecordingTable:
         self._has_scroll_x = None
 
         self._columns: list[ColumnSpec] = []
+        self._show_hide_commands: dict[int,bool] = {}
         self.build_columns(extra_columns)
 
         self._eye_tracker_label_width: float = None
@@ -106,6 +107,18 @@ class RecordingTable:
                 self._columns.append(col)
                 i_def_col += 1
             i_col += 1
+        self._show_hide_commands.clear()
+
+    def show_hide_columns(self, show_hide: dict[str, bool]):
+        for c in show_hide:
+            matching = [c in col.name for col in self._columns]
+            n_matching = sum(matching)
+            if n_matching==0:
+                raise ValueError(f'No column found whose name contains "{c}"')
+            elif n_matching>1:
+                raise ValueError(f'More than one column found whose name contains "{c}": {[col.name for i,col in enumerate(self._columns) if matching[i]]}')
+            c_idx = matching.index(True)
+            self._show_hide_commands[c_idx] = show_hide[c]
 
     def _get_column(self, name: str, position: int):
         flags = imgui.TableColumnFlags_.default_hide | imgui.TableColumnFlags_.no_resize    # most columns use this one
@@ -213,6 +226,11 @@ class RecordingTable:
                 else:
                     imgui.table_setup_column(col.name, col.flags)
                 has_angled_headers = has_angled_headers or (col.flags & imgui.TableColumnFlags_.angled_header)
+
+            # show/hide columns through API
+            for c_idx in self._show_hide_commands:
+                imgui.table_set_column_enabled(c_idx, self._show_hide_commands[c_idx])
+            self._show_hide_commands.clear()
 
             # Sticky column headers and selector row
             n_row_freeze = 2 if has_angled_headers else 1
