@@ -332,7 +332,10 @@ class RecordingTable:
                                 imgui.set_drag_drop_payload_py_id("RECORDING", dd_id)
                                 submitted_drag_drop = True
                                 # Display preview
-                                imgui.text(self.get_rec_fun(self.recordings[iid]).name)
+                                if isinstance(rec:=self.get_rec_fun(self.recordings[iid]), recording.Recording):
+                                    imgui.text(rec.name)
+                                else:
+                                    imgui.text(str(rec.source_directory / rec.video_file))
                                 imgui.end_drag_drop_source()
 
                             imgui.set_cursor_pos_y(cur_pos_y)   # instead of imgui.same_line(), we just need this part of its effect
