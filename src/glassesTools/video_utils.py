@@ -1,6 +1,7 @@
 import numpy as np
 import pandas as pd
 import cv2
+import pathlib
 
 from .mp4analyser import iso
 
@@ -13,12 +14,11 @@ def av_rescale(a, b, c):
     return (a * b + r) // c
 
 
-def get_frame_timestamps_from_video(vid_file):
-    """
-    Parse the supplied video, return an array of frame timestamps. There must be only one video stream
-    in the video file, because otherwise we do not know which is the correct stream.
-    """
-    if vid_file.suffix in ['.mov', '.mp4', '.m4a', '.3gp', '.3g2', '.mj2']:
+def is_isobmmf(vid_file: pathlib.Path):
+    return vid_file.suffix in ['.mov', '.mp4', '.m4a', '.3gp', '.3g2', '.mj2']
+
+def _get_frame_timestamps_from_video(vid_file: pathlib.Path) -> np.array:
+    if is_isobmmf(vid_file):
         # parse mp4 file
         boxes       = iso.Mp4File(str(vid_file))
         summary     = boxes.get_summary()
@@ -117,7 +117,7 @@ def get_frame_timestamps_from_video(vid_file):
             # then we subtract the dts by that amount to make the first pts zero.
             dts -= min_corrected_pts
         # now turn into timestamps in ms
-        frame_ts = (dts+empty_duration)/media_time_scale*1000
+        return (dts+empty_duration)/media_time_scale*1000
     else:
         # open file with opencv and get timestamps of each frame
         vid = cv2.VideoCapture(vid_file)
@@ -147,14 +147,32 @@ def get_frame_timestamps_from_video(vid_file):
 
         # release the video capture object
         vid.release()
-        frame_ts = np.array(frame_ts)
+        return np.array(frame_ts)
+
+def get_frame_timestamps_from_video(vid_file: pathlib.Path) -> pd.DataFrame:
+    """
+    Parse the supplied video, return an array of frame timestamps. There must be only one video stream
+    in the video file, because otherwise we do not know which is the correct stream.
+    """
+    frame_ts = _get_frame_timestamps_from_video(vid_file)
 
     ### convert the frame_timestamps to dataframe
     frame_idx = np.arange(0, len(frame_ts))
     frame_ts_df = pd.DataFrame({'frame_idx': frame_idx, 'timestamp': frame_ts})
     frame_ts_df.set_index('frame_idx', inplace=True)
-
     return frame_ts_df
+
+def get_video_duration(vid_file: pathlib.Path) -> float:
+    # get duration of video file in seconds
+    if is_isobmmf(vid_file):
+        frame_ts = _get_frame_timestamps_from_video(vid_file)
+        return frame_ts[-1]
+    else:
+        vid = cv2.VideoCapture(vid_file)
+        fps = vid.get(cv2.CAP_PROP_FPS)
+        totalNoFrames = vid.get(cv2.CAP_PROP_FRAME_COUNT)
+        vid.release()
+        return totalNoFrames / fps * 1000
 
 
 def timestamps_to_frame_number(ts,frame_timestamps,mode='nearest',trim=False):
