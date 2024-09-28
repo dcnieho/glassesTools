@@ -170,4 +170,4 @@ def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame, frame_ts: pd.DataF
 
 
 __all__ = ['pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3','adhawk_mindlink',
-           'get_recording_info']
+           'get_recording_info','do_import','check_source_dir','check_output_dir','check_folders','check_device']
