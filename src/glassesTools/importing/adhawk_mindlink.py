@@ -13,7 +13,7 @@ import datetime
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
-from .. import timestamps, video_utils
+from .. import naming, timestamps, video_utils
 
 
 def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, cam_cal_file: str|pathlib.Path=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
@@ -50,7 +50,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
     #### prep the copied data...
     print('  Getting camera calibration...')
     if cam_cal_file is not None:
-        shutil.copyfile(str(cam_cal_file), str(output_dir / 'calibration.xml'))
+        shutil.copyfile(str(cam_cal_file), str(output_dir / naming.cam_cal_fname))
         sceneVideoDimensions = np.array([1280, 720])
     else:
         print('    !! No camera calibration provided! Defaulting to hardcoded')
@@ -138,7 +138,7 @@ def copyAdhawkRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, copy_sc
     vid_entry   = getMetaEntry(inputDir, 'video')
     srcFile     = inputDir / vid_entry['file_name']
     if copy_scene_video:
-        destFile    = outputDir / 'worldCamera.mp4'
+        destFile    = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
         shutil.copy2(str(srcFile), str(destFile))
     else:
         destFile = None
@@ -161,7 +161,7 @@ def getCameraHardcoded(outputDir: str|pathlib.Path):
     camera['rotation'] = cv2.Rodrigues(np.radians(np.array([12.000000000000043, 0.0, 0.0])))[0]
 
     # store to file
-    fs = cv2.FileStorage(outputDir / 'calibration.xml', cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(outputDir / naming.cam_cal_fname, cv2.FILE_STORAGE_WRITE)
     for key,value in camera.items():
         fs.write(name=key,val=value)
     fs.release()

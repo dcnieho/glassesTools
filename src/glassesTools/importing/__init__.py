@@ -6,7 +6,7 @@ import polars as pl
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
-from .. import eyetracker
+from .. import eyetracker, naming
 
 from .adhawk_mindlink import preprocessData as adhawk_mindlink
 from .SeeTrue_STONE import preprocessData as SeeTrue_STONE
@@ -152,7 +152,7 @@ def check_device(device: str|EyeTracker, rec_info: Recording):
             device = eyetracker.string_to_enum(rec_info.eye_tracker)
     return device, rec_info
 
-def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame, frame_ts: pd.DataFrame, rec_info: Recording, gaze_fname = 'gazeData.tsv', frame_ts_fname = 'frameTimestamps.tsv', rec_info_fname = Recording.default_json_file_name, source_dir_as_relative_path = False):
+def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame, frame_ts: pd.DataFrame, rec_info: Recording, gaze_fname = naming.gaze_data_fname, frame_ts_fname = naming.frame_timestamps_fname, rec_info_fname = Recording.default_json_file_name, source_dir_as_relative_path = False):
     # write the gaze data to a csv file (polars as that library saves to file waaay faster)
     pl.from_pandas(gaze,include_index=True).write_csv(output_dir / gaze_fname, separator='\t', null_value='nan', float_precision=8)
 

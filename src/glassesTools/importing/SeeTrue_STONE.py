@@ -16,7 +16,7 @@ import numpy as np
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
-from .. import video_utils
+from .. import naming, video_utils
 
 
 def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, cam_cal_file: str|pathlib.Path=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
@@ -55,7 +55,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
 
     print('  Getting camera calibration...')
     if cam_cal_file is not None:
-        shutil.copyfile(str(cam_cal_file), str(output_dir / 'calibration.xml'))
+        shutil.copyfile(str(cam_cal_file), str(output_dir / naming.cam_cal_fname))
     else:
         print('    !! No camera calibration provided! Defaulting to hardcoded')
         getCameraHardcoded(output_dir)
@@ -182,7 +182,7 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
 
     # 3. make into video
     framerate = "{:.4f}".format(1000./ifi)
-    outFile = outputDir / 'worldCamera.mp4'
+    outFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
     cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'image2', '-framerate', framerate, '-start_number', str(frames[0]), '-i', '"'+str(sceneVidDir / 'frame_%d.jpeg')+'"', '"'+str(outFile)+'"'])
     os.system(cmd_str)
     if outFile.is_file():
@@ -247,7 +247,7 @@ def getCameraHardcoded(outputDir: str|pathlib.Path):
     camera['resolution'] = np.array([640, 480])
 
     # store to file
-    fs = cv2.FileStorage(outputDir / 'calibration.xml', cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(outputDir / naming.scene_camera_calibration_fname, cv2.FILE_STORAGE_WRITE)
     for key,value in camera.items():
         fs.write(name=key,val=value)
     fs.release()

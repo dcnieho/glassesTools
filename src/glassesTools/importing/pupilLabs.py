@@ -23,7 +23,7 @@ from urllib.request import urlopen
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
-from .. import timestamps, video_utils
+from .. import naming, timestamps, video_utils
 
 
 def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
@@ -63,7 +63,7 @@ def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, so
     else:
         srcVid = source_dir / 'world.mp4'
     if copy_scene_video:
-        destVid = output_dir / 'worldCamera.mp4'
+        destVid = output_dir / f'{naming.scene_camera_video_fname_stem}.mp4'
         shutil.copy2(str(srcVid), str(destVid))
         rec_info.scene_video_file = destVid.name
     else:
@@ -347,7 +347,7 @@ def getCameraCalFromCloudExport(inputDir: str|pathlib.Path, outputDir: str|pathl
     return camInfo['resolution']
 
 def storeCameraCalibration(camInfo: dict[str, typing.Any], outputDir: str|pathlib.Path):
-    fs = cv2.FileStorage(outputDir / 'calibration.xml', cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(outputDir / naming.cam_cal_fname, cv2.FILE_STORAGE_WRITE)
     for key,value in camInfo.items():
         fs.write(name=key,val=value)
     fs.release()

@@ -24,7 +24,7 @@ from scipy.spatial.transform import Rotation
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
-from .. import video_utils
+from .. import naming, video_utils
 
 
 def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
@@ -130,12 +130,12 @@ def copySMIRecordings(inputDir: pathlib.Path, outputDir: pathlib.Path, recInfo: 
     # else just copy. Ignore copy_scene_video in this case
     if shutil.which('ffmpeg') is not None:
         # make mp4
-        destFile = outputDir / 'worldCamera.mp4'
+        destFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
         cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', '"'+str(srcFile)+'"', '-vcodec', 'copy', '-acodec', 'aac', '"'+str(destFile)+'"'])
         os.system(cmd_str)
     else:
         if copy_scene_video:
-            destFile = outputDir / 'worldCamera.avi'
+            destFile = outputDir / f'{naming.scene_camera_video_fname_stem}.avi'
             shutil.copy2(str(srcFile), str(destFile))
         else:
             destFile = None
@@ -196,7 +196,7 @@ def getCameraFromFile(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path):
 
 
     # store to file
-    fs = cv2.FileStorage(outputDir / 'calibration.xml', cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(outputDir / naming.scene_camera_calibration_fname, cv2.FILE_STORAGE_WRITE)
     for key,value in camera.items():
         fs.write(name=key,val=value)
     fs.release()

@@ -24,7 +24,7 @@ import datetime
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
-from .. import timestamps, video_utils
+from .. import naming, timestamps, video_utils
 
 
 def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
@@ -139,7 +139,7 @@ def copyTobiiRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, copy_sce
     inputDir = inputDir / 'segments' / '1'
     srcFile  = inputDir / 'fullstream.mp4'
     if copy_scene_video:
-        destFile = outputDir / 'worldCamera.mp4'
+        destFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
         shutil.copy2(str(srcFile), str(destFile))
     else:
         destFile = None
@@ -198,7 +198,7 @@ def getCameraFromTSLV(inputDir: str|pathlib.Path):
 
 
     # store to file
-    fs = cv2.FileStorage(inputDir / 'calibration.xml', cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(inputDir / naming.scene_camera_calibration_fname, cv2.FILE_STORAGE_WRITE)
     for key,value in camera.items():
         fs.write(name=key,val=value)
     fs.release()
