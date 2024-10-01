@@ -347,7 +347,7 @@ def getCameraCalFromCloudExport(inputDir: str|pathlib.Path, outputDir: str|pathl
     return camInfo['resolution']
 
 def storeCameraCalibration(camInfo: dict[str, typing.Any], outputDir: str|pathlib.Path):
-    fs = cv2.FileStorage(outputDir / naming.cam_cal_fname, cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(outputDir / naming.scene_camera_calibration_fname, cv2.FILE_STORAGE_WRITE)
     for key,value in camInfo.items():
         fs.write(name=key,val=value)
     fs.release()

@@ -55,7 +55,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
 
     print('  Getting camera calibration...')
     if cam_cal_file is not None:
-        shutil.copyfile(str(cam_cal_file), str(output_dir / naming.cam_cal_fname))
+        shutil.copyfile(str(cam_cal_file), str(output_dir / naming.scene_camera_calibration_fname))
     else:
         print('    !! No camera calibration provided! Defaulting to hardcoded')
         getCameraHardcoded(output_dir)

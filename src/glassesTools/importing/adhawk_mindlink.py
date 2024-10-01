@@ -50,7 +50,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
     #### prep the copied data...
     print('  Getting camera calibration...')
     if cam_cal_file is not None:
-        shutil.copyfile(str(cam_cal_file), str(output_dir / naming.cam_cal_fname))
+        shutil.copyfile(str(cam_cal_file), str(output_dir / naming.scene_camera_calibration_fname))
         sceneVideoDimensions = np.array([1280, 720])
     else:
         print('    !! No camera calibration provided! Defaulting to hardcoded')
@@ -161,7 +161,7 @@ def getCameraHardcoded(outputDir: str|pathlib.Path):
     camera['rotation'] = cv2.Rodrigues(np.radians(np.array([12.000000000000043, 0.0, 0.0])))[0]
 
     # store to file
-    fs = cv2.FileStorage(outputDir / naming.cam_cal_fname, cv2.FILE_STORAGE_WRITE)
+    fs = cv2.FileStorage(outputDir / naming.scene_camera_calibration_fname, cv2.FILE_STORAGE_WRITE)
     for key,value in camera.items():
         fs.write(name=key,val=value)
     fs.release()
