@@ -44,6 +44,7 @@ class FileActionProvider:
                         result = file_actions.get_dir_list_sync(path)
                 except Exception as exc:
                     result = exc
+                self._listing_done(result, path)
         else:
             try:
                 l_path = path
