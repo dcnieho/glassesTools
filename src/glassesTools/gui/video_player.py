@@ -252,7 +252,7 @@ class GUI:
         if self._window_timeline[window_id] is None:
             return None
         colors = self._window_timeline[window_id].get_annotation_colors()
-        return {e:(*colors[e],) for e in colors}
+        return {e:(colors[e].value.x,colors[e].value.y,colors[e].value.z,colors[e].value.w) for e in colors}
 
     def set_allow_annotate(self, allow_annotate: bool, annotate_shortcut_key_map: dict[annotation.Event, imgui.Key]=None, annotate_tooltips: dict[annotation.Event, str] = None):
         self._allow_annotate = allow_annotate
@@ -487,7 +487,7 @@ class GUI:
         elif not need_begin_end:
             win_sz = imgui.get_content_region_avail()
             win_sz.y -= tl_height
-            self._window_sfac[w] = min([x/y for x,y in zip(win_sz,img_sz)])
+            self._window_sfac[w] = min([win_sz.x/img_sz[0], win_sz.y/img_sz[1]])
 
 
         if need_begin_end:
@@ -502,7 +502,7 @@ class GUI:
             if not self._window_determine_size[w]:
                 win_sz = imgui.get_content_region_avail()
                 win_sz.y -= tl_height
-                self._window_sfac[w] = min([x/y for x,y in zip(win_sz,img_sz)])
+                self._window_sfac[w] = min([win_sz.x/img_sz[0], win_sz.y/img_sz[1]])
         self._window_determine_size[w] = False
 
         # draw image
@@ -512,7 +512,7 @@ class GUI:
         if self._current_frame[w][0] is None:
             overlay_text = 'No image'
             text_size = imgui.calc_text_size(overlay_text)
-            offset = [(x-y)/2 for x,y in zip(img_sz,text_size)]
+            offset = [(img_sz[0]-text_size.x)/2, (img_sz[1]-text_size.y)/2]
             imgui.set_cursor_pos((img_margin+offset[0],offset[1]))
             imgui.text_colored((1., 0., 0., 1.), overlay_text)
             imgui.set_cursor_pos((img_margin,0))
@@ -530,7 +530,8 @@ class GUI:
         if self._window_show_play_percentage[w] and self._last_frame_idx is not None:
             overlay_text += f' ({fr_idx/self._last_frame_idx*100:.1f}%)'
         txt_sz = imgui.calc_text_size(overlay_text)
-        overlay_size = txt_sz+imgui.ImVec2([x*2 for x in imgui.get_style().frame_padding])
+        padding = imgui.get_style().frame_padding
+        overlay_size = txt_sz+imgui.ImVec2(padding.x*2, padding.y*2)
         match self._window_timecode_pos[w]:
             case 'l':
                 overlay_x_pos = img_margin
@@ -574,7 +575,7 @@ class GUI:
                 return max([imgui.calc_text_size(l) for l in b.lbl], key=lambda x: x.x)
             return imgui.calc_text_size(b.lbl)
         text_sizes = [_get_text_size(b) for b in buttons]
-        button_sizes = [imgui.ImVec2([x+2*y for x,y in zip(ts, imgui.get_style().frame_padding)]) for ts in text_sizes]
+        button_sizes = [imgui.ImVec2([ts.x+2*padding.x, ts.y+2*padding.y]) for ts in text_sizes]
         total_button_size = functools.reduce(lambda a,b: imgui.ImVec2(a.x+b.x, max(a.y,b.y)), button_sizes)
         total_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*imgui.get_style().item_spacing.x, total_button_size.y)
         # draw them, or info item for tooltip
@@ -660,13 +661,13 @@ class GUI:
                 imgui.begin_disabled()
             if self._window_show_controls[w]:
                 if b.color is not None:
-                    but_alphas = [imgui.get_style_color_vec4(b)[3] for b in [imgui.Col_.button, imgui.Col_.button_hovered, imgui.Col_.button_active]]
+                    but_alphas = [imgui.get_style_color_vec4(b).w for b in [imgui.Col_.button, imgui.Col_.button_hovered, imgui.Col_.button_active]]
                     imgui.push_style_color(imgui.Col_.button,         timeline.color_replace_alpha(b.color,but_alphas[0]).value)
                     imgui.push_style_color(imgui.Col_.button_hovered, timeline.color_replace_alpha(timeline.color_brighten(b.color, .15),but_alphas[1]).value)
                     imgui.push_style_color(imgui.Col_.button_active,  timeline.color_replace_alpha(timeline.color_brighten(b.color, .9 ),but_alphas[2]).value)
                     text_contrast_ratio = 1 / 1.57
                     text_color = imgui.ImColor(imgui.get_style_color_vec4(imgui.Col_.text))
-                    imgui.push_style_color(imgui.Col_.text  ,         timeline.color_adjust_contrast(text_color,text_contrast_ratio,b.color).value)
+                    imgui.push_style_color(imgui.Col_.text,           timeline.color_adjust_contrast(text_color,text_contrast_ratio,b.color).value)
                 activated = imgui.button(lbl, size=sz)
                 if b.color is not None:
                     imgui.pop_style_color(4)

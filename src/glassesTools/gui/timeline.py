@@ -7,9 +7,8 @@ from imgui_bundle import imgui, hello_imgui, icons_fontawesome_6 as ifa6
 from .. import annotation, timestamps, utils
 
 def _color_u32_replace_alpha(color: int, alpha: float) -> int:
-    col = imgui.ImVec4(*imgui.get_style_color_vec4(color)) # make copy so we don't change the original!
-    col.w = alpha
-    return imgui.color_convert_float4_to_u32(col)
+    col = imgui.get_style_color_vec4(color)
+    return imgui.color_convert_float4_to_u32((col.x, col.y, col.z, alpha))
 
 def color_replace_alpha(color: imgui.ImColor, alpha: float) -> imgui.ImColor:
     return imgui.ImColor(color.value.x, color.value.y, color.value.z, alpha)
@@ -449,7 +448,7 @@ class Timeline:
         border_color = imgui.color_convert_float4_to_u32(color_replace_alpha(color, color.value.w * 0.9).value)
 
         text_offset = imgui.ImVec2((2*dpi_fac, 2*dpi_fac))
-        clip_title_max = text_size + imgui.ImVec2([2*x for x in text_offset])
+        clip_title_max = text_size + imgui.ImVec2([2*text_offset.x, 2*text_offset.y])
 
         # draw annotations
         if annotation.type_map[event]==annotation.Type.Interval:

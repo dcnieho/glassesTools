@@ -52,10 +52,10 @@ def push_popup(gui, *args, bottom=False, **kwargs):
     return popup_func
 
 def fix_popup_transparency():
-    frame_bg_col = list(imgui.get_style().color_(imgui.Col_.title_bg_active))
-    imgui.get_style().set_color_(imgui.Col_.title_bg_active,(*frame_bg_col[0:3], 1.))
-    popup_bg_col = list(imgui.get_style().color_(imgui.Col_.popup_bg))
-    imgui.get_style().set_color_(imgui.Col_.popup_bg,(*popup_bg_col[0:3], 1.))
+    frame_bg_col = imgui.get_style().color_(imgui.Col_.title_bg_active)
+    imgui.get_style().set_color_(imgui.Col_.title_bg_active,(frame_bg_col.x, frame_bg_col.y, frame_bg_col.z, 1.))
+    popup_bg_col = imgui.get_style().color_(imgui.Col_.popup_bg)
+    imgui.get_style().set_color_(imgui.Col_.popup_bg,(popup_bg_col.x, popup_bg_col.y, popup_bg_col.z, 1.))
 
 def handle_popup_stack(popup_stack: list):
     fix_popup_transparency()
