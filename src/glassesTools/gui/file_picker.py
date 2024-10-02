@@ -577,7 +577,7 @@ class FilePicker:
                     paths         = [i.full_path for i in items]
                     display_names = [self._get_path_leaf_display_name(p) for p in paths]
                     idx = display_names.index(self.path_bar_popup['which_selected'])
-                elif isinstance(key[1],str) and key[1]=='ellipsis':
+                elif isinstance(key,str) and key=='ellipsis':
                     display_names = [b[1] for b in btn_removed]
                     paths = [b[0] for b in btn_removed]
                     display_names.reverse()
