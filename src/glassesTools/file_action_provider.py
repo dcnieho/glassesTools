@@ -2,7 +2,7 @@ import concurrent
 import pathlib
 from typing import Callable
 
-from . import async_thread, file_actions
+from . import async_thread, file_actions, platform
 
 class FileActionProvider:
     def __init__(self, listing_callback: Callable[[str, str|pathlib.Path, list[file_actions.DirEntry]|Exception], None]=None, action_callback: Callable[[str, pathlib.Path, str, pathlib.Path|Exception], None] = None):
@@ -20,27 +20,36 @@ class FileActionProvider:
             if not w.done():
                 w.cancel()
 
-    local_name = 'This PC'
+    local_name = 'This PC' if platform.os==platform.Os.Windows else 'Root'
 
     def get_listing(self, path: str|pathlib.Path) -> list[file_actions.DirEntry]|concurrent.futures.Future:
         fut = None
-        if path=='root':
-            try:
-                result = file_actions.get_drives()
-                result.extend(file_actions.get_thispc_listing())
-            except Exception as exc:
-                result = exc
-            self._listing_done(result, 'root')
+        if platform.os==platform.Os.Windows:
+            if path=='root':
+                try:
+                    result = file_actions.get_drives()
+                    result.extend(file_actions.get_thispc_listing())
+                except Exception as exc:
+                    result = exc
+                self._listing_done(result, 'root')
+            else:
+                # check whether this is a path to a network computer (e.g. \\SERVER)
+                net_comp = file_actions.get_net_computer(path)
+                try:
+                    if net_comp:
+                        # network computer name, get its shares
+                        result = file_actions.get_visible_shares(net_comp,'Guest','')
+                    else:
+                        # normal directory or share on a network computer, no special handling needed
+                        result = file_actions.get_dir_list_sync(path)
+                except Exception as exc:
+                    result = exc
         else:
-            # check whether this is a path to a network computer (e.g. \\SERVER)
-            net_comp = file_actions.get_net_computer(path)
             try:
-                if net_comp:
-                    # network computer name, get its shares
-                    result = file_actions.get_visible_shares(net_comp,'Guest','')
-                else:
-                    # normal directory or share on a network computer, no special handling needed
-                    result = file_actions.get_dir_list_sync(path)
+                l_path = path
+                if path=='root':
+                    l_path = '/'
+                result = file_actions.get_dir_list_sync(l_path)
             except Exception as exc:
                 result = exc
             self._listing_done(result, path)

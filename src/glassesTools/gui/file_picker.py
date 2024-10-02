@@ -6,7 +6,7 @@ import threading
 from dataclasses import dataclass
 from imgui_bundle import hello_imgui, imgui, icons_fontawesome_6 as ifa6, imspinner
 
-from .. import file_actions, file_action_provider as fap, utils
+from .. import file_actions, file_action_provider as fap, platform, utils
 from . import msg_box, utils as gui_utils
 
 
@@ -126,12 +126,14 @@ class FilePicker:
         self.bg_color = bg_color
 
     def _is_root(self, path: str|pathlib.Path):
-        is_root = False
-        if isinstance(path, str):
+        if platform.os==platform.Os.Windows and isinstance(path, str):
             if path.casefold()==self._get_path_display_name('root').casefold():
                 path = 'root'
-            is_root = path=='root'
-        return is_root
+            return path=='root'
+        elif platform.os!=platform.Os.Windows:
+            return path=='root' or (pa:=pathlib.Path(path).absolute())==pathlib.Path(pa.anchor)
+        return False
+
 
     def set_dir(self, paths: str|pathlib.Path|list[str|pathlib.Path]):
         if not isinstance(paths,list):
@@ -148,12 +150,12 @@ class FilePicker:
         is_root = self._is_root(path)
 
         if not is_root:
-            if (comp := file_actions.get_net_computer(path)):
+            if platform.os==platform.Os.Windows and (comp := file_actions.get_net_computer(path)):
                 # ensure loc has the format //SERVER/, which is what pathlib understands
                 # but keep it as a string, these things don't round-trip in pathlib
                 path = f'//{comp}/'
             else:
-                path = pathlib.Path(path)
+                path = pathlib.Path(path).expanduser().resolve()
                 if path.is_file():
                     path = path.parent
                 if path is None:
@@ -161,6 +163,8 @@ class FilePicker:
                 if not str(path).startswith('\\\\') or str(path).startswith('//'):
                     # don't call resolve on network paths
                     path = path.resolve()
+        else:
+            path = 'root'
 
         if path!=self.loc:
             self.loc = path
@@ -193,7 +197,7 @@ class FilePicker:
     def _listing_done(self, path: str|pathlib.Path, items: list[file_actions.DirEntry]|Exception):
         # deal with cache
         if not isinstance(items, Exception):
-            items = {i:DirEntryWithCache(item) for i,item in enumerate(items)}
+            items = {i:DirEntryWithCache(item) for i,item in enumerate(natsort.os_sorted(items, key=lambda i: i.full_path))}
         self._listing_cache[path] = items
 
         if str(path)==str(self.loc):
@@ -282,9 +286,9 @@ class FilePicker:
         if not isinstance(path,pathlib.Path):
             path = pathlib.Path(path)
         parent = path.parent
-        if parent==path:
+        if (pa:=pathlib.Path(parent).absolute())==pathlib.Path(pa.anchor):
             if isinstance(path,pathlib.PureWindowsPath):
-                if (net_comps := file_actions.split_network_path(path)):
+                if platform.os==platform.Os.Windows and (net_comps := file_actions.split_network_path(path)):
                     if len(net_comps)==1:
                         # network computer, one higher is list of drives and
                         # visible network computers, i.e., root
@@ -295,7 +299,7 @@ class FilePicker:
                     # if a normal local path, then this means we're in a drive root
                     parent = 'root'
             else:
-                # TODO: non-Windows logic
+                # non-Windows logic: simply root
                 parent = 'root'
         return parent
 
@@ -304,27 +308,30 @@ class FilePicker:
         if path_str=='root':
             loc_str = self.file_action_provider.local_name
         else:
-            if (comp := file_actions.get_net_computer(path_str)):
-                # pathlib.Path's str() doesn't do the right thing here, render it ourselves
-                loc_str = f'\\\\{comp}'
-            else:
-                if not for_edit and isinstance(path,pathlib.Path) and self._get_parent(path)=='root' and 'root' in self._listing_cache and isinstance(self._listing_cache['root'],dict):
-                    # this is a drive root, lookup name of this drive
-                    # except when this is meant to be a string to be edited, then we
-                    # just want the raw drive location string
-                    loc_str = None
-                    for _,l in self._listing_cache['root'].items():
-                        if l.full_path==path:
-                            loc_str = l.name
-                    if loc_str is None:
-                        loc_str = path.drive
+            if platform.os==platform.Os.Windows:
+                if (comp := file_actions.get_net_computer(path_str)):
+                    # pathlib.Path's str() doesn't do the right thing here, render it ourselves
+                    loc_str = f'\\\\{comp}'
                 else:
-                    loc_str = path_str
+                    if not for_edit and isinstance(path,pathlib.Path) and self._get_parent(path)=='root' and 'root' in self._listing_cache and isinstance(self._listing_cache['root'],dict):
+                        # this is a drive root, lookup name of this drive
+                        # except when this is meant to be a string to be edited, then we
+                        # just want the raw drive location string
+                        loc_str = None
+                        for _,l in self._listing_cache['root'].items():
+                            if l.full_path==path:
+                                loc_str = l.name
+                        if loc_str is None:
+                            loc_str = path.drive
+                    else:
+                        loc_str = path_str
+            else:
+                loc_str = path.name if not for_edit else path_str
         return loc_str
 
     def _get_path_leaf_display_name(self, path: str | pathlib.Path):
         if isinstance(path, pathlib.Path) and self._get_parent(path)!='root':
-            if (net_comps := file_actions.split_network_path(path)):
+            if platform.os==platform.Os.Windows and (net_comps := file_actions.split_network_path(path)):
                 if len(net_comps)==1:
                     disp_name = f'\\\\{net_comps[0]}'
                 else:
@@ -671,7 +678,7 @@ class FilePicker:
         else:
             # do we have context menus?
             # not for special paths (which are strings) and not for share overviews of a network computer
-            net_comps = file_actions.get_net_computer(self.loc)
+            net_comps = file_actions.get_net_computer(self.loc) if platform.os==platform.Os.Windows else None
             has_context_menu = not isinstance(self.loc, str) and (not net_comps or len(net_comps)>1)
 
             table_flags = (
