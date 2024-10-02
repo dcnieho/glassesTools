@@ -305,7 +305,7 @@ class FilePicker:
 
     def _get_path_display_name(self, path: str | pathlib.Path, for_edit=False):
         path_str = str(path)
-        if path_str=='root':
+        if path_str=='root' or self._is_root(path):
             loc_str = self.file_action_provider.local_name
         else:
             if platform.os==platform.Os.Windows:
