@@ -1,4 +1,4 @@
-__version__ = "1.11.4"
+__version__ = "1.11.5"
 
 __title__ = "glassesTools"
 __description__ = "Tools for processing wearable eye tracker recordings."
