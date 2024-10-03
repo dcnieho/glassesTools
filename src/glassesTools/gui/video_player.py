@@ -126,6 +126,7 @@ class GUI:
         self._window_visible: dict[int,bool] = {}
         self._window_determine_size: dict[int,bool] = {}
         self._window_show_controls: dict[int,bool] = {}
+        self._window_show_action_tooltip: dict[int,bool] = {}
         self._window_show_play_percentage: dict[int,bool] = {}
         self._window_sfac: dict[int,float] = {}
         self._window_timeline: dict[int,timeline.Timeline] = {}
@@ -149,11 +150,11 @@ class GUI:
             self._window_visible[w_id]          = False
             self._window_determine_size[w_id]   = False
             self._window_show_controls[w_id]    = False
+            self._window_show_action_tooltip[w_id]  = False
             self._window_show_play_percentage[w_id] = False
             self._window_sfac[w_id]             = 1.
             self._window_timeline[w_id]         = None
             self._window_timecode_pos[w_id]     = 'l'
-            self._show_action_tooltip           = False
 
             self._next_window_id += 1
             return w_id
@@ -171,6 +172,7 @@ class GUI:
             self._window_visible.pop(window_id)
             self._window_determine_size.pop(window_id)
             self._window_show_controls.pop(window_id)
+            self._window_show_action_tooltip.pop(window_id)
             self._window_show_play_percentage.pop(window_id)
             self._window_sfac.pop(window_id)
             self._window_timeline.pop(window_id)
@@ -213,8 +215,10 @@ class GUI:
         if window_id is None:
             window_id = self._get_main_window_id()
         self._window_show_controls[window_id] = show_controls
-    def set_show_action_tooltip(self, show: bool):
-        self._show_action_tooltip = show
+    def set_show_action_tooltip(self, show_action_tooltip: bool, window_id:int = None):
+        if window_id is None:
+            window_id = self._get_main_window_id()
+        self._window_show_action_tooltip[window_id] = show_action_tooltip
     def set_timecode_position(self, position, window_id:int = None):
         if window_id is None:
             window_id = self._get_main_window_id()
@@ -582,10 +586,6 @@ class GUI:
         total_button_size = functools.reduce(lambda a,b: imgui.ImVec2(a.x+b.x, max(a.y,b.y)), button_sizes)
         total_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*imgui.get_style().item_spacing.x, total_button_size.y)
 
-        tooltip_txt_sz = imgui.calc_text_size('(?)')
-        tooltip_button_cursor_pos = (img_margin+img_sz[0]-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x, img_sz[1]-tooltip_txt_sz.y-2*imgui.get_style().frame_padding.y)
-        frame_padding = imgui.get_style().frame_padding
-        tooltip_controls_child_size = tooltip_txt_sz+imgui.ImVec2([frame_padding.x*2, frame_padding.y*2])
         # draw them, or info item for tooltip
         if self._window_show_controls[w]:
             buttons_x_pos = (img_space-total_size.x)/2
@@ -612,7 +612,16 @@ class GUI:
                     overlay_x_pos = buttons_x_pos+total_size.x+imgui.get_style().frame_padding.x
             button_cursor_pos = (buttons_x_pos,img_sz[1]-total_size.y)
             controls_child_size = total_size
+
+        tooltip_txt_sz = imgui.calc_text_size('(?)')
+        if self._window_timecode_pos[w]=='r':
+            tt_pos_x = overlay_x_pos-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
         else:
+            tt_pos_x = img_margin+img_sz[0]-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
+        tooltip_button_cursor_pos = (tt_pos_x, img_sz[1]-tooltip_txt_sz.y-2*imgui.get_style().frame_padding.y)
+        frame_padding = imgui.get_style().frame_padding
+        tooltip_controls_child_size = tooltip_txt_sz+imgui.ImVec2([frame_padding.x*2, frame_padding.y*2])
+        if not self._window_show_controls[w]:
             txt_sz = tooltip_txt_sz
             button_cursor_pos = tooltip_button_cursor_pos
             controls_child_size = tooltip_controls_child_size
@@ -715,7 +724,7 @@ class GUI:
                 imgui.end_disabled()
             imgui.same_line()
         imgui.end_child()
-        if self._window_show_controls[w] and self._show_action_tooltip:
+        if self._window_show_controls[w] and self._window_show_action_tooltip[w]:
             imgui.set_cursor_pos(tooltip_button_cursor_pos)
             imgui.begin_child("##tooltip_overlay", size=tooltip_controls_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
             _draw_action_tooltip()
