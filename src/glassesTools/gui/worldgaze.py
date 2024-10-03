@@ -9,7 +9,7 @@ def show_visualization(
         planes: dict[str, plane.Plane], poses: dict[str, dict[int, plane.Pose]],
         head_gazes: dict[int, list[gaze_headref.Gaze]], plane_gazes: dict[str, dict[int, list[gaze_worldref.Gaze]]],
         annotations: dict[annotation.Event, list[list[int]]],
-        gui: video_player.GUI, frame_win_id: int, show_planes: bool, show_only_intervals: bool, sub_pixel_fac: int
+        gui: video_player.GUI, show_planes: bool, show_only_intervals: bool, sub_pixel_fac: int
     ):
     in_video                = pathlib.Path(in_video)
     frame_timestamp_file    = pathlib.Path(frame_timestamp_file)
@@ -28,7 +28,7 @@ def show_visualization(
             annotations_flat[e] = [i for iv in annotations[e] for i in iv]
         else:
             annotations_flat[e] = annotations[e].copy()
-    gui.set_show_timeline(True, video_ts, annotations_flat, window_id=frame_win_id)
+    gui.set_show_timeline(True, video_ts, annotations_flat, window_id=gui.main_window_id)
 
     # add windows for planes, if wanted
     if show_planes:
@@ -40,7 +40,7 @@ def show_visualization(
     for frame_idx in range(max_frame_idx+1):
         done, frame, frame_idx, frame_ts = cap.read_frame(report_gap=True)
         if first_frame and frame is not None:
-            gui.set_frame_size(frame.shape, frame_win_id)
+            gui.set_frame_size(frame.shape, gui.main_window_id)
             first_frame = False
         if done or intervals.beyond_last_interval(frame_idx, annotations):
             break
@@ -60,10 +60,10 @@ def show_visualization(
         if show_only_intervals and not intervals.is_in_interval(frame_idx, annotations) or frame is None:
             # we don't have a valid frame or no need to show this frame
             # do update timeline of the viewers
+            gui.update_image(None, frame_ts/1000., frame_idx, window_id=gui.main_window_id)
             if show_planes:
-                gui.update_image(None, frame_ts/1000., frame_idx, window_id = frame_win_id)
                 for p in planes:
-                    gui.update_image(None, frame_ts/1000., frame_idx, window_id = plane_win_id[p])
+                    gui.update_image(None, frame_ts/1000., frame_idx, window_id=plane_win_id[p])
             continue
 
         if show_planes:
@@ -84,7 +84,7 @@ def show_visualization(
 
         if show_planes:
             for p in planes:
-                gui.update_image(ref_img[p], frame_ts/1000., frame_idx, window_id = plane_win_id[p])
+                gui.update_image(ref_img[p], frame_ts/1000., frame_idx, window_id=plane_win_id[p])
 
         # if we have plane pose, draw plane origin on video
         for p in planes:
@@ -95,6 +95,6 @@ def show_visualization(
                 drawing.openCVLine(frame, (a[0],a[1]-ll), (a[0],a[1]+ll), (0,255,0), 1, sub_pixel_fac)
                 drawing.openCVLine(frame, (a[0]-ll,a[1]), (a[0]+ll,a[1]), (0,255,0), 1, sub_pixel_fac)
 
-        gui.update_image(frame, frame_ts/1000., frame_idx, window_id = frame_win_id)
+        gui.update_image(frame, frame_ts/1000., frame_idx, window_id=gui.main_window_id)
 
     gui.stop()
