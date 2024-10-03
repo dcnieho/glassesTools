@@ -83,6 +83,7 @@ class Button:
 
 # GUI provider for viewer and coder windows
 class GUI:
+    main_window_id = 0
     def __init__(self, use_thread=True):
         self._running = False
         self._should_exit = False
@@ -114,7 +115,7 @@ class GUI:
         self._is_playing = False
         self._requests: list[tuple[str,Any]] = []
 
-        self._next_window_id: int = 0
+        self._next_window_id: int = GUI.main_window_id
         self._windows_lock: threading.Lock = threading.Lock()
         self._windows: dict[int,str] = {}
         self._window_flags = int(
@@ -160,7 +161,7 @@ class GUI:
             return w_id
 
     def delete_window(self, window_id: int):
-        if window_id==0:
+        if window_id==GUI.main_window_id:
             raise ValueError('It is not possible to delete the main window')
         with self._windows_lock:
             self._windows.pop(window_id)
@@ -364,14 +365,13 @@ class GUI:
             if self._window_timeline[w] is not None:
                 self._window_timeline[w].notify_annotations_changed()
 
-    def _get_main_window_id(self):
+    def _get_main_window_id(self) -> int:
         # NB: actually the main window id is always 0, but i want to have a defensive check here
-        # so that user doesn't make a mistake not specifying the window they apply an operation to
-        with self._windows_lock:
-            if len(self._windows)==1:
-                return next(iter(self._windows))
-            else:
-                raise RuntimeError("You have more than one window, you must indicate for which window you are making this call for")
+        # so that user doesn't make a mistake not specifying what window they apply an operation
+        # to when there is more than one window
+        if len(self._windows)>1:
+            raise RuntimeError("You have more than one window, you must indicate for which window you are making this call for")
+        return GUI.main_window_id
 
     def _thread_start_fun(self):
         self._running = True
@@ -386,13 +386,13 @@ class GUI:
             imgui.get_io().config_viewports_no_auto_merge = True
 
             glfw.swap_interval(0)
-            self._window_visible[self._get_main_window_id()] = False
+            self._window_visible[GUI.main_window_id] = False
             glfw.set_window_close_callback(glfw_utils.glfw_window_hello_imgui(), close_callback)
 
         params = hello_imgui.RunnerParams()
         params.app_window_params.restore_previous_geometry = False
         params.ini_folder_type = hello_imgui.IniFolderType.temp_folder  # so we don't have endless ini files in the app folder, since we don't use them anyway (see previous line, restore_previous_geometry = False)
-        params.app_window_params.window_title = self._windows[self._get_main_window_id()]
+        params.app_window_params.window_title = self._windows[GUI.main_window_id]
         params.app_window_params.hidden = True
         params.fps_idling.fps_idle = 0
         params.callbacks.default_icon_font = hello_imgui.DefaultIconFont.font_awesome6
