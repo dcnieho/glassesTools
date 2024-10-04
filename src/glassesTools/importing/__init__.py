@@ -78,7 +78,7 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
     # do the actual import/pre-process
     match device:
         case EyeTracker.AdHawk_MindLink:
-            rec_info = adhawk_mindlink(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, cam_cal_file=cam_cal_file, source_dir_as_relative_path=source_dir_as_relative_path)
+            rec_info = adhawk_mindlink(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
         case EyeTracker.Pupil_Core:
             rec_info = pupil_core(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Pupil_Invisible:
@@ -86,7 +86,7 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
         case EyeTracker.Pupil_Neon:
             rec_info = pupil_neon(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.SeeTrue_STONE:
-            rec_info = SeeTrue_STONE(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, cam_cal_file=cam_cal_file, source_dir_as_relative_path=source_dir_as_relative_path)
+            rec_info = SeeTrue_STONE(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
         case EyeTracker.SMI_ETG:
             rec_info = SMI_ETG(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Tobii_Glasses_2:

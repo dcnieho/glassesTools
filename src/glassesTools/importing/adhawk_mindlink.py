@@ -16,7 +16,7 @@ from ..eyetracker import EyeTracker
 from .. import naming, timestamps, video_utils
 
 
-def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, cam_cal_file: str|pathlib.Path=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
+def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False, cam_cal_file: str|pathlib.Path=None) -> Recording:
     from . import check_folders, _store_data
     """
     Run all preprocessing steps on AdHawk MindLink data and store in output_dir
