@@ -150,7 +150,7 @@ When loading a [`glassesTools.recording.Recording`](#recording-info) from this j
 
 ### Gaze data
 #### Head-referenced gaze data
-The `glassesTools.gaze_headref.Gaze` class is used for storing a sample of head-referenced gaze data, as recorded by the eye tracker. It has the following properties:
+The `glassesTools.gaze_headref.Gaze` class is used for storing a sample of head-referenced gaze data, as recorded by the eye tracker. These data are typically stored in a `gazeData.tsv` file, using columns with the same names as these properties. It has the following properties:
 |Property|Type|Description|
 | --- | --- | --- |
 |`timestamp`|`float`|Timestamp (ms) for the gaze sample.|
@@ -163,7 +163,7 @@ The `glassesTools.gaze_headref.Gaze` class is used for storing a sample of head-
 |`gaze_ori_r`|`np.ndarray`|Origin for the right eye's gaze direction vector (mm) in the eye tracker's coordinate system.|
 
 #### World-referenced gaze data
-The `glassesTools.gaze_worldref.Gaze` class is used for storing a sample of gaze data expressed in the world. Each sample is expressed in two reference frames, one with respect to the scene camera (`gazePosCam` and `gazeOriCam`), and the other with respect to a plane/surface in the world (such as the glassesValidator poster, `gazePosPlane2D`). `glassesTools.gaze_worldref.Gaze` has the following properties:
+The `glassesTools.gaze_worldref.Gaze` class is used for storing a sample of gaze data expressed in the world. Each sample is expressed in two reference frames, one with respect to the scene camera (`gazePosCam` and `gazeOriCam`), and the other with respect to a plane/surface in the world (such as the glassesValidator poster, `gazePosPlane2D`). It is typically the position on a plane in the world (the `gazePosPlane2D` fields) that one is interested in. `glassesTools.gaze_worldref.Gaze` has the following properties:
 |Property|Type|Description|
 | --- | --- | --- |
 |`timestamp`|`float`|Timestamp (ms) for the gaze sample.|
@@ -183,6 +183,39 @@ The `glassesTools.gaze_worldref.Gaze` class is used for storing a sample of gaze
 
 All positions are in mm.
 For data on a plane, the positive x-axis points to the right and the positive y-axis downward, which means that (-,-) coordinates are to the left and above of the poster origin, and (+,+) to the right and below.
+
+There are multiple methods by which gaze position on a surface can be determined by the functionality in glassesTools (`glassesTools.gaze_worldref.from_head()` specifically). The methods are formed by combining two decisions:
+
+1) Transforming gaze positions from the scene camera reference frame to positions on a plane/surface in the world:
+
+   1. Performed by means of homography (`*_homography` in the `glassesTools.gaze_worldref.Gaze` properties).
+   2. Performed using recovered camera pose and gaze direction vector, by means of intersection of gaze vector with the validation
+      poster plane (all the other properties of `glassesTools.gaze_worldref.Gaze`).
+
+   Mode ii. is used by default, when a scene camera calibration is available. If a camera calibration is not available, mode i. will
+   be used instead.
+   Six of the nine supported wearable eye trackers provide the calibration of the scene camera of a specific pair of glasses, which
+   will be used this calibration for these eye trackers (mode ii.). Currently, the Adhawk, SeeTrue and Pupil Core do not provide a
+   specific camera calibration. However, for each the manufacturer has provided a default/generic scene camera calibration which
+   enables glassesTools to work without having to assume a viewing distance (mode i.), but which may be somewhat different from
+   the intrinsics of the specific scene camera, which may result in slightly incorrect viewing positions and gaze positions on the
+   plane.
+
+2) Which data is used for determining gaze position on the plane/surface in the world:
+
+   1. The gaze position in the scene camera image (`*_vidPos_*` in the `glassesTools.gaze_worldref.Gaze` properties).
+   2. The gaze position in the world (often binocular gaze point, `*World` in the `glassesTools.gaze_worldref.Gaze` properties).
+   3. Gaze direction vectors in a head reference frame (`*Left` and `*Right` in the `glassesTools.gaze_worldref.Gaze` properties).
+
+   When operating in mode i., the eye tracker's estimate of the (binocular) gaze point in the scene camera image is used. This is
+   the appropriate choice for most wearable eye tracking research, as it is this gaze point that is normally used for further
+   analysis. However, in some settings and when the eye tracker provides a (3D) gaze position in the world and/or gaze direction
+   vectors for the individual eyes along with their origin, the researcher may wish to use these world gaze point/gaze vectors
+   instead. NB: for most of the currently supported eye trackers, modes i. and ii. are equivalent (i.e., the gaze position in the
+   camera image is simply the gaze position in the world projected to the camera image). This is however not always the case. The
+   AdHawk MindLink for instance has an operating mode that corrects for parallax error in the projected gaze point using the
+   vergence signal, which leads to the eye tracker reporting a different gaze position in the scene video than a direct projection
+   of gaze position in the world to the scene camera image.
 
 ## Processing
 Several further classes for processing data in the glassesTools common data format or storing derived data are noteworthy:
