@@ -130,29 +130,68 @@ The `glassesTools.recording.Recording` object contains information about a recor
 It has the following properties:
 |Property|Type|Description|
 | --- | --- | --- |
-`name`|`str`|Recording name|
-`source_directory`|`pathlib.Path`|Original source directory from which the recording was imported|
-`working_directory`|`pathlib.Path`|Directory where the recording data in the common format is stored|
-`start_time`|`Timestamp`|Recording start time|
-`duration`|`int`|Recording duration (ms)|
-`eye_tracker`|`EyeTracker`|[Eye tracker type](#eye-tracker-support) (e.g. Pupil Invisible or Tobii Glasses 2)|
-`project`|`str`|Project name|
-`participant`|`str`|Participant name|
-`firmware_version`|`str`|Firmware version|
-`glasses_serial`|`str`|Glasses serial number|
-`recording_unit_serial`|`str`|Recording unit serial number|
-`recording_software_version`|`str`|Recording software version|
-`scene_camera_serial`|`str`|Scene camera serial number|
-`scene_video_file`|`str`|Scene video filename (found in `source_directory`)|
+|`name`|`str`|Recording name|
+|`source_directory`|`pathlib.Path`|Original source directory from which the recording was imported|
+|`working_directory`|`pathlib.Path`|Directory where the recording data in the common format is stored|
+|`start_time`|`glassesTools.timestamps.Timestamp`|Recording start time|
+|`duration`|`int`|Recording duration (ms)|
+|`eye_tracker`|[`glassesTools.eyetracker.EyeTracker`](#eye-tracker-support)|Eye tracker type (e.g. Pupil Invisible or Tobii Glasses 2)|
+|`project`|`str`|Project name|
+|`participant`|`str`|Participant name|
+|`firmware_version`|`str`|Firmware version|
+|`glasses_serial`|`str`|Glasses serial number|
+|`recording_unit_serial`|`str`|Recording unit serial number|
+|`recording_software_version`|`str`|Recording software version|
+|`scene_camera_serial`|`str`|Scene camera serial number|
+|`scene_video_file`|`str`|Scene video filename (found in `source_directory`)|
+
 All these fields except `working_directory` are stored in the file `recording_info.json` in the recording's working directory.
-When loading a `glassesTools.recording.Recording` from this json file, the `working_directory` is set based on the path of the file.
+When loading a [`glassesTools.recording.Recording`](#recording-info) from this json file, the `working_directory` is set based on the path of the file.
 
 ### Gaze data
 #### Head-referenced gaze data
-`glassesTools.gaze_headref.Gaze`
+The `glassesTools.gaze_headref.Gaze` class is used for storing a sample of head-referenced gaze data, as recorded by the eye tracker. It has the following properties:
+|Property|Type|Description|
+| --- | --- | --- |
+|`timestamp`|`float`|Timestamp (ms) for the gaze sample.|
+|`frame_idx`|`int`|Index (0-based) of the frame in the scene video that this gaze sample belongs to.|
+|`gaze_pos_vid`|`np.ndarray`|Gaze position on the scene video (pixels)|
+|`gaze_pos_3d`|`np.ndarray`|(3D) Gaze position in the eye tracker's coordinate system (mm)|
+|`gaze_dir_l`|`np.ndarray`|Gaze direction vector for the left eye in the eye tracker's coordinate system.|
+|`gaze_ori_l`|`np.ndarray`|Origin for the left eye's gaze direction vector (mm) in the eye tracker's coordinate system.|
+|`gaze_dir_r`|`np.ndarray`|Gaze direction vector for the right eye in the eye tracker's coordinate system.|
+|`gaze_ori_r`|`np.ndarray`|Origin for the right eye's gaze direction vector (mm) in the eye tracker's coordinate system.|
 
 #### World-referenced gaze data
-`glassesTools.gaze_worldref.Gaze`
+The `glassesTools.gaze_worldref.Gaze` class is used for storing a sample of gaze data expressed in the world. Each sample is expressed in two reference frames, one with respect to the scene camera (`gazePosCam` and `gazeOriCam`), and the other with respect to a plane/surface in the world (such as the glassesValidator poster, `gazePosPlane2D`). `glassesTools.gaze_worldref.Gaze` has the following properties:
+|Property|Type|Description|
+| --- | --- | --- |
+|`timestamp`|`float`|Timestamp (ms) for the gaze sample.|
+|`frame_idx`|`int`|Index (0-based) of the frame in the scene video that this gaze sample belongs to.|
+|`gazePosCam_vidPos_ray`|`np.ndarray`|Gaze position on the plane in the scene camera reference frame, derived by turning the gaze position on the scene video (`glassesTools.gaze_headref.Gaze.gaze_pos_vid`) into a direction vector and intersecting it with a surface.|
+|`gazePosCam_vidPos_homography`|`np.ndarray`|Gaze position on the plane in the scene camera reference frame, derived by turning the gaze position on the scene video (`glassesTools.gaze_headref.Gaze.gaze_pos_vid`) into a position on the plane (`glassesTools.gaze_worldref.Gaze.gazePosPlane2D_vidPos_homography`) directly using a homography transformation and then transforming that position into the scene camera reference frame.|
+|`gazePosCamWorld`|`np.ndarray`|Gaze position on the plane in the scene camera reference frame, derived from the 3D gaze point (`glassesTools.gaze_headref.Gaze.gaze_pos_3d`) by turning it into a direction ray and intersecting that with the plane.|
+|`gazeOriCamLeft`|`np.ndarray`|Gaze direction vector for the left eye in the scene camera's coordinate system.|
+|`gazePosCamLeft`|`np.ndarray`|Gaze position on the plane derived by taking the gaze vector of the left eye defined by its direction vector (`glassesTools.gaze_headref.Gaze.gaze_dir_l`) and origin (`glassesTools.gaze_headref.Gaze.gaze_ori_l`) and intersecting that with the plane.|
+|`gazeOriCamRight`|`np.ndarray`|Gaze direction vector for the right eye in the scene camera's coordinate system.|
+|`gazePosCamRight`|`np.ndarray`|Gaze position on the plane derived by taking the gaze vector of the right eye defined by its direction vector (`glassesTools.gaze_headref.Gaze.gaze_dir_r`) and origin (`glassesTools.gaze_headref.Gaze.gaze_ori_r`) and intersecting that with the plane.|
+|`gazePosPlane2D_vidPos_ray`|`np.ndarray`|Gaze position on the plane in the plane's reference frame, derived by turning the gaze position on the scene video (`glassesTools.gaze_headref.Gaze.gaze_pos_vid`) into a direction vector and intersecting it with a surface.|
+|`gazePosPlane2D_vidPos_homography`|`np.ndarray`|Gaze position on the plane in the plane's reference frame, derived directly by a homography transformation of the gaze position on the scene video (`glassesTools.gaze_headref.Gaze.gaze_pos_vid`) to map it to a position on the plane.|
+|`gazePosPlane2DWorld`|`np.ndarray`|`glassesTools.gaze_worldref.Gaze.gazePosCamWorld` in the plane's reference frame.|
+|`gazePosPlane2DLeft`|`np.ndarray`|`glassesTools.gaze_worldref.Gaze.gazePosCamLeft` in the plane's reference frame.|
+|`gazePosPlane2DRight`|`np.ndarray`|`glassesTools.gaze_worldref.Gaze.gazePosCamRight` in the plane's reference frame.|
+
+All positions are in mm.
+For data on a plane, the positive x-axis points to the right and the positive y-axis downward, which means that (-,-) coordinates are to the left and above of the poster origin, and (+,+) to the right and below.
 
 ## Processing
-`glassesTools.aruco.ArUcoDetector`, `glassesTools.aruco.PoseEstimator`, `glassesTools.marker`, `glassesTools.ocv`, `glassesTools.plane`
+Several further classes for processing data in the glassesTools common data format or storing derived data are noteworthy:
+|Class|description|
+| --- | --- |
+|`glassesTools.aruco.ArUcoDetector`||
+|`glassesTools.aruco.PoseEstimator`||
+|`glassesTools.marker.Pose`||
+|`glassesTools.ocv.CameraParams`||
+|`glassesTools.ocv.CV2VideoReader`||
+|`glassesTools.plane.Plane`||
+|`glassesTools.plane.Pose`||
