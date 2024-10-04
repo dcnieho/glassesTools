@@ -63,9 +63,9 @@ class Gaze:
         # in poster space (2D coordinates)
         self.gazePosPlane2D_vidPos_ray          = gazePosPlane2D_vidPos_ray         # Video gaze point mapped to poster by turning into direction ray and intersecting with poster
         self.gazePosPlane2D_vidPos_homography   = gazePosPlane2D_vidPos_homography  # Video gaze point directly mapped to poster through homography transformation
-        self.gazePosPlane2DWorld                = gazePosPlane2DWorld               # wGaze3D in poster space
-        self.gazePosPlane2DLeft                 = gazePosPlane2DLeft                # lGaze3D in poster space
-        self.gazePosPlane2DRight                = gazePosPlane2DRight               # rGaze3D in poster space
+        self.gazePosPlane2DWorld                = gazePosPlane2DWorld               # gazePosCamWorld in poster space
+        self.gazePosPlane2DLeft                 = gazePosPlane2DLeft                # gazePosCamLeft in poster space
+        self.gazePosPlane2DRight                = gazePosPlane2DRight               # gazePosCamRight in poster space
 
     def draw_on_world_video(self, img, camera_params: ocv.CameraParams, sub_pixel_fac=1):
         # project to camera, display
