@@ -3,27 +3,33 @@
 [![image](https://img.shields.io/pypi/pyversions/glassesTools.svg)](https://pypi.org/project/glassesTools/)
 
 # GlassesTools v1.11.7
-Tools for processing wearable eye tracker recordings.
+Tools for processing wearable eye tracker recordings. Used by [gazeMapper](https://github.com/dcnieho/gazeMapper) and [glassesValidator](https://github.com/dcnieho/glassesValidator).
 
 If you use this package or any of the code in this repository, please cite:<br>
 [Niehorster, D.C., Hessels, R.S., Benjamins, J.S., Nyström, M. and Hooge, I.T.C. (2023). GlassesValidator:
 A data quality tool for eye tracking glasses. Behavior Research Methods. doi: 10.3758/s13428-023-02105-5](https://doi.org/10.3758/s13428-023-02105-5)
 
+# How to acquire
+GlassesTools is available from `https://github.com/dcnieho/glassesTools`, and supports Python 3.10 and 3.11 on Windows, MacOS and Linux.
+
+The easiest way to acquire glassesTools is to install it directly into your Python distribution using the command
+`python -m pip install glassesTools`. If you run into problems on MacOS to install the `imgui_bundle` package, you can
+try to install it first with the command `SYSTEM_VERSION_COMPAT=0 pip install --only-binary=:all: imgui_bundle`.
+
 
 # API
-
 ## Eye tracker support
 glassesTools supports the following eye trackers:
 |Name|`glassesTools.eyetracker.EyeTracker` `Enum` value|
 | --- | --- |
-|AdHawk MindLink|EyeTracker.AdHawk_MindLink|
-|Pupil Core|EyeTracker.Pupil_Core|
-|Pupil Invisible|EyeTracker.Pupil_Invisible|
-|Pupil Neon|EyeTracker.Pupil_Neon|
-|SeeTrue STONE|EyeTracker.SeeTrue_STONE|
-|SMI ETG 1 and ETG 2|EyeTracker.SMI_ETG|
-|Tobii Pro Glasses 2|EyeTracker.Tobii_Glasses_2|
-|Tobii Pro Glasses 3|EyeTracker.Tobii_Glasses_3|
+|AdHawk MindLink|`EyeTracker.AdHawk_MindLink`|
+|Pupil Core|`EyeTracker.Pupil_Core`|
+|Pupil Invisible|`EyeTracker.Pupil_Invisible`|
+|Pupil Neon|`EyeTracker.Pupil_Neon`|
+|SeeTrue STONE|`EyeTracker.SeeTrue_STONE`|
+|SMI ETG 1 and ETG 2|`EyeTracker.SMI_ETG`|
+|Tobii Pro Glasses 2|`EyeTracker.Tobii_Glasses_2`|
+|Tobii Pro Glasses 3|`EyeTracker.Tobii_Glasses_3`|
 
 Pull requests or partial help implementing support for further wearable eye trackers are gladly received. To support a new eye tracker,
 device support in [`glassesTools.importing`](#glassestoolsimporting) should be implemented and the new eye tracker added to
@@ -85,38 +91,61 @@ software before they can be imported using glassesTools. These are:
 |function|inputs|description|
 | --- | --- | --- |
 |`get_recording_info()`|<ol><li>[`source_dir`](#common-input-arguments)</li><li>`device`: `glassesTools.eyetracker.EyeTracker`</li></ol>|Determine if provided path contains a recording/recordings made with the specified eye tracker (`device`) and if so, get info about these recordings.|
-|`do_import()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`device`: `glassesTools.eyetracker.EyeTracker`</li><li>`rec_info`</li></ol>|Import the specified recording to `output_dir`. Either `device` or `rec_info` must be specified. Does nothing if directory does not contain a recording made with the specified eye tracker.|
+|`do_import()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`device`: `glassesTools.eyetracker.EyeTracker`</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li><li>[`cam_cal_file`](#common-input-arguments): Optional.</li></ol>|Import the specified recording to `output_dir`. Either `device` or `rec_info` must be specified. Does nothing if directory does not contain a recording made with the specified eye tracker.|
 |  |  |  |
-|`adhawk_mindlink()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`rec_info`</li><li>`cam_cal_file`: OpenCV XML file containing a camera calibration to be used when processing this recording. Optional. If not provided a default calibration provided by AdHawk is used.</li></ol>|Import an AdHawk MindLink recording to a subdirectory of `output_dir`. Does nothing if directory does not contain an AdHawk MindLink recording. `rec_info` is optional.|
-|`pupil_core()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`rec_info`</li></ol>|Import a Pupil Core recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a Pupil Core recording. `rec_info` is optional.|
-|`pupil_invisible()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`rec_info`</li></ol>|Import a Pupil Invisible recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a Pupil Invisible recording. `rec_info` is optional.|
-|`pupil_neon()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`rec_info`</li></ol>|Import a Pupil Neon recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a Pupil Neon recording. `rec_info` is optional.|
-|`SeeTrue_STONE()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`rec_info`</li><li>`cam_cal_file`: OpenCV XML file containing a camera calibration to be used when processing this recording. Optional. If not provided a default calibration provided by SeeTrue is used.</li></ol>|Import a SeeTrue recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a SeeTrue recording. `rec_info` is optional.|
-|`SMI_ETG()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`rec_info`</li></ol>|Import a SMI ETG recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a SMI ETG 1 or 2 recording. `rec_info` is optional.|
-|`tobii_G2()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`rec_info`</li></ol>|Import a Tobii Pro Glasses 2 recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a Tobii Pro Glasses 2 recording. `rec_info` is optional.|
-|`tobii_G3()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`rec_info`</li></ol>|Import a Tobii Pro Glasses 3 recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a Tobii Pro Glasses 3 recording. `rec_info` is optional.|
+|`adhawk_mindlink()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li><li>[`cam_cal_file`](#common-input-arguments): Optional. If not provided a default calibration provided by AdHawk is used.</li></ol>|Import an AdHawk MindLink recording to a subdirectory of `output_dir`. Does nothing if directory does not contain an AdHawk MindLink recording.|
+|`pupil_core()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li></ol>|Import a Pupil Core recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a Pupil Core recording.|
+|`pupil_invisible()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li></ol>|Import a Pupil Invisible recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a Pupil Invisible recording.|
+|`pupil_neon()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li></ol>|Import a Pupil Neon recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a Pupil Neon recording.|
+|`SeeTrue_STONE()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li><li>[`cam_cal_file`](#common-input-arguments): Optional. If not provided a default calibration provided by SeeTrue is used.</li></ol>|Import a SeeTrue recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a SeeTrue recording.|
+|`SMI_ETG()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li></ol>|Import a SMI ETG recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a SMI ETG 1 or 2 recording.|
+|`tobii_G2()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li></ol>|Import a Tobii Pro Glasses 2 recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a Tobii Pro Glasses 2 recording.|
+|`tobii_G3()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li></ol>|Import a Tobii Pro Glasses 3 recording to a subdirectory of `output_dir`. Does nothing if directory does not contain a Tobii Pro Glasses 3 recording.|
 
 #### Common input arguments
 |argument|description|
 | --- | --- |
 |`source_dir`|Path to directory containing one (or for some eye trackers potentially multiple) eye tracker recording(s) as stored by the eye tracker's recording hardware or software.|
-|`working_dir`, or `output_dir`|Path to a glassesValidator recording directory. In the case of output_dir, it is the directory the functions in `glassesTools.importing` will import the recording to.|
+|`working_dir`, or `output_dir`|Path to a glassesValidator recording directory. In the case of output_dir, it is the directory the functions in [`glassesTools.importing`](#glassestoolsimporting) will import the recording to.|
+|`rec_info`|Recording info ([`glassesTools.recording.Recording`](#recording-info)) or list of recording info specifying one or multiple recordings.|
+|`copy_scene_video`||
+|`source_dir_as_relative_path`||
+|`cam_cal_file`|OpenCV XML file containing a camera calibration to be used when processing this recording.|
 
 ### `glassesTools.video_utils`
-Besides the gaze data, the common data format also contains a file with timestamps for each frame in the eye tracker's scene camera video. This file is created automatically when importing a recording using the functions in [`glassesTools.importing`](#glassestoolsimporting), but can also be created manually using the function `glassesTools.video_utils.get_frame_timestamps_from_video`. The duration of a video file can furthermore be determined using `glassesTools.video_utils.get_video_duration` and gaze data can be associated with frames in the scene camera video by means of the gaze and video timestamp using `glassesTools.video_utils.timestamps_to_frame_number`.
+Besides the gaze data, the common data format also contains a file with timestamps for each frame in the eye tracker's scene camera video. This file is created automatically when importing a recording using the functions in [`glassesTools.importing`](#glassestoolsimporting), but can also be created manually using the function `glassesTools.video_utils.get_frame_timestamps_from_video()`. The duration of a video file can furthermore be determined using `glassesTools.video_utils.get_video_duration()` and gaze data can be associated with frames in the scene camera video by means of the gaze and video timestamp using `glassesTools.video_utils.timestamps_to_frame_number()`.
 
 ## Common data format
-The common data format of glassesTools contains the following files:
+The common data format of glassesTools contains the following files per recording:
 |file|description|
 | --- | --- |
-|`worldCamera.mp4`|[`glassesValidator.preprocess`](#glassesvalidatorpreprocess) functions|(Optional) copy of the scene camera video.|
-|`recording_info.json`|Information about the recording.|
-|`gazeData.tsv`|Gaze data cast into a common format understood by glassesValidator.|
-|`frameTimestamps.tsv`|Timestamps for each frame in the scene camera video.|
+|`worldCamera.mp4`|(Optional) copy of the scene camera video.|
+|`recording_info.json`|[Information about the recording](#recording-info).|
+|`gazeData.tsv`|Gaze data cast into the glassesTools common format.|
+|`frameTimestamps.tsv`|[Timestamps for each frame in the scene camera video.](#glassestoolsvideo_utils)|
 |`calibration.xml`|Camera calibration parameters for the scene camera.|
 
 ### Recording info
-`glassesTools.recording`
+The `glassesTools.recording.Recording` object contains information about a recording.
+It has the following properties:
+|Property|Type|Description|
+| --- | --- | --- |
+`name`|`str`|Recording name|
+`source_directory`|`pathlib.Path`|Original source directory from which the recording was imported|
+`working_directory`|`pathlib.Path`|Directory where the recording data in the common format is stored|
+`start_time`|`Timestamp`|Recording start time|
+`duration`|`int`|Recording duration (ms)|
+`eye_tracker`|`EyeTracker`|[Eye tracker type](#eye-tracker-support) (e.g. Pupil Invisible or Tobii Glasses 2)|
+`project`|`str`|Project name|
+`participant`|`str`|Participant name|
+`firmware_version`|`str`|Firmware version|
+`glasses_serial`|`str`|Glasses serial number|
+`recording_unit_serial`|`str`|Recording unit serial number|
+`recording_software_version`|`str`|Recording software version|
+`scene_camera_serial`|`str`|Scene camera serial number|
+`scene_video_file`|`str`|Scene video filename (found in `source_directory`)|
+All these fields except `working_directory` are stored in the file `recording_info.json` in the recording's working directory.
+When loading a `glassesTools.recording.Recording` from this json file, the `working_directory` is set based on the path of the file.
 
 ### Gaze data
 #### Head-referenced gaze data
