@@ -45,13 +45,13 @@ software before they can be imported using glassesTools. These are:
 - *Pupil Labs eye trackers*: Recordings should either be preprocessed using Pupil Player (*Pupil Core* and *Pupil Invisible*),
   Neon Player (*Pupil Neon*) or exported from Pupil Cloud (*Pupil Invisible* and *Pupil Neon*).
   - Using Pupil Player (*Pupil Core* and *Pupil Invisible*) or Neon player (*Pupil Neon*): Each recording should 1) be opened
-    in Pupil/Neon Player, and 2) an export of the recording (`e` hotkey) should be run from pupil player. Make sure to disable the
-    `World Video Exporter` in the `Plugin Manager` before exporting, as the exported video is not used by glassesValidator and takes a long time to create. Note that importing a Pupil/Neon Player export of a Pupil Invisibl/Neone recording may require an internet connection. This is used to retrieve the scene camera calibration from Pupil Lab's servers in case the recording does not have
+    in Pupil/Neon Player, and 2) an export of the recording (`e` hotkey) should be run from Pupil/Neon Player. Make sure to disable the
+    `World Video Exporter` in the `Plugin Manager` before exporting, as the exported video is not used by glassesTools and takes a long time to create. Note that importing a Pupil/Neon Player export of a Pupil Invisibl/Neone recording may require an internet connection. This is used to retrieve the scene camera calibration from Pupil Lab's servers in case the recording does not have
     a `calibration.bin` file.
   - Using Pupil Cloud (*Pupil Invisible* and *Pupil Neon*): Export the recordings using the `Timeseries data + Scene video` action.
   - For the *Pupil Core*, for best results you may wish to do a scene camera calibration yourself, see https://docs.pupil-labs.com/core/software/pupil-capture/#camera-intrinsics-estimation.
     If you do not do so, a generic calibration will be used by Pupil Capture during data recording, by Pupil Player during data
-    analysis and by glassesValidator, which may result in incorrect accuracy values.
+    analysis and by the glassesTools processing functions, which may result in incorrect accuracy values.
 - *SMI ETG*: For SMI ETG recordings, access to BeGaze is required and the following steps should be performed:
   - Export gaze data: `Export` -> `Legacy: Export Raw Data to File`.
     - In the `General` tab, make sure you select the following:
@@ -163,7 +163,7 @@ The `glassesTools.gaze_headref.Gaze` class is used for storing a sample of head-
 |`gaze_ori_r`|`np.ndarray`|Origin for the right eye's gaze direction vector (mm) in the eye tracker's coordinate system.|
 
 #### World-referenced gaze data
-The `glassesTools.gaze_worldref.Gaze` class is used for storing a sample of gaze data expressed in the world. Each sample is expressed in two reference frames, one with respect to the scene camera (`gazePosCam` and `gazeOriCam`), and the other with respect to a plane/surface in the world (such as the glassesValidator poster, `gazePosPlane2D`). It is typically the position on a plane in the world (the `gazePosPlane2D` fields) that one is interested in. `glassesTools.gaze_worldref.Gaze` has the following properties:
+The `glassesTools.gaze_worldref.Gaze` class is used for storing a sample of gaze data expressed in the world. Each sample is expressed in two reference frames, one with respect to the scene camera (`gazePosCam*` and `gazeOriCam*`), and the other with respect to a plane/surface in the world (such as the glassesValidator poster, `gazePosPlane2D*`). It is typically the position on a plane in the world (the `gazePosPlane2D*` fields) that one is interested in. `glassesTools.gaze_worldref.Gaze` has the following properties:
 |Property|Type|Description|
 | --- | --- | --- |
 |`timestamp`|`float`|Timestamp (ms) for the gaze sample.|
@@ -175,6 +175,7 @@ The `glassesTools.gaze_worldref.Gaze` class is used for storing a sample of gaze
 |`gazePosCamLeft`|`np.ndarray`|Gaze position on the plane derived by taking the gaze vector of the left eye defined by its direction vector (`glassesTools.gaze_headref.Gaze.gaze_dir_l`) and origin (`glassesTools.gaze_headref.Gaze.gaze_ori_l`) and intersecting that with the plane.|
 |`gazeOriCamRight`|`np.ndarray`|Gaze direction vector for the right eye in the scene camera's coordinate system.|
 |`gazePosCamRight`|`np.ndarray`|Gaze position on the plane derived by taking the gaze vector of the right eye defined by its direction vector (`glassesTools.gaze_headref.Gaze.gaze_dir_r`) and origin (`glassesTools.gaze_headref.Gaze.gaze_ori_r`) and intersecting that with the plane.|
+|  |  |  |
 |`gazePosPlane2D_vidPos_ray`|`np.ndarray`|Gaze position on the plane in the plane's reference frame, derived by turning the gaze position on the scene video (`glassesTools.gaze_headref.Gaze.gaze_pos_vid`) into a direction vector and intersecting it with a surface.|
 |`gazePosPlane2D_vidPos_homography`|`np.ndarray`|Gaze position on the plane in the plane's reference frame, derived directly by a homography transformation of the gaze position on the scene video (`glassesTools.gaze_headref.Gaze.gaze_pos_vid`) to map it to a position on the plane.|
 |`gazePosPlane2DWorld`|`np.ndarray`|`glassesTools.gaze_worldref.Gaze.gazePosCamWorld` in the plane's reference frame.|
@@ -184,20 +185,19 @@ The `glassesTools.gaze_worldref.Gaze` class is used for storing a sample of gaze
 All positions are in mm.
 For data on a plane, the positive x-axis points to the right and the positive y-axis downward, which means that (-,-) coordinates are to the left and above of the poster origin, and (+,+) to the right and below.
 
-There are multiple methods by which gaze position on a surface can be determined by the functionality in glassesTools (`glassesTools.gaze_worldref.from_head()` specifically). The methods are formed by combining two decisions:
+There are multiple methods by which gaze position on a plane/surface can be determined by the functionality in glassesTools (`glassesTools.gaze_worldref.from_head()` specifically). The methods are formed by combining two decisions:
 
 1) Transforming gaze positions from the scene camera reference frame to positions on a plane/surface in the world:
 
    1. Performed by means of homography (`*_homography` in the `glassesTools.gaze_worldref.Gaze` properties).
-   2. Performed using recovered camera pose and gaze direction vector, by means of intersection of gaze vector with the validation
-      poster plane (all the other properties of `glassesTools.gaze_worldref.Gaze`).
+   2. Performed using recovered camera pose and gaze direction vector, by means of intersection of gaze vector with the plane (all the other properties of `glassesTools.gaze_worldref.Gaze`).
 
    Mode ii. is used by default, when a scene camera calibration is available. If a camera calibration is not available, mode i. will
    be used instead.
    Six of the nine supported wearable eye trackers provide the calibration of the scene camera of a specific pair of glasses, which
-   will be used this calibration for these eye trackers (mode ii.). Currently, the Adhawk, SeeTrue and Pupil Core do not provide a
+   will be used for these eye trackers (mode ii.). Currently, the Adhawk, SeeTrue and Pupil Core do not provide a
    specific camera calibration. However, for each the manufacturer has provided a default/generic scene camera calibration which
-   enables glassesTools to work without having to assume a viewing distance (mode i.), but which may be somewhat different from
+   enables glassesTools to work based on scene camera pose information (mode ii.), but which may be somewhat different from
    the intrinsics of the specific scene camera, which may result in slightly incorrect viewing positions and gaze positions on the
    plane.
 
@@ -208,23 +208,28 @@ There are multiple methods by which gaze position on a surface can be determined
    3. Gaze direction vectors in a head reference frame (`*Left` and `*Right` in the `glassesTools.gaze_worldref.Gaze` properties).
 
    When operating in mode i., the eye tracker's estimate of the (binocular) gaze point in the scene camera image is used. This is
-   the appropriate choice for most wearable eye tracking research, as it is this gaze point that is normally used for further
-   analysis. However, in some settings and when the eye tracker provides a (3D) gaze position in the world and/or gaze direction
-   vectors for the individual eyes along with their origin, the researcher may wish to use these world gaze point/gaze vectors
-   instead. NB: for most of the currently supported eye trackers, modes i. and ii. are equivalent (i.e., the gaze position in the
-   camera image is simply the gaze position in the world projected to the camera image). This is however not always the case. The
-   AdHawk MindLink for instance has an operating mode that corrects for parallax error in the projected gaze point using the
-   vergence signal, which leads to the eye tracker reporting a different gaze position in the scene video than a direct projection
-   of gaze position in the world to the scene camera image.
+   the appropriate choice for most wearable eye tracking research, as it is this gaze point that is normally shown to the user and
+   used for further analysis. However, in some settings and when the eye tracker provides a (3D) gaze position in the world and/or
+   gaze direction vectors for the individual eyes along with their origin, the researcher may wish to use these world gaze
+   point/gaze vectors instead. NB: for most of the currently supported eye trackers, modes i. and ii. are equivalent (i.e., the gaze
+   position in the camera image is simply the gaze position in the world projected to the camera image). This is however not always
+   the case. The AdHawk MindLink for instance has an operating mode that corrects for parallax error in the gaze point projected to
+   the scene camera image using the vergence signal, which leads to the eye tracker reporting a different gaze position in the scene
+   video than a direct projection of 3D gaze position in the world to the scene camera image would yield.
+
+<ins>Note about Pupil Neon gaze vectors</ins>:
+The Pupil Neon supports reporting per eye direction vectors, which glassesTools supports reading in. However, it should be noted that
+these direction vectors, as per [the Pupil Neon documentation](https://docs.pupil-labs.com/neon/data-collection/data-streams/#_3d-eye-states) describe the optical axis of the eye, not the visual axis. As such, for most users, they will be offset by a few
+degrees from the gaze point in the scene camera image reported by the Pupil Neon.
 
 ## Processing
 Several further classes for processing data in the glassesTools common data format or storing derived data are noteworthy:
 |Class|description|
 | --- | --- |
-|`glassesTools.aruco.ArUcoDetector`||
-|`glassesTools.aruco.PoseEstimator`||
-|`glassesTools.marker.Pose`||
-|`glassesTools.ocv.CameraParams`||
-|`glassesTools.ocv.CV2VideoReader`||
-|`glassesTools.plane.Plane`||
-|`glassesTools.plane.Pose`||
+|`glassesTools.aruco.ArUcoDetector`|Class for detecting ArUco boards and computing camera pose and homography transformation w.r.t to the board (output as a `glassesTools.plane.Plane` object), see `glassesTools.aruco.ArUcoDetector.detect_and_estimate()`. Also allows visualizing the detection result on the input frame with `glassesTools.aruco.ArUcoDetector.visualize()`.|
+|`glassesTools.aruco.PoseEstimator`|Class for running detection of one or multiple ArUco boards (encapsulated by `glassesTools.aruco.ArUcoDetector`s), as well as optional specified individual markers and user-provided processing functions over an input video. Has support for visualizing the results to a `glassesTools.gui.video_player.GUI` gui. Can process the whole video at once (`glassesTools.aruco.PoseEstimator.process_video()`) or one frame at a time (`glassesTools.aruco.PoseEstimator.process_one_frame()`) for more fine-grained control.|
+|`glassesTools.marker.Pose`|Class for storage of detection result for an individual fiducial marker, as well as reading and writing arrays of such detections to file.|
+|`glassesTools.ocv.CameraParams`|Class for encapsulating camera properties and calibration parameters (resolution, intrinsics and extrinsics).|
+|`glassesTools.ocv.CV2VideoReader`|Class for reading a video file using OpenCV's `cv2.VideoCapture` that takes utmost care to report correct frame numbers and timestamps (at times at the cost of performance). Seeks through spooling, and does not die upon corrupt frames. When time in the returned video stream jumps due to longer stretches of corrupt frames, it uses the frame timestamps specified during object creation to recover the correct frame number.|
+|`glassesTools.plane.Plane`|Class for specification of a plane (defined by an array of ArUco markers and their locations and orientations on an ArUco board).|
+|`glassesTools.plane.Pose`|Class for storage of transformation information (homography and pose) between camera and plane in the world, and has member functions for performing these transformations.|
