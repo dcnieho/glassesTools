@@ -7,7 +7,7 @@ Tools for processing wearable eye tracker recordings. Used by [gazeMapper](https
 
 If you use this package or any of the code in this repository, please cite:<br>
 [Niehorster, D.C., Hessels, R.S., Benjamins, J.S., Nyström, M. and Hooge, I.T.C. (2023). GlassesValidator:
-A data quality tool for eye tracking glasses. Behavior Research Methods. doi: 10.3758/s13428-023-02105-5](https://doi.org/10.3758/s13428-023-02105-5)
+A data quality tool for eye tracking glasses. Behavior Research Methods. doi: 10.3758/s13428-023-02105-5](https://doi.org/10.3758/s13428-023-02105-5) ([BibTeX](#bibtex))
 
 # How to acquire
 GlassesTools is available from `https://github.com/dcnieho/glassesTools`, and supports Python 3.10 and 3.11 on Windows, MacOS and Linux.
@@ -233,3 +233,24 @@ Several further classes for processing data in the glassesTools common data form
 |`glassesTools.ocv.CV2VideoReader`|Class for reading a video file using OpenCV's `cv2.VideoCapture` that takes utmost care to report correct frame numbers and timestamps (at times at the cost of performance). Seeks through spooling, and does not die upon corrupt frames. When time in the returned video stream jumps due to longer stretches of corrupt frames, it uses the frame timestamps specified during object creation to recover the correct frame number.|
 |`glassesTools.plane.Plane`|Class for specification of a plane (defined by an array of ArUco markers and their locations and orientations on an ArUco board).|
 |`glassesTools.plane.Pose`|Class for storage of transformation information (homography and pose) between camera and plane in the world, and has member functions for performing these transformations.|
+
+# Citation
+If you use this tool or any of the code in this repository, please cite:<br>
+[Niehorster, D.C., Hessels, R.S., Benjamins, J.S., Nyström, M. and Hooge, I.T.C. (2023). GlassesValidator:
+A data quality tool for eye tracking glasses. Behavior Research Methods. doi: 10.3758/s13428-023-02105-5](https://doi.org/10.3758/s13428-023-02105-5)
+
+## BibTeX
+```latex
+@article{niehorster2023glassesValidator,
+    Author = {Niehorster, Diederick C. and
+              Hessels, R. S. and
+              Benjamins, J. S. and
+              Nystr{\"o}m, Marcus and
+              Hooge, I. T. C.},
+    Journal = {Behavior Research Methods},
+    Number = {},
+    Title = {{GlassesValidator}: A data quality tool for eye tracking glasses},
+    Year = {2023},
+    doi = {10.3758/s13428-023-02105-5}
+}
+```
