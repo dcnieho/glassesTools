@@ -8,6 +8,16 @@ from . import annotation, drawing, intervals, marker, ocv, plane, timestamps
 from .gui import video_player
 
 
+def deploy_marker_images(output_dir: str|pathlib.Path, size: int, ArUco_dict: int=cv2.aruco.DICT_4X4_250, markerBorderBits: int=1):
+    # Load the predefined dictionary
+    dictionary = cv2.aruco.getPredefinedDictionary(ArUco_dict)
+
+    # Generate the markers
+    for i in range(dictionary.bytesList.shape[0]):
+        markerImage = np.zeros((size, size), dtype=np.uint8)
+        markerImage = cv2.aruco.generateImageMarker(dictionary, i, size, markerImage, markerBorderBits)
+
+        cv2.imwrite(output_dir / f"{i}.png", markerImage)
 
 class ArUcoDetector():
     def __init__(self, ArUco_dict: cv2.aruco.Dictionary, params: dict[str]):
