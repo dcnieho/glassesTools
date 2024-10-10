@@ -1,7 +1,7 @@
 # intervals are either lists of lists ([1,2], [100,200]), or dicts containing such lists as values
 from . import annotation
 
-def _prep_ival_dict(intervals):
+def _prep_ival_dict(intervals, add_incomplete_intervals=False):
     intervals = intervals.copy()    # so any manipulation doesn't propagate back out
     for k in intervals:
         if not intervals[k]:
@@ -11,6 +11,8 @@ def _prep_ival_dict(intervals):
                 temp = []
                 for m in range(0,len(intervals[k])-1,2): # read in batches of two, and run until -1 to make sure we don't pick up incomplete intervals
                     temp.append(intervals[k][m:m+2])
+                if add_incomplete_intervals and len(intervals[k])%2==1:
+                    temp.append(intervals[k][-1:])
                 intervals[k] = temp
             else:
                 intervals[k] = [[tp] for tp in intervals[k]]
@@ -39,7 +41,7 @@ def which_interval(frame_idx, intervals):
     if not isinstance(intervals, dict):
         return None, None
     # prep input, if needed
-    intervals = _prep_ival_dict(intervals)
+    intervals = _prep_ival_dict(intervals, add_incomplete_intervals=True)
 
     # get output
     keys = []
