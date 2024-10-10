@@ -710,7 +710,7 @@ class GUI:
                     case Action.Quit:
                         self._requests.append(('exit',None))
                     case Action.Annotate_Make:
-                        self._requests.append(('add_coding',(b.event, [self._current_frame[w][2]])))
+                        self._requests.append(('add_coding',(b.event, self._current_frame[w][2])))
                     case Action.Annotate_Delete:
                         for k,iv in zip(annotate_keys,annotate_ivals):
                             if len(iv)>1 and self._current_frame[w][2] in iv:
