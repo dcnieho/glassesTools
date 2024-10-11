@@ -6,14 +6,14 @@ from . import marker
 
 def openCVCircle(img, center_coordinates, radius, color, thickness, sub_pixel_fac):
     p = [np.round(x*sub_pixel_fac) for x in center_coordinates]
-    if np.all([not math.isnan(x) and abs(x)<np.iinfo(int).max for x in p]):
+    if np.all([not math.isnan(x) and abs(x)<np.iinfo(np.intc).max for x in p]):
         p = tuple([int(x) for x in p])
         cv2.circle(img, p, radius*sub_pixel_fac, color, thickness, lineType=cv2.LINE_AA, shift=int(math.log2(sub_pixel_fac)))
 
 def openCVLine(img, start_point, end_point, color, thickness, sub_pixel_fac):
     sp = [np.round(x*sub_pixel_fac) for x in start_point]
     ep = [np.round(x*sub_pixel_fac) for x in   end_point]
-    if np.all([not math.isnan(x) and abs(x)<np.iinfo(int).max for x in sp]) and np.all([not math.isnan(x) and abs(x)<np.iinfo(int).max for x in ep]):
+    if np.all([not math.isnan(x) and abs(x)<np.iinfo(np.intc).max for x in sp]) and np.all([not math.isnan(x) and abs(x)<np.iinfo(np.intc).max for x in ep]):
         sp = tuple([int(x) for x in sp])
         ep = tuple([int(x) for x in ep])
         cv2.line(img, sp, ep, color, thickness, lineType=cv2.LINE_AA, shift=int(math.log2(sub_pixel_fac)))
@@ -21,7 +21,7 @@ def openCVLine(img, start_point, end_point, color, thickness, sub_pixel_fac):
 def openCVRectangle(img, p1, p2, color, thickness, sub_pixel_fac):
     p1 = [np.round(x*sub_pixel_fac) for x in p1]
     p2 = [np.round(x*sub_pixel_fac) for x in p2]
-    if np.all([not math.isnan(x) and abs(x)<np.iinfo(int).max for x in p1]) and np.all([not math.isnan(x) and abs(x)<np.iinfo(int).max for x in p2]):
+    if np.all([not math.isnan(x) and abs(x)<np.iinfo(np.intc).max for x in p1]) and np.all([not math.isnan(x) and abs(x)<np.iinfo(np.intc).max for x in p2]):
         p1 = tuple([int(x) for x in p1])
         p2 = tuple([int(x) for x in p2])
         cv2.rectangle(img, p1, p2, color, thickness, lineType=cv2.LINE_AA, shift=int(math.log2(sub_pixel_fac)))
@@ -71,4 +71,4 @@ def arucoDetectedMarkers(img,corners,ids,border_color=(0,255,0), draw_IDs = True
         # draw IDs if wanted
         if draw_IDs:
             c = marker.corners_intersection(corner)
-            cv2.putText(img, str(ids[i][0]), tuple(c.astype('int')), cv2.FONT_HERSHEY_SIMPLEX, 0.6, textColor, 2, lineType=cv2.LINE_AA)
+            cv2.putText(img, str(ids[i][0]), tuple(c.astype(np.intc)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, textColor, 2, lineType=cv2.LINE_AA)
