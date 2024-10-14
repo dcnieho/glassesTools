@@ -55,7 +55,6 @@ class RecordingTable:
         self.dont_show_empty        = False
 
         self.is_drag_drop_source    = False
-        self.drag_drop_id           = None
 
         self.sorted_recordings_ids: list[int] = []
         self.last_clicked_id: int = None
@@ -342,9 +341,8 @@ class RecordingTable:
                             imgui.pop_style_var(3)
                             # act as drag/drop source, if wanted
                             if self.is_drag_drop_source and imgui.begin_drag_drop_source(imgui.DragDropFlags_.payload_auto_expire):
-                                # Set payload to carry the index of our item (in python, the payload is an int)
-                                self.drag_drop_id = dd_id = iid
-                                if not isinstance(iid,int):
+                                # Set payload to carry the id of our item (NB: must be an int)
+                                if not isinstance(iid, int):
                                     dd_id = -1
 
                                 imgui.set_drag_drop_payload_py_id("RECORDING", dd_id)
@@ -408,9 +406,6 @@ class RecordingTable:
                 self._has_scroll_x = imgui.get_current_context().current_window.scrollbar_x
                 last_cursor_y = imgui.get_cursor_screen_pos().y
                 imgui.end_table()
-
-                if not submitted_drag_drop:
-                    self.drag_drop_id = None
 
                 # handle click in table area outside header+contents:
                 # deselect all, and if right click, show popup
