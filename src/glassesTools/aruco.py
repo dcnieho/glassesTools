@@ -211,7 +211,7 @@ class PoseEstimator:
         self.do_visualize                               = False
         self.sub_pixel_fac                              = 8
         self.show_detected_markers                      = True
-        self.show_board_axes                            = True
+        self.show_plane_axes                            = True
         self.show_individual_marker_axes                = True
         self.show_sync_func_output                      = True
         self.show_unexpected_markers                    = True
@@ -402,7 +402,7 @@ class PoseEstimator:
             # now actually draw them
             for p in planes_for_this_frame:
                 # draw detection and pose, if wanted
-                self._detectors[p].visualize(frame, pose_out[p], detect_dicts[p], self.plane_setups[p]['plane'].marker_size/2, self.sub_pixel_fac, self.show_detected_markers, self.show_board_axes, self.show_rejected_markers, special_highlights)
+                self._detectors[p].visualize(frame, pose_out[p], detect_dicts[p], self.plane_setups[p]['plane'].marker_size/2, self.sub_pixel_fac, self.show_detected_markers, self.show_plane_axes, self.show_rejected_markers, special_highlights)
 
             # ensure visualization of detected and rejected markers is honored when marker detection
             # was done but self._detectors[p].visualize() above won't be called because there are no
