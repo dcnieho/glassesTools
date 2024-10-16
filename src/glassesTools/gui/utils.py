@@ -228,6 +228,43 @@ def my_combo(*args, **kwargs):
     imgui.pop_style_color()
     return result
 
+def tooltip_combo(label: str, current_item: int, items: list[str], item_tooltips: list[str], popup_max_height_in_items: int = -1) -> tuple[bool, int]:
+    # NB: port of ImGui::Combo, with added tooltip support
+    g = imgui.get_current_context()
+    items_count = len(items)
+    preview_value = items[current_item] if current_item>=0 and current_item<items_count else ''
+
+    if (popup_max_height_in_items != -1 and not (g.next_window_data.flags & imgui.internal.NextWindowDataFlags_.has_size_constraint)):
+        max_popup_height = imgui.FLT_MAX if popup_max_height_in_items<=0 else (g.font_size + g.style.item_spacing.y) * popup_max_height_in_items - g.style.item_spacing.y + (g.style.window_padding.y * 2)
+        imgui.set_next_window_size_constraints((0,0), (imgui.FLT_MAX, max_popup_height))
+
+    if not imgui.begin_combo(label, preview_value, imgui.ComboFlags_.none):
+        return False, current_item
+
+    value_changed = False
+    clipper = imgui.ListClipper()
+    clipper.begin(items_count)
+    clipper.include_item_by_index(current_item)
+    while clipper.step():
+        for i in range(clipper.display_start, clipper.display_end):
+            imgui.push_id(i)
+
+            item_text = "*Unknown item*" if items[i] is None else items[i]
+            item_selected = i==current_item
+            if imgui.selectable(item_text, item_selected)[0] and current_item != i:
+                value_changed = True
+                current_item = i
+            if item_tooltips[i]:
+                draw_hover_text(item_tooltips[i], '')
+            if item_selected:
+                imgui.set_item_default_focus()
+
+            imgui.pop_id()
+    imgui.end_combo()
+    if value_changed:
+        imgui.internal.mark_item_edited(g.last_item_data.id_)
+
+    return value_changed, current_item
 
 def get_current_monitor(wx, wy, ww=None, wh=None):
     # so we always return something sensible
