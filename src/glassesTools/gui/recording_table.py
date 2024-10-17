@@ -298,7 +298,6 @@ class RecordingTable:
                 if self.sorted_recordings_ids and self.last_clicked_id not in self.sorted_recordings_ids:
                     # default to topmost if last_clicked unknown, or no longer on screen due to filter
                     self.last_clicked_id = self.sorted_recordings_ids[0]
-                submitted_drag_drop = False
                 for iid in self.sorted_recordings_ids:
                     imgui.table_next_row()
 
@@ -346,7 +345,6 @@ class RecordingTable:
                                     dd_id = -1
 
                                 imgui.set_drag_drop_payload_py_id("RECORDING", dd_id)
-                                submitted_drag_drop = True
                                 # Display preview
                                 if isinstance(rec:=self.get_rec_fun(self.recordings[iid]), recording.Recording):
                                     imgui.text(rec.name)
