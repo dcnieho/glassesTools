@@ -341,6 +341,7 @@ class RecordingTable:
                             # act as drag/drop source, if wanted
                             if self.is_drag_drop_source and imgui.begin_drag_drop_source(imgui.DragDropFlags_.payload_auto_expire):
                                 # Set payload to carry the id of our item (NB: must be an int)
+                                dd_id = iid
                                 if not isinstance(iid, int):
                                     dd_id = -1
 
