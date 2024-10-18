@@ -23,7 +23,9 @@ def show_visualization(
 
     # flatten if needed
     annotations_flat: dict[annotation.Event, list[int]] = {}
-    for e in annotations:
+    for e in annotation.Event:  # iterate over this for consistent ordering
+        if e not in annotations:
+            continue
         if annotations[e] and isinstance(annotations[e][0],list):
             annotations_flat[e] = [i for iv in annotations[e] for i in iv]
         else:
