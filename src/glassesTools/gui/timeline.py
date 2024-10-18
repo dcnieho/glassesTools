@@ -61,7 +61,7 @@ class Timeline:
 
         # GUI interaction possibilities
         self._allow_seek = False
-        self._allow_annotate = False
+        self._allow_annotate: set[annotation.Event] = set()
         self._allow_timeline_zoom = False
 
         # tracks
@@ -86,7 +86,7 @@ class Timeline:
     def set_allow_seek(self, allow_seek: bool):
         self._allow_seek = allow_seek
 
-    def set_allow_annotate(self, allow_annotate: bool):
+    def set_allow_annotate(self, allow_annotate: set[annotation.Event]):
         self._allow_annotate = allow_annotate
 
     def set_allow_timeline_zoom(self, allow_timeline_zoom: bool):
@@ -104,10 +104,16 @@ class Timeline:
             tool_tip = ''
             if e in annotate_tooltips:
                 tool_tip = annotate_tooltips[e]
-                if e in annotate_shortcut_key_map and self._allow_annotate:
-                    tool_tip += f' ({imgui.get_key_name(annotate_shortcut_key_map[e])})'
-            elif e in annotate_shortcut_key_map and self._allow_annotate:
-                tool_tip = imgui.get_key_name(annotate_shortcut_key_map[e])
+                if e in annotate_shortcut_key_map:
+                    if e in self._allow_annotate:
+                        tool_tip += f' ({imgui.get_key_name(annotate_shortcut_key_map[e])})'
+                    else:
+                        tool_tip += f' (read only)'
+            elif e in annotate_shortcut_key_map:
+                if e in self._allow_annotate:
+                    tool_tip = imgui.get_key_name(annotate_shortcut_key_map[e])
+                else:
+                    tool_tip = 'read only'
 
             if tool_tip:
                 self._annotation_tooltips[e] = tool_tip
@@ -271,12 +277,12 @@ class Timeline:
             if not np.isclose(self._h_scroll, new_h_scroll):
                 self._new_h_scroll = new_h_scroll
 
-    def _timepoint_interaction_logic(self, lbl: str, x_pos: float, y_ext: float, hover_info: tuple[str,float,int]=None, draggable=False, has_context_menu=True, add_episode_action=False) -> tuple[float, bool, str|None]:
+    def _timepoint_interaction_logic(self, lbl: str, x_pos: float, y_ext: float, event: annotation.Event|None, hover_info: tuple[str,float,int]=None, draggable=False, has_context_menu=True, add_episode_action=False) -> tuple[float, bool, str|None]:
         do_move = False
         action = None
         dragging = False
 
-        if self._allow_seek or self._allow_annotate or has_context_menu or hover_info:
+        if self._allow_seek or (event in self._allow_annotate) or has_context_menu or hover_info:
             dpi_fac = hello_imgui.dpi_window_size_factor()
             cursor_pos = imgui.get_cursor_screen_pos()
             imgui.set_cursor_screen_pos((x_pos-2*dpi_fac, cursor_pos.y))
@@ -291,7 +297,7 @@ class Timeline:
             if (is_active or is_hovered):
                 if draggable and self._allow_seek:
                     imgui.set_mouse_cursor(imgui.MouseCursor_.resize_ew)
-                elif self._allow_seek or self._allow_annotate:
+                elif self._allow_seek or event in self._allow_annotate:
                     imgui.set_mouse_cursor(imgui.MouseCursor_.hand)
 
             if hover_info and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
@@ -311,23 +317,23 @@ class Timeline:
                     self._dragged_time = None
             do_move = self._allow_seek and (is_deactivated or (draggable and drag_finished))
 
-            if has_context_menu and (self._allow_seek or self._allow_annotate) and imgui.begin_popup_context_item(f"##timepoint_context_menu_{lbl}"):
+            if has_context_menu and (self._allow_seek or event in self._allow_annotate) and imgui.begin_popup_context_item(f"##timepoint_context_menu_{lbl}"):
                 if self._allow_seek and imgui.selectable(ifa6.ICON_FA_ARROW_RIGHT + ' go to timepoint', False)[0]:
                     do_move = True
-                if self._allow_annotate and imgui.selectable(ifa6.ICON_FA_TRASH_CAN + ' remove timepoint', False)[0]:
+                if event in self._allow_annotate and imgui.selectable(ifa6.ICON_FA_TRASH_CAN + ' remove timepoint', False)[0]:
                     action = 'delete_timepoint'
-                if self._allow_annotate and add_episode_action and imgui.selectable(ifa6.ICON_FA_TRASH_CAN + ' remove episode', False)[0]:
+                if event in self._allow_annotate and add_episode_action and imgui.selectable(ifa6.ICON_FA_TRASH_CAN + ' remove episode', False)[0]:
                     action = 'delete_episode'
                 imgui.end_popup()
 
         return x_pos, do_move, action
 
-    def _episode_interaction_logic(self, lbl: str, x_start: float, x_end: float, y_ext: float, hover_info: tuple[str,int,list[float],list[int]]=None) -> tuple[float, bool, str|None]:
+    def _episode_interaction_logic(self, lbl: str, x_start: float, x_end: float, y_ext: float, event: annotation.Event|None, hover_info: tuple[str,int,list[float],list[int]]=None) -> tuple[float, bool, str|None]:
         x_pos = x_start
         do_move = False
         action = None
 
-        if self._allow_seek or self._allow_annotate or hover_info:
+        if self._allow_seek or (event in self._allow_annotate) or hover_info:
             dpi_fac = hello_imgui.dpi_window_size_factor()
             cursor_pos = imgui.get_cursor_screen_pos()
             imgui.set_cursor_screen_pos((x_start+2*dpi_fac, cursor_pos.y))
@@ -338,13 +344,13 @@ class Timeline:
             if hover_info and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
                 imgui.set_tooltip(f'{hover_info[0]} {hover_info[1]}\ntimestamps: {hover_info[2][0]:.3f} - {hover_info[2][1]:.3f}\nframe indices: {hover_info[3][0]} - {hover_info[3][1]}')
 
-            if (self._allow_seek or self._allow_annotate) and imgui.begin_popup_context_item(f"##episode_context_menu_{lbl}"):
+            if (self._allow_seek or event in self._allow_annotate) and imgui.begin_popup_context_item(f"##episode_context_menu_{lbl}"):
                 if self._allow_seek and imgui.selectable(ifa6.ICON_FA_ARROW_LEFT + ' go to start', False)[0]:
                     do_move = True
                 if self._allow_seek and imgui.selectable(ifa6.ICON_FA_ARROW_RIGHT + ' go to end', False)[0]:
                     x_pos = x_end
                     do_move = True
-                if self._allow_annotate and imgui.selectable(ifa6.ICON_FA_TRASH_CAN + ' remove episode', False)[0]:
+                if event in self._allow_annotate and imgui.selectable(ifa6.ICON_FA_TRASH_CAN + ' remove episode', False)[0]:
                     action = 'delete_episode'
                 imgui.end_popup()
 
@@ -409,7 +415,7 @@ class Timeline:
 
         draw_list.pop_clip_rect()
 
-    def _draw_annotation_line(self, name: str, idx: int, time: float, frame_idx: int, seq_nr: int, height: float, border_color: int) -> str|None:
+    def _draw_annotation_line(self, name: str, event: annotation.Event, idx: int, time: float, frame_idx: int, seq_nr: int, height: float, border_color: int) -> str|None:
         dpi_fac = hello_imgui.dpi_window_size_factor()
         cursor_pos = imgui.get_cursor_screen_pos()
         draw_list = imgui.get_window_draw_list()
@@ -419,7 +425,7 @@ class Timeline:
                             border_color,
                             thickness=2*dpi_fac)
         hover_info = (name, seq_nr, time, frame_idx) if self._show_info_on_hover else None
-        _, do_move, action = self._timepoint_interaction_logic(f'annotation_{name}_{idx}', screen_position, height, hover_info, draggable=False, has_context_menu=True)
+        _, do_move, action = self._timepoint_interaction_logic(f'annotation_{name}_{idx}', screen_position, height, event, hover_info, draggable=False, has_context_menu=True)
         if do_move:
             self._request_time(self._pos_to_time(screen_position, True))
         return action
@@ -466,7 +472,7 @@ class Timeline:
                                    thickness=dpi_fac)
 
                 hover_info = (name, int(m/2)+1, annotations_time[m], annotations_frame[m]) if self._show_info_on_hover else None
-                _, do_move, action = self._timepoint_interaction_logic(f'annotation_{name}_{m}', start_screen_position, size.y, hover_info, draggable=False, has_context_menu=True, add_episode_action=True)
+                _, do_move, action = self._timepoint_interaction_logic(f'annotation_{name}_{m}', start_screen_position, size.y, event, hover_info, draggable=False, has_context_menu=True, add_episode_action=True)
                 if do_move:
                     self._request_time(self._pos_to_time(start_screen_position, True))
                 elif action=='delete_timepoint':
@@ -475,7 +481,7 @@ class Timeline:
                     self._request_delete(event, annotations_frame[m:m+2])
 
                 hover_info = (name, int(m/2)+1, annotations_time[m+1], annotations_frame[m+1]) if self._show_info_on_hover else None
-                _, do_move, action = self._timepoint_interaction_logic(f'annotation_{name}_{m+1}', end_screen_position, size.y, hover_info, draggable=False, has_context_menu=True, add_episode_action=True)
+                _, do_move, action = self._timepoint_interaction_logic(f'annotation_{name}_{m+1}', end_screen_position, size.y, event, hover_info, draggable=False, has_context_menu=True, add_episode_action=True)
                 if do_move:
                     self._request_time(self._pos_to_time(end_screen_position, True))
                 elif action=='delete_timepoint':
@@ -484,7 +490,7 @@ class Timeline:
                     self._request_delete(event, annotations_frame[m:m+2])
 
                 hover_info = (name, int(m/2)+1, annotations_time[m:m+2], annotations_frame[m:m+2]) if self._show_info_on_hover else None
-                x_pos, do_move, action = self._episode_interaction_logic(f'annotation_{name}_{m}', start_screen_position, end_screen_position, size.y, hover_info)
+                x_pos, do_move, action = self._episode_interaction_logic(f'annotation_{name}_{m}', start_screen_position, end_screen_position, size.y, event, hover_info)
                 if do_move:
                     self._request_time(self._pos_to_time(x_pos, True))
                 elif action=='delete_episode':
@@ -492,13 +498,13 @@ class Timeline:
 
             if len(annotations_time)%2:
                 # unmatched marker left over, draw it
-                action = self._draw_annotation_line(f'{name} unmatched!', len(annotations_time)-1, annotations_time[-1], annotations_frame[-1], math.ceil(len(annotations_time)/2), size.y, border_color)
+                action = self._draw_annotation_line(f'{name} unmatched!', event, len(annotations_time)-1, annotations_time[-1], annotations_frame[-1], math.ceil(len(annotations_time)/2), size.y, border_color)
                 if action=='delete_timepoint':
                     self._request_delete(event, annotations_frame[-1])
         else:
             # points in time: draw as lines
             for i,(at,af) in enumerate(zip(annotations_time,annotations_frame)):
-                action = self._draw_annotation_line(name, i, at, af, i+1, size.y, border_color)
+                action = self._draw_annotation_line(name, event, i, at, af, i+1, size.y, border_color)
                 if action=='delete_timepoint':
                     self._request_delete(event, annotations_frame[event][i])
 

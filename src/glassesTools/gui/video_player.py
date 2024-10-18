@@ -108,7 +108,7 @@ class GUI:
 
         self._allow_pause = False
         self._allow_seek = False
-        self._allow_annotate = False
+        self._allow_annotate: set[annotation.Event] = set()
         self._allow_timeline_zoom = False
         self._timeline_show_annotation_labels = True
         self._timeline_show_info_on_hover = True
@@ -262,7 +262,7 @@ class GUI:
         colors = self._window_timeline[window_id].get_annotation_colors()
         return {e:(colors[e].value.x,colors[e].value.y,colors[e].value.z,colors[e].value.w) for e in colors}
 
-    def set_allow_annotate(self, allow_annotate: bool, annotate_shortcut_key_map: dict[annotation.Event, imgui.Key]=None, annotate_tooltips: dict[annotation.Event, str] = None):
+    def set_allow_annotate(self, allow_annotate: set[annotation.Event], annotate_shortcut_key_map: dict[annotation.Event, imgui.Key]=None, annotate_tooltips: dict[annotation.Event, str] = None):
         self._allow_annotate = allow_annotate
         if annotate_shortcut_key_map is not None:
             self._annotate_shortcut_key_map = annotate_shortcut_key_map
@@ -271,7 +271,7 @@ class GUI:
         self._annotate_tooltips = annotate_tooltips
         for w in self._windows:
             if self._window_timeline[w] is not None and self._window_timeline[w].get_num_annotations():
-                self._window_timeline[w].set_allow_annotate(allow_annotate)
+                self._window_timeline[w].set_allow_annotate(self._allow_annotate)
                 self._window_timeline[w].set_annotation_keys(self._annotate_shortcut_key_map, self._annotate_tooltips)
         self._create_annotation_buttons()
 
@@ -292,7 +292,7 @@ class GUI:
         if not any_timeline or not self._allow_annotate:
             return
         for e in self._annotate_shortcut_key_map:
-            self._add_remove_button(self._allow_annotate, Action.Annotate_Make, e)
+            self._add_remove_button(e in self._allow_annotate, Action.Annotate_Make, e)
 
     def set_show_annotation_label(self, show_label: bool, window_id:int = None):
         self._timeline_show_annotation_labels = show_label
@@ -566,8 +566,10 @@ class GUI:
             buttons.extend([None, None])
             buttons.append(self._buttons[Action.Annotate_Delete])
             annotation_colors = self._window_timeline[w].get_annotation_colors()
-            annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], self._annotations_frame)
+            annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], {k:v for k,v in self._annotations_frame.items() if k in self._allow_annotate})
             for e in self._annotate_shortcut_key_map:
+                if e not in self._allow_annotate:
+                    continue
                 if e in annotation_colors and e in annotate_keys:
                     but = dataclasses.replace(self._buttons[(Action.Annotate_Make, e)])
                     but.color = annotation_colors[e]
