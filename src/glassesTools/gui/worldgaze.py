@@ -21,16 +21,7 @@ def show_visualization(
     cap             = ocv.CV2VideoReader(in_video, video_ts.timestamps)
     cam_params      = ocv.CameraParams.read_from_file(camera_calibration_file)
 
-    # flatten if needed
-    annotations_flat: dict[annotation.Event, list[int]] = {}
-    for e in annotation.Event:  # iterate over this for consistent ordering
-        if e not in annotations:
-            continue
-        if annotations[e] and isinstance(annotations[e][0],list):
-            annotations_flat[e] = [i for iv in annotations[e] for i in iv]
-        else:
-            annotations_flat[e] = annotations[e].copy()
-    gui.set_show_timeline(True, video_ts, annotations_flat, window_id=gui.main_window_id)
+    gui.set_show_timeline(True, video_ts, annotation.flatten_annotation_dict(annotations), window_id=gui.main_window_id)
 
     # add windows for planes, if wanted
     if show_planes:
