@@ -27,3 +27,14 @@ tooltip_map = {
     Event.Sync_ET_Data: 'Eye tracker synchronization episode',
     Event.Trial       : 'Trial',
 }
+
+def flatten_annotation_dict(annotations: dict[Event, list[list[int]]]) -> dict[Event, list[int]]:
+    annotations_flat: dict[Event, list[int]] = {}
+    for e in Event:  # iterate over this for consistent ordering
+        if e not in annotations:
+            continue
+        if annotations[e] and isinstance(annotations[e][0],list):
+            annotations_flat[e] = [i for iv in annotations[e] for i in iv]
+        else:
+            annotations_flat[e] = annotations[e].copy()
+    return annotations_flat
