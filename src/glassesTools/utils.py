@@ -53,6 +53,9 @@ class AutoName(enum.Enum):
     def _generate_next_value_(name, start, count, last_values):
         return name.strip("_").replace("__", "-").replace("_", " ")
 
+def enum_val_2_str(x) -> str:
+    # to ensure that string representation of enum is constant over Python versions (it isn't for enum.IntEnum at least)
+    return f'{type(x).__name__}.{x.name}'
 
 @dataclasses.dataclass
 class CustomTypeEntry:
