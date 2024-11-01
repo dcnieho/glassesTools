@@ -479,11 +479,33 @@ def readGazeDataPupilPlayer(file: str|pathlib.Path, sceneVideoDimensions: list[i
     """
     isCore = recInfo.eye_tracker is EyeTracker.Pupil_Core
 
+    file = pathlib.Path(file)
     df = pd.read_csv(file)
+    pupilPosFile = file.with_name('pupil_positions.csv')
+    hasPupilPos = pupilPosFile.is_file() and 'base_data' in df
 
     # drop columns with nothing in them
     df = df.dropna(how='all', axis=1)
-    df = df.drop(columns=['base_data'],errors='ignore') # drop these columns if they exist)
+    # if there is a pupil positions file, get pupil diameters from there
+    if hasPupilPos:
+        def parse_base_data(sample):
+            out = {}
+            bd = sample['base_data'].split(' ')
+            for b in bd:
+                b = b.split('-')
+                out[f'pup_ts_{b[1]}'] = float(b[0])
+            return out
+        pupil_pos_ts = df.apply(parse_base_data, axis='columns', result_type='expand')
+        df_pup = pd.read_csv(pupilPosFile)
+        df_pup = df_pup.dropna(subset='diameter_3d')
+        df_pup = df_pup[['pupil_timestamp', 'eye_id', 'diameter_3d']]
+        eyes = ['l','r']
+        for e in [0,1]:
+            if not any(df_pup['eye_id']==e) or f'pup_ts_{e}' not in pupil_pos_ts:
+                continue
+            diam = pupil_pos_ts.merge(df_pup[df_pup['eye_id']==e], how='left',left_on=f'pup_ts_{e}',right_on='pupil_timestamp')
+            df[f'pup_diam_{eyes[e]}'] = diam['diameter_3d']
+    df = df.drop(columns=['base_data'],errors='ignore') # drop these columns if they exist
 
     # rename and reorder columns
     lookup = {'gaze_timestamp': 'timestamp',
@@ -491,12 +513,14 @@ def readGazeDataPupilPlayer(file: str|pathlib.Path, sceneVideoDimensions: list[i
               'eye_center1_3d_x':'gaze_ori_l_x',
               'eye_center1_3d_y':'gaze_ori_l_y',
               'eye_center1_3d_z':'gaze_ori_l_z',
+              'pup_diam_l':'pup_diam_l',
               'gaze_normal1_x':'gaze_dir_l_x',
               'gaze_normal1_y':'gaze_dir_l_y',
               'gaze_normal1_z':'gaze_dir_l_z',
               'eye_center0_3d_x':'gaze_ori_r_x',   # NB: if monocular setup filming left eye, this is the left eye
               'eye_center0_3d_y':'gaze_ori_r_y',
               'eye_center0_3d_z':'gaze_ori_r_z',
+              'pup_diam_r':'pup_diam_r',
               'gaze_normal0_x':'gaze_dir_r_x',
               'gaze_normal0_y':'gaze_dir_r_y',
               'gaze_normal0_z':'gaze_dir_r_z',
