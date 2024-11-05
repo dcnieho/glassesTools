@@ -59,7 +59,7 @@ software before they can be imported using glassesTools. These are:
       - `Points of Regard (POR)`: enable `Gaze position`, `Eye position`, `Gaze vector`
       - `Binocular`: enable `Gaze position`
       - `Misc Data`: enable `Frame counter`
-      - disable everything else
+      - disable everything else (it is ok to enable `pupil diameter` and `Pupil diameter [mm]` under `Raw data`, if available)
     - In the Details tab, set:
       - `Decimal places` to 4
       - `Decimal separator` to `point`
