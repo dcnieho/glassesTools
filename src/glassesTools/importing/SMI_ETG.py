@@ -251,10 +251,6 @@ def gazedata2df(textFile,sceneVideoDimensions):
 
     df = pd.read_table(StringIO(textData),comment='#',index_col=False)
 
-    # get assumed viewing distance
-    matchedLines    = [line for line in textData.split('\n') if "Head Distance [mm]" in line]
-    viewingDistance = float(matchedLines[0].split('\t')[1])
-
     # prepare data frame
     # remove unneeded columns
     df=df.drop(columns=['Type', 'Trial', 'Aux1'],errors='ignore') # drop these columns if they exist
