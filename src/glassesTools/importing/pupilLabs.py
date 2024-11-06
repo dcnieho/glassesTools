@@ -556,15 +556,15 @@ def readGazeDataPupilPlayer(file: str|pathlib.Path, sceneVideoDimensions: list[i
     if recInfo.eye_tracker==EyeTracker.Pupil_Neon:
         # these are UTC or some kind of time format. Need them relative to recording start
         # that info is found in export_info.csv
-        df.loc[:,'timestamp'] -= df['timestamp'].iloc[0]
+        df['timestamp'] -= df['timestamp'].iloc[0]
         ei = pd.read_csv(file.with_name('export_info.csv'))
         time_range = ei[ei['key']=='Absolute Time Range']['value'].iloc[0]
         time_range = [float(x)*1000. for x in time_range.split('-')]    # s -> ms
         # convert timestamps from ns to ms
         df = df.astype({'timestamp': 'float'})
-        df.loc[:,'timestamp'] /= 1000.0*1000.0
+        df['timestamp'] /= 1000.0*1000.0
         # now correct for starting point gotten from export_info.csv
-        df.loc[:,'timestamp'] += time_range[0]
+        df['timestamp'] += time_range[0]
         # NB: gaze positions are already in pixels on the scene camera video
     else:
         # convert timestamps from s to ms

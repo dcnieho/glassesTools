@@ -295,7 +295,8 @@ def gazedata2df(textFile,sceneVideoDimensions):
     df = df[idx]
 
     # convert timestamps from us to ms and set as index
-    df.loc[:,'timestamp'] /= 1000.0
+    df = df.astype({'timestamp': 'float'})
+    df['timestamp'] /= 1000.0
     df = df.set_index('timestamp')
 
     # return the dataframe
