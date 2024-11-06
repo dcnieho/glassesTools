@@ -297,6 +297,16 @@ def gazedata2df(textFile,sceneVideoDimensions):
     # convert timestamps from us to ms and set as index
     df = df.astype({'timestamp': 'float'})
     df['timestamp'] /= 1000.0
+    # NB: SMI gaze timestamps are arbitrary, and not expressed in scene video time. I have experimented
+    # with various methods for aligning them, but this does not appear to be possible. Either the scene
+    # video or the gaze timestamps are fake. As example, I have a recording with a 24 Hz scene camera and
+    # a 60 Hz eye movement signal. Timestamps of both the video and the eye movement are nicely very
+    # close to 24 Hz and 60 Hz, yet SMI's frame column (see comments in formatGazeData above) for this
+    # recording sometimes has frames with only one sample associated, and other frames with five samples.
+    # This cannot be rescued. So, since the timestamp is arbitrary anyway, subtract so that the first
+    # time is zero. Users are strongly recommended to use gazeMapper's VOR sync to better align SMI eye
+    # tracker data with the scene video.
+    df['timestamp'] -= df['timestamp'].iloc[0]
     df = df.set_index('timestamp')
 
     # return the dataframe
