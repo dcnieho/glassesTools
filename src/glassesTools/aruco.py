@@ -409,7 +409,7 @@ class PoseEstimator:
             # planes for this frame
             if not planes_for_this_frame and (self.proc_individial_markers_all_frames or self.individual_markers):
                 if self.show_rejected_markers:
-                    cv2.aruco.drawDetectedMarkers(frame, rejected_corners, None, special=(0,0,255))
+                    cv2.aruco.drawDetectedMarkers(frame, rejected_corners, None, (0,0,255))
                 if self.show_detected_markers:
                     drawing.arucoDetectedMarkers(frame, corners, ids, sub_pixel_fac=self.sub_pixel_fac)
 
