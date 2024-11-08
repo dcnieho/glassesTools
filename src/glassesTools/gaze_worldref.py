@@ -3,8 +3,17 @@ import math
 import cv2
 import pathlib
 import typing
+import enum
 
-from . import data_files, drawing, gaze_headref, ocv, plane
+from . import data_files, drawing, gaze_headref, ocv, plane, utils
+
+class Type(utils.AutoName):
+    Scene_Video_Position    = enum.auto()
+    World_3D_Point          = enum.auto()
+    Left_Eye_Gaze_Vector    = enum.auto()
+    Right_Eye_Gaze_Vector   = enum.auto()
+    Average_Gaze_Vector     = enum.auto()
+utils.register_type(utils.CustomTypeEntry(Type,'__enum.gaze_worldref.Type__', utils.enum_val_2_str, lambda x: getattr(Type, x.split('.')[-1])))
 
 class Gaze:
     # description of tsv file used for storage
@@ -66,6 +75,30 @@ class Gaze:
         self.gazePosPlane2DWorld                = gazePosPlane2DWorld               # gazePosCamWorld in poster space
         self.gazePosPlane2DLeft                 = gazePosPlane2DLeft                # gazePosCamLeft in poster space
         self.gazePosPlane2DRight                = gazePosPlane2DRight               # gazePosCamRight in poster space
+
+    def get_gaze_point(self, gaze_type: Type, reference_frame='plane'):
+        return_3D = reference_frame in ('world', 'camera')    # in all other cases return gaze on plane
+        match gaze_type:
+            case Type.Scene_Video_Position:
+                gaze_point = self.gazePosCam_vidPos_ray if return_3D else self.gazePosPlane2D_vidPos_ray
+                if gaze_point is None:
+                    # fall back to homography
+                    gaze_point = self.gazePosCam_vidPos_homography if return_3D else self.gazePosPlane2D_vidPos_homography
+            case Type.World_3D_Point:
+                gaze_point = self.gazePosCamWorld if return_3D else self.gazePosPlane2DWorld
+            case Type.Left_Eye_Gaze_Vector:
+                gaze_point = self.gazePosCamLeft if return_3D else self.gazePosPlane2DLeft
+            case Type.Right_Eye_Gaze_Vector:
+                gaze_point = self.gazePosCamRight if return_3D else self.gazePosPlane2DRight
+            case Type.Average_Gaze_Vector:
+                gaze_point = None
+                if return_3D and (self.gazePosCamLeft is not None) and (self.gazePosCamRight is not None):
+                    gaze_point = (self.gazePosCamLeft, self.gazePosCamRight)
+                elif not return_3D and (self.gazePosPlane2DLeft is not None) and (self.gazePosPlane2DRight is not None):
+                    gaze_point = (self.gazePosPlane2DLeft, self.gazePosPlane2DRight)
+                if gaze_point is not None:
+                    gaze_point = (gaze_point[0]+gaze_point[1])/2
+        return gaze_point
 
     def draw_on_world_video(self, img, camera_params: ocv.CameraParams, sub_pixel_fac=1):
         # project to camera, display
