@@ -47,8 +47,7 @@ class Gaze:
                  gazePosPlane2DWorld                : np.ndarray = None,
                  gazePosPlane2DLeft                 : np.ndarray = None,
                  gazePosPlane2DRight                : np.ndarray = None):
-        # 3D gaze is in world space, w.r.t. scene camera
-        # 2D gaze is on the poster
+
         self.timestamp                          = timestamp
         self.frame_idx                          = frame_idx
 
@@ -69,12 +68,12 @@ class Gaze:
         self.gazeOriCamRight                    = gazeOriCamRight
         self.gazePosCamRight                    = gazePosCamRight                   # 3D gaze point on plane (right eye gaze vector intersected with plane)
 
-        # in poster space (2D coordinates)
-        self.gazePosPlane2D_vidPos_ray          = gazePosPlane2D_vidPos_ray         # Video gaze point mapped to poster by turning into direction ray and intersecting with poster
-        self.gazePosPlane2D_vidPos_homography   = gazePosPlane2D_vidPos_homography  # Video gaze point directly mapped to poster through homography transformation
-        self.gazePosPlane2DWorld                = gazePosPlane2DWorld               # gazePosCamWorld in poster space
-        self.gazePosPlane2DLeft                 = gazePosPlane2DLeft                # gazePosCamLeft in poster space
-        self.gazePosPlane2DRight                = gazePosPlane2DRight               # gazePosCamRight in poster space
+        # in plane space (2D coordinates)
+        self.gazePosPlane2D_vidPos_ray          = gazePosPlane2D_vidPos_ray         # Video gaze point mapped to plane by turning into direction ray and intersecting with plane
+        self.gazePosPlane2D_vidPos_homography   = gazePosPlane2D_vidPos_homography  # Video gaze point directly mapped to plane through homography transformation
+        self.gazePosPlane2DWorld                = gazePosPlane2DWorld               # gazePosCamWorld in plane space
+        self.gazePosPlane2DLeft                 = gazePosPlane2DLeft                # gazePosCamLeft in plane space
+        self.gazePosPlane2DRight                = gazePosPlane2DRight               # gazePosCamRight in plane space
 
     def get_gaze_point(self, gaze_type: Type, reference_frame='plane'):
         return_3D = reference_frame in ('world', 'camera')    # in all other cases return gaze on plane
@@ -186,7 +185,7 @@ def _from_head_impl(pose: plane.Pose, gaze: gaze_headref.Gaze, camera_params: oc
             camera_position = np.zeros((3,1))
         RtCam = np.hstack((RCam, camera_position))
 
-        # project gaze on video to reference poster using camera pose
+        # project gaze on video to reference plane using camera pose
         gaze_world.gazePosPlane2D_vidPos_ray, gaze_world.gazePosCam_vidPos_ray = \
             pose.cam_to_plane_pose(gaze.gaze_pos_vid, camera_params)
 
@@ -195,15 +194,15 @@ def _from_head_impl(pose: plane.Pose, gaze: gaze_headref.Gaze, camera_params: oc
             # transform 3D gaze point from eye tracker space to camera space
             g3D = np.matmul(RtCam,np.array(np.append(gaze.gaze_pos_3d, 1)).reshape(4,1))
 
-            # find intersection with poster (NB: pose is in camera reference frame)
+            # find intersection with plane (NB: pose is in camera reference frame)
             gaze_world.gazePosCamWorld = pose.vector_intersect(g3D)    # default vec origin (0,0,0) is fine because we work from camera's view point
 
-            # above intersection is in camera space, turn into poster space to get position on poster
+            # above intersection is in camera space, turn into plane space to get position on plane
             (x,y,z) = pose.cam_frame_to_world(gaze_world.gazePosCamWorld)   # z should be very close to zero
             gaze_world.gazePosPlane2DWorld = np.asarray([x, y])
 
-    # unproject 2D gaze point on video to point on poster (should yield values very close to
-    # the above method of intersecting video gaze point ray with poster, and usually also very
+    # unproject 2D gaze point on video to point on plane (should yield values very close to
+    # the above method of intersecting video gaze point ray with plane, and usually also very
     # close to binocular gaze point (though for at least one tracker the latter is not the case;
     # the AdHawk has an optional parallax correction using a vergence signal))
     if pose.homography_successful():
@@ -213,7 +212,7 @@ def _from_head_impl(pose: plane.Pose, gaze: gaze_headref.Gaze, camera_params: oc
         if pose.pose_successful():
             gaze_world.gazePosCam_vidPos_homography = pose.world_frame_to_cam(np.append(gaze_world.gazePosPlane2D_vidPos_homography, 0))
 
-    # project gaze vectors to reference poster (and draw on video)
+    # project gaze vectors to plane
     if not pose.pose_successful():
         # nothing to do anymore
         return gaze_world
@@ -230,12 +229,12 @@ def _from_head_impl(pose: plane.Pose, gaze: gaze_headref.Gaze, camera_params: oc
         gOri    = np.matmul(RtCam,np.append(gOri,1.))
         setattr(gaze_world,attr[0],gOri)
 
-        # intersect with poster -> yield point on poster in camera reference frame
-        gPoster = pose.vector_intersect(gVec, gOri)
-        setattr(gaze_world,attr[1],gPoster)
+        # intersect with plane -> yield point on plane in camera reference frame
+        gPlane = pose.vector_intersect(gVec, gOri)
+        setattr(gaze_world,attr[1],gPlane)
 
-        # transform intersection with poster from camera space to poster space
-        (x,y,z)  = pose.cam_frame_to_world(gPoster)  # z should be very close to zero
+        # transform intersection with plane from camera space to plane space
+        (x,y,z)  = pose.cam_frame_to_world(gPlane)  # z should be very close to zero
         setattr(gaze_world,attr[2],np.asarray([x, y]))
 
     return gaze_world
