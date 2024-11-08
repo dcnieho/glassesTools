@@ -135,8 +135,7 @@ class Gaze:
         if self.gazePosPlane2DRight is not None:
             reference.draw(img, *self.gazePosPlane2DRight, sub_pixel_fac, (255,0,0), 3)
         # average
-        if (self.gazePosPlane2DLeft is not None) and (self.gazePosPlane2DRight is not None):
-            average = np.array([(x1+x2)/2 for x1,x2 in zip(self.gazePosPlane2DLeft,self.gazePosPlane2DRight)])
+        if (average:=self.get_gaze_point(Type.Average_Gaze_Vector)) is not None:
             if not math.isnan(average[0]):
                 reference.draw(img, *average, sub_pixel_fac, (255,0,255))
         # video gaze position
