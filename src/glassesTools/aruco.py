@@ -410,8 +410,20 @@ class PoseEstimator:
             if not planes_for_this_frame and (self.proc_individial_markers_all_frames or self.individual_markers):
                 if self.show_rejected_markers:
                     cv2.aruco.drawDetectedMarkers(frame, rejected_corners, None, (0,0,255))
-                if self.show_detected_markers:
-                    drawing.arucoDetectedMarkers(frame, corners, ids, sub_pixel_fac=self.sub_pixel_fac)
+                if self.show_detected_markers and ids is not None:
+                    # deal with unexpected markers
+                    unexpected = set(ids.flatten())-expected
+                    if self.show_unexpected_markers:
+                        to_highlight |= unexpected
+                        d_ids = ids
+                        d_corners = corners
+                    else:
+                        to_remove = np.where([x[0] in unexpected for x in ids])[0]
+                        d_ids = np.delete(ids, to_remove, axis=0)
+                        d_corners = tuple(v for i,v in enumerate(corners) if i not in to_remove)
+                    if to_highlight:
+                        special_highlights = [list(to_highlight), (150,253,253)]
+                    drawing.arucoDetectedMarkers(frame, d_corners, d_ids, sub_pixel_fac=self.sub_pixel_fac, special_highlight=special_highlights)
 
             # deal with individual markers, if any
             for m_id in individual_marker_out:
