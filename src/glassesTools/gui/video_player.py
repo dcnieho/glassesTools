@@ -616,17 +616,23 @@ class GUI:
             controls_child_size = total_size
 
         tooltip_txt_sz = imgui.calc_text_size('(?)')
+        tooltip_child_size = tooltip_txt_sz+imgui.ImVec2([imgui.get_style().frame_padding.x*2, imgui.get_style().frame_padding.y*2])
         if self._window_timecode_pos[w]=='r':
             tt_pos_x = overlay_x_pos-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
         else:
             tt_pos_x = img_margin+img_sz[0]-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
-        tooltip_button_cursor_pos = (tt_pos_x, img_sz[1]-tooltip_txt_sz.y-2*imgui.get_style().frame_padding.y)
-        frame_padding = imgui.get_style().frame_padding
-        tooltip_controls_child_size = tooltip_txt_sz+imgui.ImVec2([frame_padding.x*2, frame_padding.y*2])
+            # check we don't overlap buttons
+            if tt_pos_x<button_cursor_pos[0]+total_size.x:
+                tt_pos_x = button_cursor_pos[0]+total_size.x+imgui.get_style().item_spacing.x
+                # check we don't go off the screen
+                if tt_pos_x+tooltip_child_size.x>img_space:
+                    # best we can do
+                    tt_pos_x = img_space-tooltip_child_size.x
+        tooltip_cursor_pos = (tt_pos_x, img_sz[1]-tooltip_txt_sz.y-2*imgui.get_style().frame_padding.y)
         if not self._window_show_controls[w]:
             txt_sz = tooltip_txt_sz
-            button_cursor_pos = tooltip_button_cursor_pos
-            controls_child_size = tooltip_controls_child_size
+            button_cursor_pos = tooltip_cursor_pos
+            controls_child_size = tooltip_child_size
 
 
         # draw bottom status overlay
@@ -727,8 +733,8 @@ class GUI:
             imgui.same_line()
         imgui.end_child()
         if self._window_show_controls[w] and self._window_show_action_tooltip[w]:
-            imgui.set_cursor_pos(tooltip_button_cursor_pos)
-            imgui.begin_child("##tooltip_overlay", size=tooltip_controls_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
+            imgui.set_cursor_pos(tooltip_cursor_pos)
+            imgui.begin_child("##tooltip_overlay", size=tooltip_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
             _draw_action_tooltip()
             imgui.end_child()
         imgui.pop_style_color()
