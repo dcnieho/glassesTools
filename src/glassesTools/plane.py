@@ -237,6 +237,7 @@ class Pose:
         drawing.openCVFrameAxis(img, camera_params.camera_mtx, camera_params.distort_coeffs, self.pose_R_vec, self.pose_T_vec, arm_length, thickness, sub_pixel_fac, position)
 
     def cam_frame_to_world(self, point: np.ndarray):
+        # NB: world frame is in the plane's coordinate system
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
             return np.full((3,), np.nan)
 
@@ -250,6 +251,7 @@ class Pose:
         return np.matmul(self._RtMatInv,np.append(np.array(point),1.).reshape((4,1))).flatten()
 
     def world_frame_to_cam(self, point: np.ndarray):
+        # NB: world frame is in the plane's coordinate system
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
             return np.full((3,), np.nan)
 
