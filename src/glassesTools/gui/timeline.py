@@ -39,6 +39,8 @@ class Timeline:
     def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[annotation.Event, list[int]] = None):
         self._video_ts = video_ts
         self._duration = self._video_ts.get_last()[1]/1000. # ms -> s
+        if self._duration==0.0:
+            raise ValueError('Cannot make a timeline for a video with 0s duration, there may be something wrong with the frame timestamps that were passed in')
 
         # horizontal scroll position, in pixels
         self._h_scroll      = 0
