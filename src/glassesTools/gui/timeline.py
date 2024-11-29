@@ -506,7 +506,7 @@ class Timeline:
             for i,(at,af) in enumerate(zip(annotations_time,annotations_frame)):
                 action = self._draw_annotation_line(name, event, i, at, af, i+1, size.y, border_color)
                 if action=='delete_timepoint':
-                    self._request_delete(event, annotations_frame[event][i])
+                    self._request_delete(event, annotations_frame[i])
 
         # draw track header (name + background)
         if self._show_annotation_labels:
