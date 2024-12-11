@@ -5,7 +5,7 @@ import pathlib
 import typing
 import enum
 
-from . import data_files, drawing, gaze_headref, ocv, plane, utils
+from . import data_files, drawing, gaze_headref, ocv, plane, transforms, utils
 
 class Type(utils.AutoName):
     Scene_Video_Position    = enum.auto()
@@ -99,17 +99,27 @@ class Gaze:
                     gaze_point = (gaze_point[0]+gaze_point[1])/2
         return gaze_point
 
-    def draw_on_world_video(self, img, camera_params: ocv.CameraParams, sub_pixel_fac=1,
-                            clr_vidPos_ray=(255,255,0), clr_world_pos=(255,0,255), clr_left=(0,0,255), clr_right=(255,0,0), clr_average=(255,0,255)):
+    def draw_on_world_video(self, img, camera_params: ocv.CameraParams, sub_pixel_fac=1, pose: plane.Pose=None,
+                            clr_vidPos=(255,255,0), clr_world_pos=(255,0,255), clr_left=(0,0,255), clr_right=(255,0,0), clr_average=(255,0,255)):
         # project to camera, display
+        def _project(pos):
+            return cv2.projectPoints(pos.reshape(1,3), np.zeros((1,3)),np.zeros((1,3)), camera_params.camera_mtx,camera_params.distort_coeffs)[0].flatten()
+        def _draw(img,cam_pos,sz,clr):
+            if not math.isnan(cam_pos[0]):
+                drawing.openCVCircle(img, cam_pos, sz, clr, -1, sub_pixel_fac)
         def project_and_draw(img,pos,sz,clr):
-            pPointCam = cv2.projectPoints(pos.reshape(1,3),np.zeros((1,3)),np.zeros((1,3)),camera_params.camera_mtx, camera_params.distort_coeffs)[0][0][0]
-            if not math.isnan(pPointCam[0]):
-                drawing.openCVCircle(img, pPointCam, sz, clr, -1, sub_pixel_fac)
+            _draw(img,_project(pos),sz,clr)
+
+        if not camera_params.has_intrinsics():
+            if pose is not None and pose.homography_successful():
+                # gaze position on plane by homography
+                _draw(img,pose.plane_to_cam_homography(self.gazePosPlane2D_vidPos_homography,camera_params),3,clr_vidPos)
+            # rest requires camera cal, so return
+            return
 
         # gaze ray
-        if self.gazePosCam_vidPos_ray is not None and clr_vidPos_ray is not None:
-            project_and_draw(img, self.gazePosCam_vidPos_ray, 3, clr_vidPos_ray)
+        if self.gazePosCam_vidPos_ray is not None and clr_vidPos is not None:
+            project_and_draw(img, self.gazePosCam_vidPos_ray, 3, clr_vidPos)
         # binocular gaze point
         if self.gazePosCamWorld is not None and clr_world_pos is not None:
             project_and_draw(img, self.gazePosCamWorld, 3, clr_world_pos)
@@ -238,3 +248,13 @@ def _from_head_impl(pose: plane.Pose, gaze: gaze_headref.Gaze, camera_params: oc
         setattr(gaze_world,attr[2],np.asarray([x, y]))
 
     return gaze_world
+
+def distance_from_plane(gaze: Gaze, plane: plane.Plane):
+    if gaze.gazePosPlane2D_vidPos_ray is not None and not math.isnan(gaze.gazePosPlane2D_vidPos_ray[0]):
+        gp = gaze.gazePosPlane2D_vidPos_ray
+    elif gaze.gazePosPlane2D_vidPos_homography is not None and not math.isnan(gaze.gazePosPlane2D_vidPos_homography[0]):
+        gp = gaze.gazePosPlane2D_vidPos_homography
+    else:
+        return math.nan
+    return transforms.dist_from_bbox(*gp, plane.bbox)
+
