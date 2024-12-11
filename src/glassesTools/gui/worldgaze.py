@@ -71,7 +71,7 @@ def show_visualization(
         for p in planes:
             if frame_idx in plane_gazes[p]:
                 for gaze_world in plane_gazes[p][frame_idx]:
-                    gaze_world.draw_on_world_video(frame, cam_params, sub_pixel_fac)
+                    gaze_world.draw_on_world_video(frame, cam_params, sub_pixel_fac, None if not p in poses or not frame_idx in poses[p] else poses[p][frame_idx])
                     if show_planes:
                         gaze_world.draw_on_plane(ref_img[p], planes[p], sub_pixel_fac)
 
