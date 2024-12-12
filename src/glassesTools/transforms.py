@@ -72,7 +72,7 @@ def apply_homography(H, x, y):
     if np.isnan(x) or np.isnan(y):
         return np.full((2,), np.nan)
 
-    src = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
+    src = np.asarray([x, y], dtype='float').reshape((1, -1, 2))
     dst = cv2.perspectiveTransform(src,H)
     return dst.flatten()
 
@@ -82,7 +82,7 @@ def distort_point(x, y, camera_matrix, dist_coeff):
         return np.full((2,), np.nan)
 
     # unproject, ignoring distortion as this is an undistored point
-    points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
+    points_2d = np.asarray([x, y], dtype='float').reshape((1, -1, 2))
     points_2d = cv2.undistortPoints(points_2d, camera_matrix, np.asarray([[0.0, 0.0, 0.0, 0.0, 0.0]]))
     points_3d = cv2.convertPointsToHomogeneous(points_2d)
     points_3d.shape = -1, 3
@@ -95,7 +95,7 @@ def undistort_point(x, y, camera_matrix, dist_coeff):
     if np.isnan(x) or np.isnan(y):
         return np.full((2,), np.nan)
 
-    points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
+    points_2d = np.asarray([x, y], dtype='float').reshape((1, -1, 2))
     points_2d = cv2.undistortPoints(points_2d, camera_matrix, dist_coeff, P=camera_matrix) # P=cameraMatrix to reproject to camera
     return points_2d.flatten()
 
@@ -103,7 +103,7 @@ def unproject_point(x, y, camera_matrix, dist_coeff):
     if np.isnan(x) or np.isnan(y):
         return np.full((3,), np.nan)
 
-    points_2d = np.asarray([x, y], dtype='float32').reshape((1, -1, 2))
+    points_2d = np.asarray([x, y], dtype='float').reshape((1, -1, 2))
     points_2d = cv2.undistortPoints(points_2d, camera_matrix, dist_coeff)
     points_3d = cv2.convertPointsToHomogeneous(points_2d)
     points_3d.shape = -1, 3
