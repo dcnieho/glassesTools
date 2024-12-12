@@ -622,7 +622,7 @@ class GUI:
         else:
             tt_pos_x = img_margin+img_sz[0]-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
             # check we don't overlap buttons
-            if tt_pos_x<button_cursor_pos[0]+total_size.x:
+            if self._window_show_controls[w] and tt_pos_x<button_cursor_pos[0]+total_size.x:
                 tt_pos_x = button_cursor_pos[0]+total_size.x+imgui.get_style().item_spacing.x
                 # check we don't go off the screen
                 if tt_pos_x+tooltip_child_size.x>img_space:
