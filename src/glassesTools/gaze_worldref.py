@@ -257,4 +257,3 @@ def distance_from_plane(gaze: Gaze, plane: plane.Plane):
     else:
         return math.nan
     return transforms.dist_from_bbox(*gp, plane.bbox)
-
