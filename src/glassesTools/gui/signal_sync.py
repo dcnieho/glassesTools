@@ -97,13 +97,13 @@ class GUI:
             self.is_done    = False
             self._should_rescale = True
 
-            self.gaze_data['ts']= np.array([s.timestamp       for fr in gazes for s in gazes[fr]])/1000 # ms -> s
-            self.gaze_data['x'] = np.array([s.gaze_pos_vid[0] for fr in gazes for s in gazes[fr]])
-            self.gaze_data['y'] = np.array([s.gaze_pos_vid[1] for fr in gazes for s in gazes[fr]])
+            self.gaze_data['ts']= np.array([s.timestamp       for fr in gazes for s in gazes[fr]],'float')/1000 # ms -> s
+            self.gaze_data['x'] = np.array([s.gaze_pos_vid[0] for fr in gazes for s in gazes[fr]],'float')
+            self.gaze_data['y'] = np.array([s.gaze_pos_vid[1] for fr in gazes for s in gazes[fr]],'float')
 
-            self.target_data['ts']  = np.array([target_positions[fr].timestamp  for fr in target_positions])/1000 # ms -> s
-            self.target_data['x']   = np.array([target_positions[fr].cam_pos[0] for fr in target_positions])
-            self.target_data['y']   = np.array([target_positions[fr].cam_pos[1] for fr in target_positions])
+            self.target_data['ts']  = np.array([target_positions[fr].timestamp  for fr in target_positions],'float')/1000 # ms -> s
+            self.target_data['x']   = np.array([target_positions[fr].cam_pos[0] for fr in target_positions],'float')
+            self.target_data['y']   = np.array([target_positions[fr].cam_pos[1] for fr in target_positions],'float')
 
             # set begin to 0
             t0 = min([self.gaze_data['ts'][0] , self.target_data['ts'][0] ])
