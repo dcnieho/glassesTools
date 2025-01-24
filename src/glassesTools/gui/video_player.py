@@ -72,7 +72,7 @@ class Button:
 
         accelerator = imgui.get_key_name(self.key)
         if self.has_shift:
-            mod_lbl = imgui.get_key_name(imgui.Key.im_gui_mod_shift)
+            mod_lbl = imgui.get_key_name(imgui.Key.mod_shift)
             if mod_lbl.lower().startswith('mod'):
                 mod_lbl = mod_lbl[3:]
             accelerator = f'{accelerator} or {mod_lbl}+{accelerator}'
@@ -526,7 +526,7 @@ class GUI:
             imgui.dummy(img_sz)
         else:
             imgui.set_cursor_pos((img_margin,0))
-            imgui.image(self._texID[w], img_sz)
+            imgui.image(self._texID[w], (*img_sz,))
 
         # prepare for drawing bottom status overlay
         fr_ts, fr_idx = self._current_frame[w][1:]
@@ -674,9 +674,9 @@ class GUI:
                 imgui.same_line()
                 continue
             mod_key = 0
-            if b.has_shift and imgui.is_key_down(imgui.Key.im_gui_mod_shift):
+            if b.has_shift and imgui.is_key_down(imgui.Key.mod_shift):
                 # ensure the shortcut with shift is picked up
-                mod_key = imgui.Key.im_gui_mod_shift
+                mod_key = imgui.Key.mod_shift
             flags = imgui.InputFlags_.route_global
             if b.repeats:
                 flags |= imgui.InputFlags_.repeat
@@ -708,13 +708,13 @@ class GUI:
                     case Action.Pause:
                         self._requests.append(('toggle_pause',None))
                     case Action.Back_Time:
-                        self._requests.append(('delta_time', -10. if imgui.is_key_down(imgui.Key.im_gui_mod_shift) else -1.))
+                        self._requests.append(('delta_time', -10. if imgui.is_key_down(imgui.Key.mod_shift) else -1.))
                     case Action.Back_Frame:
-                        self._requests.append(('delta_frame', -10 if imgui.is_key_down(imgui.Key.im_gui_mod_shift) else -1))
+                        self._requests.append(('delta_frame', -10 if imgui.is_key_down(imgui.Key.mod_shift) else -1))
                     case Action.Forward_Frame:
-                        self._requests.append(('delta_frame',  10 if imgui.is_key_down(imgui.Key.im_gui_mod_shift) else  1))
+                        self._requests.append(('delta_frame',  10 if imgui.is_key_down(imgui.Key.mod_shift) else  1))
                     case Action.Forward_Time:
-                        self._requests.append(('delta_time',  10. if imgui.is_key_down(imgui.Key.im_gui_mod_shift) else  1.))
+                        self._requests.append(('delta_time',  10. if imgui.is_key_down(imgui.Key.mod_shift) else  1.))
                     case Action.Quit:
                         self._requests.append(('exit',None))
                     case Action.Annotate_Make:

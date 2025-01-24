@@ -367,7 +367,7 @@ class FilePicker:
 
         enable_keyboard_nav = not self.popup_stack and not self.disable_keyboard_navigation and not imgui.get_io().want_text_input   # no keyboard navigation in this GUI if a popup is open or key input taken elsewhere
         backspace_released  = imgui.is_key_pressed(imgui.Key.backspace)
-        shift_down          = imgui.is_key_down(imgui.Key.im_gui_mod_shift)
+        shift_down          = imgui.is_key_down(imgui.Key.mod_shift)
 
         imgui.begin_group()
         # History back button
@@ -734,10 +734,10 @@ class FilePicker:
                             multi_selected_state = 0
 
                         if multi_selected_state==0:
-                            imgui.internal.push_item_flag(imgui.internal.ItemFlags_.mixed_value, True)
+                            imgui.push_item_flag(imgui.internal.ItemFlagsPrivate_.mixed_value, True)
                         clicked, new_state = gui_utils.my_checkbox("##header_checkbox", multi_selected_state==1, frame_size=(0,0), frame_padding_override=(imgui.get_style().frame_padding.x/2,0), do_vertical_align=False)
                         if multi_selected_state==0:
-                            imgui.internal.pop_item_flag()
+                            imgui.pop_item_flag()
 
                         if clicked:
                             utils.set_all(self.selected, new_state, subset=self.sorted_items, predicate=self.predicate_selectable)

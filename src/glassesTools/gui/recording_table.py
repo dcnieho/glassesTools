@@ -274,10 +274,10 @@ class RecordingTable:
                             multi_selected_state = 0
 
                         if multi_selected_state==0:
-                            imgui.internal.push_item_flag(imgui.internal.ItemFlags_.mixed_value, True)
+                            imgui.push_item_flag(imgui.internal.ItemFlagsPrivate_.mixed_value, True)
                         clicked, new_state = gui_utils.my_checkbox("##header_checkbox", multi_selected_state==1, frame_size=(0,0), do_vertical_align=False)
                         if multi_selected_state==0:
-                            imgui.internal.pop_item_flag()
+                            imgui.pop_item_flag()
 
                         if clicked:
                             utils.set_all(self.selected_recordings, new_state, subset = self.sorted_recordings_ids)
@@ -455,7 +455,7 @@ class RecordingTable:
             imgui.internal.render_frame(bb.min, bb.max, imgui.color_convert_float4_to_u32(clr), True, imgui.get_style().frame_rounding)
             # draw text on top
             imgui.push_style_color(imgui.Col_.text, (1., 1., 1., 1.))
-            imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), et, None, label_size, imgui.get_style().button_text_align, bb)
+            imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), et, '', label_size, imgui.get_style().button_text_align, bb)
             imgui.pop_style_color()
 
         if align:
