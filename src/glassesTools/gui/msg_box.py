@@ -53,6 +53,4 @@ def msgbox(title: str, msg: str, type: MsgBox = None, buttons: dict[str, Callabl
                 imgui.input_text_multiline(f"###more_info_{title}", more, (width, height), flags=imgui.InputTextFlags_.read_only)
                 imgui.tree_pop()
         imgui.end_group()
-        imgui.same_line(spacing=spacing)
-        imgui.dummy((0, 0))
     return utils.popup(title, popup_content, buttons, closable=False, escape=True, outside=False)
