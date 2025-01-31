@@ -31,7 +31,7 @@ def preprocessData(output_dir: str|pathlib.Path, device: str|EyeTracker=None, so
     """
     Run all preprocessing steps on pupil data and store in output_dir
     """
-    device, rec_info = check_device(device, rec_info)
+    device, rec_info, _ = check_device(device, rec_info)
     if not device in [EyeTracker.Pupil_Core, EyeTracker.Pupil_Invisible, EyeTracker.Pupil_Neon]:
         raise ValueError(f'Provided device ({rec_info.eye_tracker.value}) is not a {EyeTracker.Pupil_Core.value}, a {EyeTracker.Pupil_Invisible.value} or a {EyeTracker.Pupil_Neon.value}.')
     output_dir, source_dir, rec_info = check_folders(output_dir, source_dir, rec_info, device)

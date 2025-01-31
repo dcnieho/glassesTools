@@ -18,6 +18,7 @@ class Recording:
     start_time                  : Timestamp     = 0
     duration                    : int           = None
     eye_tracker                 : EyeTracker    = EyeTracker.Unknown
+    eye_tracker_name            : str           = ""    # name to show if eye_tracker is EyeTracker.Generic
     project                     : str           = ""
     participant                 : str           = ""
     firmware_version            : str           = ""
@@ -58,7 +59,7 @@ class Recording:
         return vid
 
 
-def find_recordings(paths: list[pathlib.Path], eye_tracker: EyeTracker) -> list[Recording]:
+def find_recordings(paths: list[pathlib.Path], eye_tracker: EyeTracker, device_name: str=None) -> list[Recording]:
     from . import importing
     all_recs = []
     for p in paths:
@@ -66,7 +67,7 @@ def find_recordings(paths: list[pathlib.Path], eye_tracker: EyeTracker) -> list[
         all_dirs.append(p)
         for d in all_dirs:
             # check if dir is a valid recording
-            if (recs:=importing.get_recording_info(d, eye_tracker)) is not None:
+            if (recs:=importing.get_recording_info(d, eye_tracker, device_name)) is not None:
                 all_recs.extend(recs)
 
     # sort in order natural for OS

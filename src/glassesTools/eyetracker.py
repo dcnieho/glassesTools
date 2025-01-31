@@ -4,6 +4,7 @@ from . import utils
 
 class EyeTracker(utils.AutoName):
     AdHawk_MindLink = enum.auto()
+    Generic         = enum.auto()
     Pupil_Core      = enum.auto()
     Pupil_Invisible = enum.auto()
     Pupil_Neon      = enum.auto()
@@ -15,6 +16,7 @@ class EyeTracker(utils.AutoName):
 eye_tracker_names = [x.value for x in EyeTracker if x!=EyeTracker.Unknown]
 
 EyeTracker.AdHawk_MindLink.color = utils.hex_to_rgba_0_1("#001D7A")
+EyeTracker.Generic        .color = utils.hex_to_rgba_0_1("#393939")
 EyeTracker.Pupil_Core     .color = utils.hex_to_rgba_0_1("#E6194B")
 EyeTracker.Pupil_Invisible.color = utils.hex_to_rgba_0_1("#3CB44B")
 EyeTracker.Pupil_Neon     .color = utils.hex_to_rgba_0_1("#C6B41E")

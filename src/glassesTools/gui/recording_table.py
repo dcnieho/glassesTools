@@ -67,6 +67,7 @@ class RecordingTable:
 
         self._columns: list[ColumnSpec] = []
         self._show_hide_commands: dict[int,bool] = {}
+        self._device_names: set[str] = set(('Camera',)) | set(et.value for et in eyetracker.EyeTracker)
         self.build_columns(extra_columns)
 
         self._eye_tracker_label_width: float = None
@@ -425,24 +426,32 @@ class RecordingTable:
 
     def draw_eye_tracker_widget(self, rec: recording.Recording|camera_recording.Recording, align=False):
         imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0)
-        x_padding = 4
-        if self._eye_tracker_label_width is None:
-            self._eye_tracker_label_width = 0
-            for et in list(eyetracker.EyeTracker):
-                self._eye_tracker_label_width = max(self._eye_tracker_label_width, imgui.calc_text_size(et.value).x)
-            self._eye_tracker_label_width += 2 * x_padding
         if align:
             imgui.begin_group()
             imgui.set_cursor_pos_y(imgui.get_cursor_pos_y() + imgui.get_style().frame_padding.y)
 
         # prep for drawing widget: determine its size and position and see if visible
         if isinstance(rec, recording.Recording):
-            et          = rec.eye_tracker.value
-            clr         = rec.eye_tracker.color
-        else:
+            if rec.eye_tracker==recording.EyeTracker.Generic:
+                et = rec.eye_tracker_name
+            else:
+                et = rec.eye_tracker.value
+            clr = rec.eye_tracker.color
+        elif isinstance(rec, camera_recording.Recording):
             # camera recording
-            et          = 'Camera'
-            clr         = (.7, .7, .7, 1.)
+            et  = 'Camera'
+            clr = (.6, .6, .6, 1.)
+        need_calc_lbl_widths = et not in self._device_names
+        if need_calc_lbl_widths:
+            self._device_names.add(et)
+
+        x_padding = 4
+        if self._eye_tracker_label_width is None or need_calc_lbl_widths:
+            self._eye_tracker_label_width = 0
+            for lbl in self._device_names:
+                self._eye_tracker_label_width = max(self._eye_tracker_label_width, imgui.calc_text_size(lbl).x)
+            self._eye_tracker_label_width += 2 * x_padding
+
         iid         = imgui.get_id(et)
         label_size  = imgui.calc_text_size(et)
         size        = imgui.ImVec2(self._eye_tracker_label_width, label_size.y)
