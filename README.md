@@ -23,6 +23,7 @@ glassesTools supports the following eye trackers:
 |Name|`glassesTools.eyetracker.EyeTracker` `Enum` value|
 | --- | --- |
 |AdHawk MindLink|`EyeTracker.AdHawk_MindLink`|
+|Generic|`EyeTracker.Generic`*|
 |Pupil Core|`EyeTracker.Pupil_Core`|
 |Pupil Invisible|`EyeTracker.Pupil_Invisible`|
 |Pupil Neon|`EyeTracker.Pupil_Neon`|
@@ -30,6 +31,8 @@ glassesTools supports the following eye trackers:
 |SMI ETG 1 and ETG 2|`EyeTracker.SMI_ETG`|
 |Tobii Pro Glasses 2|`EyeTracker.Tobii_Glasses_2`|
 |Tobii Pro Glasses 3|`EyeTracker.Tobii_Glasses_3`|
+
+* The generic eye tracker allows users to import recordings made with unsupported eye trackers into tools built upon glassesTools, if the user has already converted the recording to the [glassesTools format](#common-data-format) themselves. The name of the eye tracker can be set in the [recording info](#recording-info) file through the `eye_tracker_name` property, so that recordings from different devices imported as generic eye tracker recordings can be distinguished.
 
 Pull requests or partial help implementing support for further wearable eye trackers are gladly received. To support a new eye tracker,
 device support in [`glassesTools.importing`](#glassestoolsimporting) should be implemented and the new eye tracker added to
@@ -90,10 +93,11 @@ software before they can be imported using glassesTools. These are:
 ### `glassesTools.importing`
 |function|inputs|description|
 | --- | --- | --- |
-|`get_recording_info()`|<ol><li>[`source_dir`](#common-input-arguments)</li><li>`device`: `glassesTools.eyetracker.EyeTracker`</li></ol>|Determine if provided path contains a recording/recordings made with the specified eye tracker (`device`) and if so, get info about these recordings.|
-|`do_import()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`device`: [`glassesTools.eyetracker.EyeTracker`](#eye-tracker-support)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li><li>[`cam_cal_file`](#common-input-arguments): Optional.</li></ol>|Import the specified recording to `output_dir`. Either `device` or `rec_info` must be specified. Does nothing if `source_dir` does not contain a recording made with the specified eye tracker.|
+|`get_recording_info()`|<ol><li>[`source_dir`](#common-input-arguments)</li><li>`device`: `glassesTools.eyetracker.EyeTracker`</li><li>`device_name`: Name of the device to be imported. Optional string, default None. Only used for generic eye tracker recordings.</li></ol>|Determine if provided path contains a recording/recordings made with the specified eye tracker (`device`) and if so, get info about these recordings.|
+|`do_import()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>`device`: [`glassesTools.eyetracker.EyeTracker`](#eye-tracker-support)</li><li>`device_name`: Name of the device to be imported. Optional string, default None. Only used for generic eye tracker recordings.</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li><li>[`cam_cal_file`](#common-input-arguments): Optional.</li></ol>|Import the specified recording to `output_dir`. Either `device` or `rec_info` must be specified. Does nothing if `source_dir` does not contain a recording made with the specified eye tracker.|
 |  |  |  |
 |`adhawk_mindlink()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li><li>[`cam_cal_file`](#common-input-arguments): Optional. If not provided a default calibration provided by AdHawk is used.</li></ol>|Import an AdHawk MindLink recording to a subdirectory of `output_dir`. Does nothing if `source_dir` does not contain an AdHawk MindLink recording.|
+|`generic()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>`device_name`: Name of the device to be imported (string, can be anything).</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li></ol>|Import a generic recording to a subdirectory of `output_dir`. Does nothing if `source_dir` does not contain a generic recording, or contains a generic recording, but its `recording_info.json` is not for a device matching `device_name`.|
 |`pupil_core()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li></ol>|Import a Pupil Core recording to a subdirectory of `output_dir`. Does nothing if `source_dir` does not contain a Pupil Core recording.|
 |`pupil_invisible()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li></ol>|Import a Pupil Invisible recording to a subdirectory of `output_dir`. Does nothing if `source_dir` does not contain a Pupil Invisible recording.|
 |`pupil_neon()`|<ol><li>[`output_dir`](#common-input-arguments)</li><li>[`source_dir`](#common-input-arguments)</li><li>[`rec_info`](#common-input-arguments): Optional.</li><li>[`copy_scene_video`](#common-input-arguments): Optional, default `True`.</li><li>[`source_dir_as_relative_path`](#common-input-arguments): Optional, default `False`.</li></ol>|Import a Pupil Neon recording to a subdirectory of `output_dir`. Does nothing if `source_dir` does not contain a Pupil Neon recording.|
@@ -136,6 +140,7 @@ It has the following properties:
 |`start_time`|`glassesTools.timestamps.Timestamp`|Recording start time|
 |`duration`|`int`|Recording duration (ms)|
 |`eye_tracker`|[`glassesTools.eyetracker.EyeTracker`](#eye-tracker-support)|Eye tracker type (e.g. Pupil Invisible or Tobii Glasses 2)|
+|`eye_tracker_name`|[`str`](#eye-tracker-support)|Name of the eye tracker if the eye tracker type is a `glassesTools.eyetracker.EyeTracker.Generic`|
 |`project`|`str`|Project name|
 |`participant`|`str`|Participant name|
 |`firmware_version`|`str`|Firmware version|
