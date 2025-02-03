@@ -9,11 +9,11 @@ from ..eyetracker import EyeTracker
 from .. import eyetracker, naming
 
 from .adhawk_mindlink import preprocessData as adhawk_mindlink
+from .generic import importData as generic
 from .SeeTrue_STONE import preprocessData as SeeTrue_STONE
 from .SMI_ETG import preprocessData as SMI_ETG
 from .tobii_G2 import preprocessData as tobii_G2
 from .tobii_G3 import preprocessData as tobii_G3
-from .generic import importData as generic
 
 def pupil_core(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from .pupilLabs import preprocessData
@@ -193,5 +193,5 @@ def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame|None, frame_ts: pd.
     rec_info.store_as_json(output_dir / rec_info_fname)
 
 
-__all__ = ['pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3','adhawk_mindlink','generic',
+__all__ = ['adhawk_mindlink','generic','pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3',
            'get_recording_info','do_import','check_source_dir','check_output_dir','check_folders','check_device']
