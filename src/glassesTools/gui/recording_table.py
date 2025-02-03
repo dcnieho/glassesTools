@@ -5,6 +5,7 @@ import threading
 from imgui_bundle import imgui, icons_fontawesome_6 as ifa6
 
 from . import utils as gui_utils
+from .timeline import _color_luminance
 from .. import camera_recording, eyetracker, recording, utils
 
 
@@ -444,6 +445,8 @@ class RecordingTable:
         need_calc_lbl_widths = et not in self._device_names
         if need_calc_lbl_widths:
             self._device_names.add(et)
+        lum = _color_luminance(imgui.ImColor(*clr))
+        txt_clr = (1.,1.,1.,1.) if lum<0.5 else (0.,0.,0.,1.)
 
         x_padding = 4
         if self._eye_tracker_label_width is None or need_calc_lbl_widths:
@@ -463,7 +466,7 @@ class RecordingTable:
             # draw frame
             imgui.internal.render_frame(bb.min, bb.max, imgui.color_convert_float4_to_u32(clr), True, imgui.get_style().frame_rounding)
             # draw text on top
-            imgui.push_style_color(imgui.Col_.text, (1., 1., 1., 1.))
+            imgui.push_style_color(imgui.Col_.text, txt_clr)
             imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), et, '', label_size, imgui.get_style().button_text_align, bb)
             imgui.pop_style_color()
 
