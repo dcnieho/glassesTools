@@ -143,6 +143,7 @@ def _get_frame_timestamps_from_video(vid_file: pathlib.Path) -> np.array:
             frame_ts.append(ts)
             # check if we're done. Can't trust ret==False to indicate we're at end of video, as it may also return false for some frames when video has errors in the middle that we can just read past
             if (not ret and frame_idx>0 and frame_idx/nframes<.99):
+                vid.release()
                 raise RuntimeError("The video file is corrupt. Testing has shown that it cannot be guaranteed that timestamps remain correct when trying to read past the hole. So abort, cannot process this video.")
 
         # release the video capture object
