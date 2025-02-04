@@ -523,7 +523,7 @@ class GUI:
             imgui.set_cursor_pos((img_margin+offset[0],offset[1]))
             imgui.text_colored((1., 0., 0., 1.), overlay_text)
             imgui.set_cursor_pos((img_margin,0))
-            imgui.dummy(img_sz)
+            imgui.dummy((*img_sz,))
         else:
             imgui.set_cursor_pos((img_margin,0))
             imgui.image(self._texID[w], (*img_sz,))
