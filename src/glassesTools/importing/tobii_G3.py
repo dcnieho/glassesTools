@@ -31,7 +31,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
     """
     Run all preprocessing steps on tobii data and store in output_dir
     """
-    output_dir, source_dir, rec_info = check_folders(output_dir, source_dir, rec_info, EyeTracker.Tobii_Glasses_3)
+    output_dir, source_dir, rec_info, _ = check_folders(output_dir, source_dir, rec_info, EyeTracker.Tobii_Glasses_3)
     print(f'processing: {source_dir.name} -> {output_dir}')
 
 

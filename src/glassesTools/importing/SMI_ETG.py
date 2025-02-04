@@ -33,7 +33,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
     Run all preprocessing steps on SMI data and store in output_dir
     """
     # NB: copy_scene_video input argument might be ignored. If ffmpeg is present, it will be used to transcode the scene camera video
-    output_dir, source_dir, rec_info = check_folders(output_dir, source_dir, rec_info, EyeTracker.SMI_ETG)
+    output_dir, source_dir, rec_info, _ = check_folders(output_dir, source_dir, rec_info, EyeTracker.SMI_ETG)
     print(f'processing: {source_dir.name} -> {output_dir}')
 
 
@@ -122,7 +122,7 @@ def copySMIRecordings(inputDir: pathlib.Path, outputDir: pathlib.Path, recInfo: 
     Copy the relevant files from the specified input dir to the specified output dirs
     """
 
-    # Copy relevent files to new directory
+    # Copy relevant files to new directory
     file    = recInfo.name + '-export.avi'
     srcFile = inputDir / file
 

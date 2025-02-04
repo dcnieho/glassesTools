@@ -29,7 +29,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
     """
     Run all preprocessing steps on SeeTrue STONE data and store in output_dir
     """
-    output_dir, source_dir, rec_info = check_folders(output_dir, source_dir, rec_info, EyeTracker.SeeTrue_STONE)
+    output_dir, source_dir, rec_info, _ = check_folders(output_dir, source_dir, rec_info, EyeTracker.SeeTrue_STONE)
     print(f'processing: {source_dir.name} -> {output_dir}')
 
 

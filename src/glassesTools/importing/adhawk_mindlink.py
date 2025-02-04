@@ -21,7 +21,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
     """
     Run all preprocessing steps on AdHawk MindLink data and store in output_dir
     """
-    output_dir, source_dir, rec_info = check_folders(output_dir, source_dir, rec_info, EyeTracker.AdHawk_MindLink)
+    output_dir, source_dir, rec_info, _ = check_folders(output_dir, source_dir, rec_info, EyeTracker.AdHawk_MindLink)
     print(f'processing: {source_dir.name} -> {output_dir}')
 
 
