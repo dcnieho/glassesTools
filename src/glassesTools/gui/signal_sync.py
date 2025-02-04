@@ -30,6 +30,7 @@ class GUI:
         self._dragging  : list[bool] = [False, False]
         self._temp_off  = np.zeros((3,))
         self._should_rescale = True
+        self.is_started : bool = False
         self.is_done    : bool = None
 
         self._window_flags = int(
@@ -111,6 +112,8 @@ class GUI:
             self.target_data['ts'] -= t0
 
     def _gui_func(self):
+        self.is_started = True
+
         # check if we should exit
         if self._should_exit:
             # and kill
