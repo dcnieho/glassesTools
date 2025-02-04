@@ -14,6 +14,7 @@ from .SeeTrue_STONE import preprocessData as SeeTrue_STONE
 from .SMI_ETG import preprocessData as SMI_ETG
 from .tobii_G2 import preprocessData as tobii_G2
 from .tobii_G3 import preprocessData as tobii_G3
+from .VPS_19 import preprocessData as VPS_19
 
 def pupil_core(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from .pupilLabs import preprocessData
@@ -61,6 +62,9 @@ def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker,
         case EyeTracker.Tobii_Glasses_3:
             from .tobii_G3 import getRecordingInfo
             rec_info = getRecordingInfo(source_dir)
+        case EyeTracker.VPS_19:
+            from .VPS_19 import getRecordingInfo
+            rec_info = getRecordingInfo(source_dir)
 
     if rec_info is not None and not isinstance(rec_info,list):
         rec_info = [rec_info]
@@ -99,6 +103,8 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
             rec_info = tobii_G2(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Tobii_Glasses_3:
             rec_info = tobii_G3(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
+        case EyeTracker.VPS_19:
+            rec_info = VPS_19(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
 
     return rec_info
 
@@ -193,5 +199,5 @@ def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame|None, frame_ts: pd.
     rec_info.store_as_json(output_dir / rec_info_fname)
 
 
-__all__ = ['adhawk_mindlink','generic','pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3',
+__all__ = ['adhawk_mindlink','generic','pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3','VPS_19',
            'get_recording_info','do_import','check_source_dir','check_output_dir','check_folders','check_device']
