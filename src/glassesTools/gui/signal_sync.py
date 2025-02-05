@@ -1,4 +1,5 @@
 import threading
+import time
 import numpy as np
 from imgui_bundle import imgui, implot, immapp, hello_imgui, glfw_utils
 import glfw
@@ -86,6 +87,9 @@ class GUI:
             raise ValueError('No gaze or target position data was provided')
 
         new_title = f'{title} (episode {ival})'
+        # the next can only be called once the gui is actually started. Avoid race condition
+        while not self.is_started:
+            time.sleep(0.01)
         # this is just for show, doesn't trigger an update. But lets keep them in sync
         hello_imgui.get_runner_params().app_window_params.window_title = new_title
         # actually update window title
