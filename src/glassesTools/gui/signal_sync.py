@@ -27,6 +27,7 @@ class GUI:
         self.gaze_data  : dict[str, np.ndarray] = {}    # ['ts', 'x', 'y']
         self.target_data: dict[str, np.ndarray] = {}
         self.offset_t   : float = 0.
+        self.offset_t_ori : float = 0.
         self._offset_xy : list[float] = [0., 0.]
         self._dragging  : list[bool] = [False, False]
         self._temp_off  = np.zeros((3,))
@@ -98,6 +99,7 @@ class GUI:
         hello_imgui.get_runner_params().app_window_params.hidden = False
         with self._data_lock:
             self.offset_t   = offset_t
+            self.offset_t_ori = offset_t
             self._offset_xy = [0., 0.]
             self.is_done    = False
             self._should_rescale = True
@@ -138,6 +140,21 @@ class GUI:
             glfw.set_window_size(win, *w_bounds.size)
             self._should_init = False
 
+        if disabled:=self.offset_t==0.:
+            imgui.begin_disabled()
+        if imgui.button('Reset to 0 ms'):
+            self.offset_t = 0.
+        if disabled:
+            imgui.end_disabled()
+        imgui.same_line()
+        if self.offset_t_ori!=0.:
+            if disabled:=self.offset_t==self.offset_t_ori:
+                imgui.begin_disabled()
+            if imgui.button(f'Reset to {self.offset_t_ori*1000:.1f} ms'):
+                self.offset_t = self.offset_t_ori
+            if disabled:
+                imgui.end_disabled()
+            imgui.same_line()
         if imgui.button('Done', (-1,0)):
             self.is_done = True
 
