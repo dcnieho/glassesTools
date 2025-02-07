@@ -35,6 +35,14 @@ class GUI:
         self.is_started : bool = False
         self.is_done    : bool = None
 
+        # cache values
+        self._gaze_data_offset  : dict[str, np.ndarray] = {}    # ['ts', 'x', 'y']
+        self._gaze_data_plot_pix: dict[str, np.ndarray] = {'x': None, 'y': None}
+        self._last_mouse_pos    : dict[int,tuple[float,float]] = {0: None, 1: None}
+        self._hovered           : int = None
+        self._held              : int = None
+        self._drag_origin       : implot.Point = None
+
         self._window_flags = int(
                                     imgui.WindowFlags_.no_title_bar |
                                     imgui.WindowFlags_.no_collapse |
@@ -117,6 +125,11 @@ class GUI:
             self.gaze_data  ['ts'] -= t0
             self.target_data['ts'] -= t0
 
+            # set up cache
+            self._gaze_data_offset['ts']    = self.gaze_data['ts']+self.offset_t
+            self._gaze_data_offset['x']     = self.gaze_data['x'].copy()
+            self._gaze_data_offset['y']     = self.gaze_data['y'].copy()
+
     def _gui_func(self):
         self.is_started = True
 
@@ -144,6 +157,7 @@ class GUI:
             imgui.begin_disabled()
         if imgui.button('Reset to 0 ms'):
             self.offset_t = 0.
+            self._update_cache(None)
         if disabled:
             imgui.end_disabled()
         imgui.same_line()
@@ -152,6 +166,7 @@ class GUI:
                 imgui.begin_disabled()
             if imgui.button(f'Reset to {self.offset_t_ori*1000:.1f} ms'):
                 self.offset_t = self.offset_t_ori
+                self._update_cache(None)
             if disabled:
                 imgui.end_disabled()
             imgui.same_line()
@@ -159,25 +174,31 @@ class GUI:
             self.is_done = True
 
         with self._data_lock:
-            toff = self.offset_t
-            xoff = self._offset_xy[0]
-            yoff = self._offset_xy[1]
-            if any(self._dragging):
-                toff += self._temp_off[0]
-                xoff += self._temp_off[1]
-                yoff += self._temp_off[2]
+            gt = self._gaze_data_offset['ts']
+            gx = self._gaze_data_offset['x']
+            gy = self._gaze_data_offset['y']
+            if self._held is not None:
+                gt = gt+self._temp_off[0]
+                gx = gx+self._temp_off[1]
+                gy = gy+self._temp_off[2]
             if implot.begin_subplots('##xy_plots',2,1,(-1,-1),implot.SubplotFlags_.link_all_x):
                 if self._should_rescale:
                     implot.set_next_axes_to_fit()
                 if implot.begin_plot('##X',flags=implot.Flags_.no_mouse_text):
                     implot.setup_axis(implot.ImAxis_.x1, None)
-                    implot.setup_axis(implot.ImAxis_.y1, 'horizontal coordinate (pix)', implot.AxisFlags_.auto_fit)
-                    implot.plot_line("gaze", self.gaze_data['ts']+toff, self.gaze_data['x']+xoff)
+                    implot.setup_axis(implot.ImAxis_.y1, 'horizontal coordinate (pix)')
+                    if self._hovered==0:
+                        implot.push_style_var(implot.StyleVar_.line_weight, implot.get_style().line_weight*2)
+                        imgui.set_mouse_cursor(imgui.MouseCursor_.hand)
+                    implot.plot_line("gaze", gt, gx)
+                    if self._hovered==0:
+                        implot.pop_style_var()
                     implot.plot_line("target", self.target_data['ts'], self.target_data['x'])
-                    self._do_drag(0)
+                    if implot.is_plot_hovered():
+                        self._do_data_drag(0)
                     # position annotation outside axes, clamping will put it in the corner
                     ax_lims = implot.get_plot_limits()
-                    implot.annotation(ax_lims.x.max,ax_lims.y.min,implot.get_style().color_(implot.Col_.inlay_text),(0,0),True,f'offset: {toff*1000:.1f}ms')
+                    implot.annotation(ax_lims.x.max,ax_lims.y.min,implot.get_style().color_(implot.Col_.inlay_text),(0,0),True,f'offset: {(self.offset_t+self._temp_off[0])*1000:.1f}ms')
                     implot.end_plot()
 
                 if self._should_rescale:
@@ -185,10 +206,16 @@ class GUI:
                     self._should_rescale = False
                 if implot.begin_plot('##Y',flags=implot.Flags_.no_mouse_text):
                     implot.setup_axis(implot.ImAxis_.x1, 'time (s)')
-                    implot.setup_axis(implot.ImAxis_.y1, 'vertical coordinate (pix)', implot.AxisFlags_.auto_fit)
-                    implot.plot_line("gaze", self.gaze_data['ts']+toff, self.gaze_data['y']+yoff)
+                    implot.setup_axis(implot.ImAxis_.y1, 'vertical coordinate (pix)')
+                    if self._hovered==1:
+                        implot.push_style_var(implot.StyleVar_.line_weight, implot.get_style().line_weight*2)
+                        imgui.set_mouse_cursor(imgui.MouseCursor_.hand)
+                    implot.plot_line("gaze", gt, gy)
+                    if self._hovered==1:
+                        implot.pop_style_var()
                     implot.plot_line("target", self.target_data['ts'], self.target_data['y'])
-                    self._do_drag(1)
+                    if implot.is_plot_hovered():
+                        self._do_data_drag(1)
                     implot.end_plot()
 
                 implot.end_subplots()
@@ -202,7 +229,7 @@ class GUI:
                     imgui.begin_tooltip()
                     imgui.push_text_wrap_pos(min(imgui.get_font_size() * 35, ws.x))
                     imgui.text_unformatted(
-                        'To align the two signals in time with each other, drag the green dot in the middle of either plot. '
+                        'Drag the gaze signal to align the two signals in time with each other. '
                         'The horizontal offset is the applied time shift (indicated by the value in the lower-right '
                         'corner of the upper plot). Any vertical shift is not stored, but can be useful when aligning the two signals. '
                         'When done aligning the two signals, press done atop the window.'
@@ -210,19 +237,59 @@ class GUI:
                     imgui.pop_text_wrap_pos()
                     imgui.end_tooltip()
 
-    def _do_drag(self, ax_idx):
-        ax_lims = implot.get_plot_limits()
-        pos = ((ax_lims.x.min+ax_lims.x.max)/2., (ax_lims.y.min+ax_lims.y.max)/2.)
-        held, dx, dy = implot.drag_point(1,*pos,imgui.ImVec4(0,0.9,0,1))[:3]
-        if held:
-            self._dragging[ax_idx]  = True
-            self._temp_off[0]       = dx-pos[0]
-            self._temp_off[ax_idx+1]= dy-pos[1]
-        elif self._dragging[ax_idx]:
+    def _do_data_drag(self, ax_idx):
+        gid = imgui.get_id(f"##gaze_data_drag_{ax_idx}")
+        imgui.push_id(gid)
+        p = implot.get_plot_mouse_pos()
+        if self._last_mouse_pos[ax_idx] is None or self._last_mouse_pos[ax_idx].x!=p.x:
+            self._last_mouse_pos[ax_idx] = p
+            distance = self._distance_to_gaze_signal(p, ax_idx)
+            if distance < 4.*hello_imgui.dpi_window_size_factor():
+                # hovering
+                self._hovered = ax_idx
+            elif self._hovered==ax_idx:
+                self._hovered = None
+        released = False
+        drag_offset = imgui.ImVec2()
+        if self._hovered==ax_idx and imgui.is_mouse_clicked(imgui.MouseButton_.left):
+            self._held = ax_idx
+            self._drag_origin = p
+            imgui.internal.set_active_id(gid,imgui.internal.get_current_window())
+        elif self._held==ax_idx:
+            if imgui.is_mouse_down(imgui.MouseButton_.left):
+                imgui.internal.set_active_id(gid,imgui.internal.get_current_window())
+                drag_offset = imgui.ImVec2(p.x-self._drag_origin.x, p.y-self._drag_origin.y)
+            else:
+                self._held = None
+                self._drag_origin = None
+                released = True
+
+        # process drag, apply
+        if self._held==ax_idx:
+            self._temp_off[0]        = drag_offset.x
+            self._temp_off[ax_idx+1] = drag_offset.y
+        elif released:
             self.offset_t           += self._temp_off[0]
             self._offset_xy[ax_idx] += self._temp_off[ax_idx+1]
             self._temp_off          = np.zeros((3,))
-            self._dragging[ax_idx]  = False
+            self._update_cache(ax_idx)
+        imgui.pop_id()
+
+    def _update_cache(self, ax_idx: int=None):
+        self._gaze_data_offset['ts'] = self.gaze_data['ts'] + self.offset_t
+        if ax_idx in [0, 2]:
+            self._gaze_data_offset['x'] = self.gaze_data['x'] + self._offset_xy[0]
+        elif ax_idx in [1, 2]:
+            self._gaze_data_offset['y'] = self.gaze_data['y'] + self._offset_xy[1]
+        self._gaze_data_plot_pix = {'x': None, 'y': None}
+
+    def _distance_to_gaze_signal(self, pos: implot.Point, ax_idx: int):
+        ax = 'x' if ax_idx==0 else 'y'
+        if self._gaze_data_plot_pix[ax] is None:
+            self._gaze_data_plot_pix[ax] = np.array([(p.x,p.y) for p in (implot.plot_to_pixels(implot.Point(x,y)) for x,y in zip(self._gaze_data_offset['ts'], self._gaze_data_offset[ax]))])
+
+        pos = implot.plot_to_pixels(pos)
+        return np.min(np.hypot(self._gaze_data_plot_pix[ax][:,0]-pos.x, self._gaze_data_plot_pix[ax][:,1]-pos.y))
 
     def stop(self):
         self._should_exit = True
