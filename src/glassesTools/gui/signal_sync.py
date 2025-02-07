@@ -174,6 +174,16 @@ class GUI:
             self.is_done = True
 
         with self._data_lock:
+            # handle gaze moving with arrow keys
+            move_dir = -1 if imgui.is_key_pressed(imgui.Key.left_arrow) else 1 if imgui.is_key_pressed(imgui.Key.right_arrow) else 0
+            if move_dir:
+                step = 1.   if imgui.is_key_down(imgui.Key.mod_ctrl)  else \
+                       0.15 if imgui.is_key_down(imgui.Key.mod_shift) else \
+                       0.01 if imgui.is_key_down(imgui.Key.mod_alt)   else \
+                       0.05
+                self.offset_t += move_dir*step
+                self._update_cache(None)
+
             gt = self._gaze_data_offset['ts']
             gx = self._gaze_data_offset['x']
             gy = self._gaze_data_offset['y']
@@ -181,6 +191,7 @@ class GUI:
                 gt = gt+self._temp_off[0]
                 gx = gx+self._temp_off[1]
                 gy = gy+self._temp_off[2]
+
             if implot.begin_subplots('##xy_plots',2,1,(-1,-1),implot.SubplotFlags_.link_all_x):
                 for d in range(2):
                     if self._should_rescale:
@@ -217,6 +228,8 @@ class GUI:
                     imgui.push_text_wrap_pos(min(imgui.get_font_size() * 35, ws.x))
                     imgui.text_unformatted(
                         'Drag the gaze signal to align the two signals in time with each other. '
+                        'You can also shift the gaze signal in time by using the arrow keys (hold shift '
+                        'for larger steps, control for extra large steps and alt for smaller). '
                         'The horizontal offset is the applied time shift (indicated by the value in the lower-right '
                         'corner of the upper plot). Any vertical shift is not stored, but can be useful when aligning the two signals. '
                         'When done aligning the two signals, press done atop the window.'
