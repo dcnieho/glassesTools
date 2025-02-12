@@ -43,11 +43,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
 
 
     ### copy the raw data to the output directory
-    srcVid, destVid = copyVPS19Recording(source_dir, output_dir, rec_info, copy_scene_video)
-    if destVid:
-        rec_info.scene_video_file = destVid.name
-    else:
-        rec_info.scene_video_file =  srcVid.name
+    copyVPS19Recording(source_dir, output_dir, rec_info, copy_scene_video)
 
     #### prep the copied data...
     print('  Getting camera calibration...')
@@ -134,8 +130,6 @@ def copyVPS19Recording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInfo:
         recInfo.scene_video_file = destFile.name
     else:
         recInfo.scene_video_file =  srcFile.name
-
-    return srcFile, destFile
 
 
 def formatGazeData(inputDir: str|pathlib.Path, recInfo: Recording):
