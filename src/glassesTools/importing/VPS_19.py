@@ -104,27 +104,11 @@ def copyVPS19Recording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInfo:
     # Copy relevant files to new directory
     srcFile  = inputDir / f'{recInfo.name}.mkv'
 
-    # if ffmpeg is on path, remux avi to mp4 (reencode audio from opus to aac and video from vp8 to h.264 as both are not supported in mp4)
-    # else just copy. Ignore copy_scene_video in this case
-    if shutil.which('ffmpeg') is not None:
-        # make mp4
-        destFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
-        # NB: this command is not perfect, seems to have an arbitrary offset in frame timestamps compared to those reported by both
-        # ffprobe -v 0 -show_entries packet=pts -select_streams v video.mkv
-        # and
-        # mkvextract.exe video.mkv timestamps_v2 0:ts-track0.txt
-        # but is best i was able to figure out...
-        # NB: having opencv read the video file also creates an arbitrary offset since it doesn't take starting time into account
-        cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', '"'+str(srcFile)+'"', '-vsync','0','-enc_time_base','-1','-copyts', '-vcodec', 'h264', '-acodec', 'aac', '"'+str(destFile)+'"'])
-        # for newer ffmpeg version:
-        #cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', '"'+str(srcFile)+'"', '-fps_mode','passthrough','-enc_time_base','demux','-copyts', '-vcodec', 'h264', '-acodec', 'aac', '"'+str(destFile)+'"'])
-        os.system(cmd_str)
+    if copy_scene_video:
+        destFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mkv'
+        shutil.copy2(srcFile, destFile)
     else:
-        if copy_scene_video:
-            destFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mkv'
-            shutil.copy2(str(srcFile), str(destFile))
-        else:
-            destFile = None
+        destFile = None
 
     if destFile:
         recInfo.scene_video_file = destFile.name

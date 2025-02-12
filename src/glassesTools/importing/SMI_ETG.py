@@ -123,22 +123,13 @@ def copySMIRecordings(inputDir: pathlib.Path, outputDir: pathlib.Path, recInfo: 
     """
 
     # Copy relevant files to new directory
-    file    = recInfo.name + '-export.avi'
-    srcFile = inputDir / file
+    srcFile = inputDir / f'{recInfo.name}-export.avi'
 
-    # if ffmpeg is on path, remux avi to mp4 (reencode audio from flac to aac as flac is not supported in mp4)
-    # else just copy. Ignore copy_scene_video in this case
-    if shutil.which('ffmpeg') is not None:
-        # make mp4
-        destFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
-        cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-i', '"'+str(srcFile)+'"', '-vcodec', 'copy', '-acodec', 'aac', '"'+str(destFile)+'"'])
-        os.system(cmd_str)
+    if copy_scene_video:
+        destFile = outputDir / f'{naming.scene_camera_video_fname_stem}.avi'
+        shutil.copy2(srcFile, destFile)
     else:
-        if copy_scene_video:
-            destFile = outputDir / f'{naming.scene_camera_video_fname_stem}.avi'
-            shutil.copy2(str(srcFile), str(destFile))
-        else:
-            destFile = None
+        destFile = None
 
     if destFile:
         recInfo.scene_video_file = destFile.name
