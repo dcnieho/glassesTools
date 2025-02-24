@@ -196,6 +196,8 @@ class PoseEstimator:
         self._single_detect_pass                                            = False
         self.allow_early_exit                                               = True
 
+        self._cache: tuple[Status, dict[str, plane.Pose], dict[str, marker.Pose], dict[str, list[int, Any]], tuple[np.ndarray, int, float]] = None  # self._cache[4][1] is frame number
+
         self.individual_markers                 : dict[int, dict[str]]  = {}
         self._individual_marker_object_points   : dict[int, np.ndarray] = {}
         self.proc_individual_markers_all_frames                         = False
@@ -236,8 +238,6 @@ class PoseEstimator:
         self._detectors[plane]      = ArUcoDetector(self._aruco_boards[plane].getDictionary(), planes_setup['aruco_params'])
         self._detectors[plane].set_board(self._aruco_boards[plane])
         self._detectors[plane].set_intrinsics(self.cam_params)
-
-        self._cache: tuple[Status, dict[str, plane.Pose], dict[str, marker.Pose], dict[str, list[int, Any]], tuple[np.ndarray, int, float]] = None  # self._cache[4][1] is frame number
 
         # check if we can do an optimization of detecting the markers only once for multiple planes (if it makes sense because we have more than one plane)
         aruco_dicts = [self.plane_setups[p]['aruco_dict'] for p in self.planes if 'aruco_dict' in self.plane_setups[p]]
@@ -319,7 +319,6 @@ class PoseEstimator:
             requests = self.gui.get_requests()
             for r,_ in requests:
                 if r=='exit':   # only request we need to handle
-                    should_exit = True
                     self._cache = Status.Finished, None, None, None, (None, None, None)
                     return self._cache
 
