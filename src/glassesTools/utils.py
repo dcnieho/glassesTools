@@ -57,6 +57,14 @@ def enum_val_2_str(x) -> str:
     # to ensure that string representation of enum is constant over Python versions (it isn't for enum.IntEnum at least)
     return f'{type(x).__name__}.{x.name}'
 
+E = typing.TypeVar('E')
+def enum_str_2_val(x: str, enum_cls: E, patches: dict[str,str]=None) -> E:
+    str_val = x.split('.')[-1]
+    if patches is not None and str_val in patches:
+        str_val = patches[str_val]
+    return getattr(enum_cls, str_val)
+
+
 @dataclasses.dataclass
 class CustomTypeEntry:
     type        : typing.Type
