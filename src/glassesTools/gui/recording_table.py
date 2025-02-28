@@ -68,10 +68,10 @@ class RecordingTable:
 
         self._columns: list[ColumnSpec] = []
         self._show_hide_commands: dict[int,bool] = {}
-        self._device_names: set[str] = set(('Camera',)) | set(et.value for et in eyetracker.EyeTracker)
         self.build_columns(extra_columns)
 
-        self._eye_tracker_label_width: float = None
+        self._et_widget_drawer = EyeTrackerName()
+
         self.table_flags: int = (
             imgui.TableFlags_.scroll_x |
             imgui.TableFlags_.scroll_y |
@@ -193,7 +193,7 @@ class RecordingTable:
         self.require_sort = True
 
     def font_changed(self):
-        self._eye_tracker_label_width = None
+        self._et_widget_drawer.eye_tracker_label_width = None
 
     def set_local_item_remover(self):
         self.item_remove_callback = self.remove_recording
@@ -426,53 +426,7 @@ class RecordingTable:
         self.selected_recordings.pop(iid,None)
 
     def draw_eye_tracker_widget(self, rec: recording.Recording|camera_recording.Recording, align=False):
-        imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0)
-        if align:
-            imgui.begin_group()
-            imgui.set_cursor_pos_y(imgui.get_cursor_pos_y() + imgui.get_style().frame_padding.y)
-
-        # prep for drawing widget: determine its size and position and see if visible
-        if isinstance(rec, recording.Recording):
-            if rec.eye_tracker==recording.EyeTracker.Generic:
-                et = rec.eye_tracker_name
-            else:
-                et = rec.eye_tracker.value
-            clr = rec.eye_tracker.color
-        elif isinstance(rec, camera_recording.Recording):
-            # camera recording
-            et  = 'Camera'
-            clr = (.6, .6, .6, 1.)
-        need_calc_lbl_widths = et not in self._device_names
-        if need_calc_lbl_widths:
-            self._device_names.add(et)
-        lum = _color_luminance(imgui.ImColor(*clr))
-        txt_clr = (1.,1.,1.,1.) if lum<0.5 else (0.,0.,0.,1.)
-
-        x_padding = 4
-        if self._eye_tracker_label_width is None or need_calc_lbl_widths:
-            self._eye_tracker_label_width = 0
-            for lbl in self._device_names:
-                self._eye_tracker_label_width = max(self._eye_tracker_label_width, imgui.calc_text_size(lbl).x)
-            self._eye_tracker_label_width += 2 * x_padding
-
-        iid         = imgui.get_id(et)
-        label_size  = imgui.calc_text_size(et)
-        size        = imgui.ImVec2(self._eye_tracker_label_width, label_size.y)
-        pos         = imgui.get_cursor_screen_pos()
-        bb          = imgui.internal.ImRect(pos, (pos.x+size.x, pos.y+size.y))
-        imgui.internal.item_size(size, 0)
-        # if visible
-        if imgui.internal.item_add(bb, iid):
-            # draw frame
-            imgui.internal.render_frame(bb.min, bb.max, imgui.color_convert_float4_to_u32(clr), True, imgui.get_style().frame_rounding)
-            # draw text on top
-            imgui.push_style_color(imgui.Col_.text, txt_clr)
-            imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), et, '', label_size, imgui.get_style().button_text_align, bb)
-            imgui.pop_style_color()
-
-        if align:
-            imgui.end_group()
-        imgui.pop_style_var()
+        self._et_widget_drawer.draw(rec, align)
 
     def draw_recording_name_text(self, rec: recording.Recording|camera_recording.Recording, accent_color: tuple[float] = None):
         if accent_color is not None:
@@ -524,3 +478,57 @@ class RecordingTable:
                 self.sorted_recordings_ids = list(filter(key, self.sorted_recordings_ids))
             sort_specs_in.specs_dirty = False
             self.require_sort = False
+
+class EyeTrackerName:
+    def __init__(self):
+        self._device_names: set[str] = set(('Camera',)) | set(et.value for et in eyetracker.EyeTracker)
+        self.eye_tracker_label_width: float = None
+
+    def draw(self, rec: recording.Recording|camera_recording.Recording, align=False):
+        imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0)
+        if align:
+            imgui.begin_group()
+            imgui.set_cursor_pos_y(imgui.get_cursor_pos_y() + imgui.get_style().frame_padding.y)
+
+        # prep for drawing widget: determine its size and position and see if visible
+        if isinstance(rec, recording.Recording):
+            if rec.eye_tracker==recording.EyeTracker.Generic:
+                et = rec.eye_tracker_name
+            else:
+                et = rec.eye_tracker.value
+            clr = rec.eye_tracker.color
+        elif isinstance(rec, camera_recording.Recording):
+            # camera recording
+            et  = 'Camera'
+            clr = (.6, .6, .6, 1.)
+        need_calc_lbl_widths = et not in self._device_names
+        if need_calc_lbl_widths:
+            self._device_names.add(et)
+        lum = _color_luminance(imgui.ImColor(*clr))
+        txt_clr = (1.,1.,1.,1.) if lum<0.5 else (0.,0.,0.,1.)
+
+        x_padding = 4
+        if self.eye_tracker_label_width is None or need_calc_lbl_widths:
+            self.eye_tracker_label_width = 0
+            for lbl in self._device_names:
+                self.eye_tracker_label_width = max(self.eye_tracker_label_width, imgui.calc_text_size(lbl).x)
+            self.eye_tracker_label_width += 2 * x_padding
+
+        iid         = imgui.get_id(et)
+        label_size  = imgui.calc_text_size(et)
+        size        = imgui.ImVec2(self.eye_tracker_label_width, label_size.y)
+        pos         = imgui.get_cursor_screen_pos()
+        bb          = imgui.internal.ImRect(pos, (pos.x+size.x, pos.y+size.y))
+        imgui.internal.item_size(size, 0)
+        # if visible
+        if imgui.internal.item_add(bb, iid):
+            # draw frame
+            imgui.internal.render_frame(bb.min, bb.max, imgui.color_convert_float4_to_u32(clr), True, imgui.get_style().frame_rounding)
+            # draw text on top
+            imgui.push_style_color(imgui.Col_.text, txt_clr)
+            imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), et, '', label_size, imgui.get_style().button_text_align, bb)
+            imgui.pop_style_color()
+
+        if align:
+            imgui.end_group()
+        imgui.pop_style_var()
