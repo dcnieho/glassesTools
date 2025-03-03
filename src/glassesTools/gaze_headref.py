@@ -52,7 +52,7 @@ class Gaze:
         drawing.openCVCircle(img, self.gaze_pos_vid, 8, clr, 2, sub_pixel_fac)
         # draw 3D gaze point as well, usually coincides with 2D gaze point, but not always. E.g. the Adhawk MindLink may
         # apply a correction for parallax error to the projected gaze point using the vergence signal.
-        if draw_3d_gaze_point and self.gaze_pos_3d is not None and camera_params.has_intrinsics():
+        if draw_3d_gaze_point and self.gaze_pos_3d is not None and camera_params is not None and camera_params.has_intrinsics():
             camRot = np.zeros((1,3)) if camera_params.rotation_vec is None else camera_params.rotation_vec
             camPos = np.zeros((1,3)) if camera_params.position     is None else camera_params.position
             a = cv2.projectPoints(np.array(self.gaze_pos_3d).reshape(1,3),camRot,camPos,camera_params.camera_mtx,camera_params.distort_coeffs)[0][0][0]
