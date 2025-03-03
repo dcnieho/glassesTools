@@ -32,7 +32,7 @@ def all_nan_if_none(vals, numel):
 def _read_coord_file_impl(file):
     return pd.read_csv(file, dtype=defaultdict(lambda: np.float32, ID='int32', color='str')).dropna(axis=0, how='all').set_index('ID')
 
-def read_coord_file(file, package_to_read_from=None):
+def read_coord_file(file, package_to_read_from=None) -> pd.DataFrame|None:
     # if directory is not provided, try to read the file from the package resources instead
     if package_to_read_from:
         with importlib.resources.path(package_to_read_from, file) as p:
