@@ -1,1 +1,6 @@
 include requirements.txt
+include src/glassesTools/validation/config/markerPositions.csv
+include src/glassesTools/validation/config/targetPositions.csv
+include src/glassesTools/validation/config/validationSetup.txt
+include src/glassesTools/validation/config/plane/poster.pdf
+include src/glassesTools/validation/config/plane/poster.tex
