@@ -58,6 +58,12 @@ class Recording:
                 vid = self.source_directory / self.scene_video_file
         return vid
 
+    def get_source_directory(self) -> pathlib.Path:
+        if not self.source_directory.is_absolute():
+            return (self.working_directory / self.source_directory).resolve()
+        else:
+            return self.source_directory
+
 
 def find_recordings(paths: list[pathlib.Path], eye_tracker: EyeTracker, device_name: str=None) -> list[Recording]:
     from . import importing
