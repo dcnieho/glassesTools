@@ -59,6 +59,8 @@ class Recording:
         return vid
 
     def get_source_directory(self) -> pathlib.Path:
+        if self.source_directory=="":
+            return None
         if not self.source_directory.is_absolute():
             return (self.working_directory / self.source_directory).resolve()
         else:
