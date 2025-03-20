@@ -47,6 +47,14 @@ class Recording:
                 vid = self.source_directory / self.video_file
         return vid
 
+    def get_source_directory(self) -> pathlib.Path:
+        if self.source_directory=="":
+            return None
+        if not self.source_directory.is_absolute():
+            return (self.working_directory / self.source_directory).resolve()
+        else:
+            return self.source_directory
+
 
 
 def do_import(rec_info: Recording, cam_cal_file: str|pathlib.Path=None, copy_video=True, source_dir_as_relative_path = False):
