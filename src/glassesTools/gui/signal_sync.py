@@ -201,15 +201,15 @@ class GUI:
                     if implot.begin_plot('##X',flags=implot.Flags_.no_mouse_text):
                         implot.setup_axis(implot.ImAxis_.x1, None if d==0 else 'time (s)')
                         implot.setup_axis(implot.ImAxis_.y1, 'horizontal coordinate (pix)' if d==0 else 'vertical coordinate (pix)')
-                        if self._hovered==0:
+                        if self._hovered==d:
                             implot.push_style_var(implot.StyleVar_.line_weight, implot.get_style().line_weight*2)
                             imgui.set_mouse_cursor(imgui.MouseCursor_.hand)
                         implot.plot_line("gaze", gt, gx if d==0 else gy)
-                        if self._hovered==0:
+                        if self._hovered==d:
                             implot.pop_style_var()
                         implot.plot_line("target", self.target_data['ts'], self.target_data['x' if d==0 else 'y'])
                         if implot.is_plot_hovered():
-                            self._do_data_drag(0)
+                            self._do_data_drag(d)
                         if d==0:
                             # position annotation outside axes, clamping will put it in the corner
                             ax_lims = implot.get_plot_limits()
@@ -238,8 +238,9 @@ class GUI:
                     imgui.end_tooltip()
 
     def _do_data_drag(self, ax_idx):
-        gid = imgui.get_id(f"##gaze_data_drag_{ax_idx}")
-        imgui.push_id(gid)
+        id_string = f"##gaze_data_drag_{ax_idx}"
+        gid = imgui.get_id(id_string)
+        imgui.push_id(id_string)
         p = implot.get_plot_mouse_pos()
         if self._last_mouse_pos[ax_idx] is None or self._last_mouse_pos[ax_idx].x!=p.x:
             self._last_mouse_pos[ax_idx] = p
