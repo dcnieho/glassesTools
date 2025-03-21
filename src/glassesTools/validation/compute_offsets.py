@@ -184,6 +184,8 @@ def compute(
                         vTarget = targets_for_homography[t]
                     else:
                         # use 3D vectors known given pose information
+                        if frame_idx not in poses:
+                            continue
                         if frame_idx not in target_cam:
                             target_cam[frame_idx] = poses[frame_idx].world_frame_to_cam(targets[t])
 
