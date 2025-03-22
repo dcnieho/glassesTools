@@ -25,7 +25,7 @@ tooltip_map = {
     Event.Validate    : 'Validation episode',
     Event.Sync_Camera : 'Camera sync point',
     Event.Sync_ET_Data: 'Eye tracker synchronization episode',
-    Event.Trial       : 'Trial',
+    Event.Trial       : 'Trial episode',
 }
 
 def flatten_annotation_dict(annotations: dict[Event, list[list[int]]]) -> dict[Event, list[int]]:
