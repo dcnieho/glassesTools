@@ -85,3 +85,17 @@ def export_data_quality(rec_dirs: list[str | pathlib.Path], output_file_or_dir: 
     if not targets:
         targets = targets_have
     summarize_and_store_data_quality(df, output_file_or_dir, dq_types, targets, average_over_targets, include_data_loss)
+
+def export_et_sync(rec_dirs: list[str|pathlib.Path], in_file_name: str, output_file_or_dir: str|pathlib.Path):
+    sync_files = [(pathlib.Path(rec)/in_file_name,{'recording': rec.name, 'session': rec.parent.name}) for rec in rec_dirs]
+    sync_files = [f for f in sync_files if f[0].is_file()]
+    # get all sync files
+    df = pd.concat((pd.read_csv(sync[0], delimiter='\t').assign(**sync[1]) for sync in sync_files), ignore_index=True)
+    if df.empty:
+        return
+    df = df.set_index(['session','recording','interval'])
+    # store
+    output_file_or_dir = pathlib.Path(output_file_or_dir)
+    if output_file_or_dir.is_dir():
+        output_file_or_dir = output_file_or_dir / 'et_sync.tsv'
+    df.to_csv(output_file_or_dir, mode='w', header=True, sep='\t', na_rep='nan', float_format="%.6f")
