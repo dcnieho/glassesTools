@@ -3,11 +3,11 @@ import functools
 import sys
 import traceback
 from typing import Any, Callable
-from imgui_bundle import imgui, hello_imgui, icons_fontawesome_6 as ifa6
+from imgui_bundle import imgui, imspinner, hello_imgui, icons_fontawesome_6 as ifa6
 import glfw
 
-from . import msg_box
-from .. import platform, utils
+from . import colors, msg_box
+from .. import platform, process_pool, utils
 
 
 # https://gist.github.com/Willy-JL/f733c960c6b0d2284bcbee0316f88878
@@ -32,6 +32,35 @@ def draw_hover_text(hover_text: str, text="(?)", force=False, hovered_flags=imgu
         draw_tooltip(hover_text)
         return True
     return False
+
+
+def draw_process_state(state: process_pool.State, have_hover_popup=True):
+    symbol_size = imgui.calc_text_size(ifa6.ICON_FA_CIRCLE)
+    match state:
+        case process_pool.State.Not_Run:
+            imgui.text_colored(colors.gray, ifa6.ICON_FA_CIRCLE)
+            hover_text = 'Not run'
+        case process_pool.State.Pending:
+            radius    = symbol_size.x / 2
+            thickness = symbol_size.x / 3 / 2.5 # 3 is number of dots, 2.5 is nextItemKoeff in imspinner.spinner_bounce_dots()
+            imspinner.spinner_bounce_dots(f'waitBounceDots', radius, thickness, color=imgui.get_style_color_vec4(imgui.Col_.text))
+            hover_text = 'Pending'
+        case process_pool.State.Running:
+            spinner_radii = [x/22/2*symbol_size.x for x in [22, 16, 10]]
+            lw = 3.5/22/2*symbol_size.x
+            imspinner.spinner_ang_triple(f'runSpinner', *spinner_radii, lw, c1=imgui.get_style_color_vec4(imgui.Col_.text), c2=colors.warning, c3=imgui.get_style_color_vec4(imgui.Col_.text))
+            hover_text = 'Running'
+        case process_pool.State.Completed:
+            imgui.text_colored(colors.ok, ifa6.ICON_FA_CIRCLE_CHECK)
+            hover_text = 'Completed'
+        case process_pool.State.Canceled:
+            imgui.text_colored(colors.warning, ifa6.ICON_FA_HAND)
+            hover_text = 'Canceled'
+        case process_pool.State.Failed:
+            imgui.text_colored(colors.error_bright, ifa6.ICON_FA_TRIANGLE_EXCLAMATION)
+            hover_text = 'Failed'
+    if have_hover_popup:
+        draw_hover_text(hover_text, text='')
 
 
 def rand_num_str(len=8):
