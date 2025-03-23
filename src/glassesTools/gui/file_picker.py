@@ -288,7 +288,7 @@ class FilePicker:
         parent = path.parent
         # on Posix we check if the parent is the fs anchor, that means the parent is root
         # on Windows, there is a level above the fs anchor, so we check if the current path (and not its parent) is the anchor
-        to_check = path if platform.os==platform.Os.Windows else parent
+        to_check = pathlib.Path(path) if platform.os==platform.Os.Windows else parent
         if to_check==pathlib.Path(path.anchor):
             if isinstance(path,pathlib.PureWindowsPath):
                 if platform.os==platform.Os.Windows and (net_comps := file_actions.split_network_path(path)):
