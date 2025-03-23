@@ -11,3 +11,4 @@ matplotlib
 aiopath
 pathvalidate
 I2MC>=2.2.6
+pebble
