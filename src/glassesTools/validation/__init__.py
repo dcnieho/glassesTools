@@ -1,7 +1,16 @@
 import enum
 
+import numpy as np
+from matplotlib import colors
+import pathlib
+import typing
+import math
+import cv2
+
+from .. import drawing as _drawing, marker as _marker, plane as _plane, transforms as _transforms, utils as _utils
+
 from . import config
-from .. import utils as _utils
+from . import default_poster
 
 # NB: using pose information requires a calibrated scene camera
 class DataQualityType(enum.Enum):
@@ -76,3 +85,87 @@ def get_DataQualityType_explanation(dq: DataQualityType):
                    "right gaze positions and the fixation target and average them " \
                    "to compute data quality measures in degrees. Requires " \
                    f"'{ler_name}' and '{rer_name}' to be enabled."
+
+
+class Plane(_plane.Plane):
+    poster_image_filename = 'referencePoster.png'
+    default_aruco_dict    = cv2.aruco.DICT_4X4_250
+
+    def __init__(self, config_dir: str|pathlib.Path|None, validation_config: dict[str,typing.Any]=None, **kwarg):
+        # NB: if config_dir is None, the default config will be used
+
+        if config_dir is not None:
+            config_dir = pathlib.Path(config_dir)
+
+        # get validation config, if needed
+        if validation_config is None:
+            validation_config = config.get_validation_setup(config_dir)
+        self.config = validation_config
+
+        # get marker width
+        if self.config['mode'] == 'deg':
+            self.cell_size_mm = 2.*math.tan(math.radians(.5))*self.config['distance']*10
+        else:
+            self.cell_size_mm = 10 # 1cm
+        markerSize = self.cell_size_mm*self.config['markerSide']
+
+        # get board size
+        plane_size = _plane.Coordinate(self.config['gridCols']*self.cell_size_mm, self.config['gridRows']*self.cell_size_mm)
+
+        # get targets first, so that they can be drawn on the reference image
+        self.targets: dict[int,_marker.Marker] = {}
+        origin = self._get_targets(config_dir, self.config)
+
+        # call base class
+        markers = config.get_markers(config_dir, self.config['markerPosFile'])
+        ref_image_store_path = None
+        if 'ref_image_store_path' in kwarg:
+            ref_image_store_path = kwarg.pop('ref_image_store_path')
+        elif config_dir is not None:
+            ref_image_store_path = config_dir / self.poster_image_filename
+        super(Plane, self).__init__(markers, markerSize, plane_size, Plane.default_aruco_dict, self.config['markerBorderBits'],self.cell_size_mm, "mm", ref_image_store_path=ref_image_store_path, ref_image_size=self.config['referencePosterSize'],**kwarg)
+
+        # set center
+        self.set_origin(origin)
+
+    def set_origin(self, origin: _plane.Coordinate):
+        # set origin of plane. Origin location is on current (not original) plane
+        # so set_origin([5., 0.]) three times in a row shifts the origin rightward by 15 units
+        for i in self.targets:
+            self.targets[i].shift(-np.array(origin))
+        super(Plane, self).set_origin(origin)
+
+    def _get_targets(self, config_dir, validationSetup) -> _plane.Coordinate:
+        """ poster space: (0,0) is origin (might be center target), (-,-) bottom left """
+
+        # read in target positions
+        targets = config.get_targets(config_dir, validationSetup['targetPosFile'])
+        if targets is not None:
+            targets['center'] = list(targets[['x','y']].values)
+            targets['center'] *= self.cell_size_mm
+            targets = targets.drop(['x','y'], axis=1)
+            self.targets = {idx:_marker.Marker(idx,**kwargs) for idx,kwargs in zip(targets.index.values,targets.to_dict(orient='records'))}
+            origin = _plane.Coordinate(*targets.loc[validationSetup['centerTarget']].center.copy())  # NB: need origin in scaled space
+        else:
+            origin = _plane.Coordinate(0.,0.)
+        return origin
+
+    def _store_reference_image(self, path: pathlib.Path, width: int) -> np.ndarray:
+        # first call superclass method to generate image without targets
+        img = super(Plane, self)._store_reference_image(path, width)
+        height = img.shape[0]
+
+        # add targets
+        subPixelFac = 8   # for sub-pixel positioning
+        for key in self.targets:
+            # 1. determine position on image
+            circlePos = _transforms.to_image_pos(*self.targets[key].center, self.bbox,[width,height])
+
+            # 2. draw
+            clr = tuple([int(i*255) for i in (colors.to_rgb(self.targets[key].color)[::-1] if self.targets[key].color else (0.,0.,1.))])  # need BGR color ordering
+            _drawing.openCVCircle(img, circlePos, 15, clr, -1, subPixelFac)
+
+        if path:
+            cv2.imwrite(path, img)
+
+        return img

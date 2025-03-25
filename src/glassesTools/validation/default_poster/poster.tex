@@ -15,7 +15,7 @@
 % much of the poster setup is read from the file validationSetup.txt.
 % read setup
 \readarraysepchar{=}
-\readdef{../validationSetup.txt}{\fileData}
+\readdef{validationSetup.txt}{\fileData}
 \readarray*\fileData\setupInfo[-,2]
 % turn each key into its own command
 % NB: this provides \distance, \markerPosFile and \targetPosFile,
@@ -100,7 +100,7 @@
                 (#1+.25*\targetRadCm,#2-1.1*\targetRadCm) --
                 (#1+.25*\targetRadCm,#2+1.1*\targetRadCm) --
                 (#1-.25*\targetRadCm,#2+1.1*\targetRadCm);
-            \end{pgfinterruptboundingbox} 
+            \end{pgfinterruptboundingbox}
             \fill[#3] (#1,#2) circle (\targetRadCm);
         \end{scope}
         \fill[#3]    (#1,#2) circle (.25*\targetRadCm);
@@ -117,25 +117,24 @@
     \if\showGrid1
         \draw[step=\step, line width=3pt] (0cm,0cm) grid (\step*\gridCols,\step*\gridRows);
     \fi
-    
-\csvreader{../\markerPosFile}{ID=\ID, x=\x, y=\y, rotation_angle=\rotang}%
+
+\csvreader{\markerPosFile}{ID=\ID, x=\x, y=\y, rotation_angle=\rotang}%
 {
     \coordinate (m) at (
     \x*\step,
     \y*\step
     );
-    
+
     \node[inner sep=0pt] (m2) at (m)			{\includegraphics[width=\markerSideCm,angle=\rotang,origin=c]{\markerFilename{\ID}}};
 };
 
 
-\csvreader{../\targetPosFile}{ID=\ID, x=\x, y=\y, color=\tColor}%
+\csvreader{\targetPosFile}{ID=\ID, x=\x, y=\y, color=\tColor}%
 {
     \gazeTarget{\x*\step}{\y*\step}{\tColor};
 };
 
 
-    
     % annotations
     \if\showAnnotations1
         \newcounter{mycounter}
@@ -143,10 +142,10 @@
         \if\showGrid1
             \node[left] at (-0\step, 1\step-0.5\step)     { 1 };
             \node[left] at (-0\step, \fpeval{floor(\gridRows)}\step-0.5\step) { \fpeval{floor(\gridRows)} };
-        
+
             \node[] at (1\step-0.5\step    ,-0.5\step) { 1 };
             \node[] at (\fpeval{floor(\gridCols)}\step-0.5\step,-0.5\step) { \fpeval{floor(\gridCols)} };
-        
+
             \setcounter{mycounter}{-1}
             \setlength{\mycounterl}{\value{mycounter}cm}
             \node[right] at (0,\gridRows\step-\mycounterl) {
@@ -154,14 +153,14 @@
             };
             \addtocounter{mycounter}{-1}
             \setlength{\mycounterl}{\value{mycounter}cm}
-        
+
             \node[right] at (0,\gridRows\step-\mycounterl) {
                 Cell: \SI{\convertto{cm}{\step}}{\centi\meter} x
                       \SI{\convertto{cm}{\step}}{\centi\meter}
             };
             \addtocounter{mycounter}{-1}
             \setlength{\mycounterl}{\value{mycounter}cm}
-            
+
             \ifthenelse{\equal{\mode}{deg}}{%
                 \node[right] at (0,\gridRows\step-\mycounterl) {
                     1 cell = \SI{1}{\degree} at \SI{\distance}{\centi\meter}
@@ -169,7 +168,7 @@
             \addtocounter{mycounter}{-1}
             \setlength{\mycounterl}{\value{mycounter}cm}
             }
-            
+
                 \node[right] at (0,\gridRows\step-\mycounterl) {
                     Markers are \markerSide x\markerSide~cells, which is
                     \convertto{cm}{\markerSideCm}x\SI{\convertto{cm}{\markerSideCm}}{\centi\meter}
@@ -177,9 +176,9 @@
         \else
             \setcounter{mycounter}{-1}
             \setlength{\mycounterl}{\value{mycounter}cm}
-            
+
             \node[right] at (0,\gridRows\step-\mycounterl) {
-                Markers are 
+                Markers are
                 \convertto{cm}{\markerSideCm}x\SI{\convertto{cm}{\markerSideCm}}{\centi\meter}
             };
         \fi
