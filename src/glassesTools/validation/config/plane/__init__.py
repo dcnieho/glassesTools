@@ -120,7 +120,7 @@ class ValidationPlane(plane.Plane):
             circlePos = transforms.to_image_pos(*self.targets[key].center, self.bbox,[width,height])
 
             # 2. draw
-            clr = tuple([int(i*255) for i in colors.to_rgb(self.targets[key].color)[::-1]])  # need BGR color ordering
+            clr = tuple([int(i*255) for i in (colors.to_rgb(self.targets[key].color)[::-1] if self.targets[key].color else (0.,0.,1.))])  # need BGR color ordering
             drawing.openCVCircle(img, circlePos, 15, clr, -1, subPixelFac)
 
         if path:
