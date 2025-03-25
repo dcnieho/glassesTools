@@ -4,6 +4,7 @@ import pathlib
 import shutil
 import os
 import subprocess
+import typing
 from enum import Enum, auto
 
 from ffpyplayer.writer import MediaWriter
@@ -11,8 +12,14 @@ from ffpyplayer.pic import Image
 import ffpyplayer.tools
 from fractions import Fraction
 
-from . import gaze_headref, naming, ocv, timestamps, video_utils
-from .gui import video_player
+from . import gaze_headref, naming, ocv, timestamps, video_utils, _has_GUI
+if _has_GUI:
+    from .gui import video_player
+else:
+    # stub out video_player as a class so type annotations below do not fail
+    class video_player:
+        @property
+        def GUI(self) -> typing.Any: ...
 
 class Status(Enum):
     Ok = auto()

@@ -4,8 +4,14 @@ import pathlib
 from typing import Any, Callable
 from enum import Enum, auto
 
-from . import annotation, drawing, intervals, marker, ocv, plane, timestamps
-from .gui import video_player
+from . import annotation, drawing, intervals, marker, ocv, plane, timestamps, _has_GUI
+if _has_GUI:
+    from .gui import video_player
+else:
+    # stub out video_player as a class so type annotations below do not fail
+    class video_player:
+        @property
+        def GUI(self) -> Any: ...
 
 
 def deploy_marker_images(output_dir: str|pathlib.Path, size: int, ArUco_dict: int=cv2.aruco.DICT_4X4_250, markerBorderBits: int=1):
