@@ -107,7 +107,7 @@ class Plane:
         for idx, row in marker_pos.iterrows():
             c   = row[['x','y']].values
             # rotate markers (negative because plane coordinate system)
-            rot = row[['rotation_angle']].values[0]
+            rot = row[['rotation_angle']].values[0] if 'rotation_angle' in row else 0.
             rotr= -math.radians(rot)
             R   = np.array([[math.cos(rotr), math.sin(rotr)], [-math.sin(rotr), math.cos(rotr)]])
             # top left first, and clockwise: same order as detected ArUco marker corners
