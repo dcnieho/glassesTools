@@ -129,6 +129,7 @@ def checkPupilRecording(inputDir: str|pathlib.Path):
 
 def getRecordingInfo(inputDir: str|pathlib.Path, device: EyeTracker) -> Recording:
     # returns None if not a recording directory
+    inputDir = pathlib.Path(inputDir)
     recInfo = Recording(source_directory=inputDir, eye_tracker=device)
 
     if (inputDir / 'info.player.json').is_file():

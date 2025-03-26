@@ -61,6 +61,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
 
 def getRecordingInfo(inputDir: str|pathlib.Path) -> Recording:
     # get recordings. A folder can contain multiple recordings.
+    inputDir = pathlib.Path(inputDir)
     # recordings are identified as a tsv and an mkv file with the
     # same name
     recInfos: list[Recording] = []

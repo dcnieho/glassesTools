@@ -68,6 +68,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
 
 def getRecordingInfo(inputDir: str|pathlib.Path) -> list[Recording]:
     # returns None if not a recording directory
+    inputDir = pathlib.Path(inputDir)
     recInfos = []
 
     # NB: a SeeTrue directory may contain multiple recordings

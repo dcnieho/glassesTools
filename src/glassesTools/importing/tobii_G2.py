@@ -71,6 +71,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
 
 def getRecordingInfo(inputDir: str|pathlib.Path) -> Recording:
     # returns None if not a recording directory
+    inputDir = pathlib.Path(inputDir)
     recInfo = Recording(source_directory=inputDir, eye_tracker=EyeTracker.Tobii_Glasses_2)
 
     # get participant info

@@ -69,6 +69,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
 
 def getRecordingInfo(inputDir: str|pathlib.Path) -> list[Recording]:
     # returns None if directory does not any recordings
+    inputDir = pathlib.Path(inputDir)
 
     # NB: can be multiple recordings in an SMI folder
 
