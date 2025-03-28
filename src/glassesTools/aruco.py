@@ -70,10 +70,10 @@ class ArUcoDetector():
     def _estimate_pose_impl(self, objP, imgP):
         # NB: N_markers also flags success of the pose estimation. Also 0 if not successful or not possible (missing intrinsics)
         N_markers, R_vec, T_vec, reprojection_error = 0, None, None, -1.
-        if objP is None or (not self._camera_params.has_intrinsics() and not self._camera_params.has_colmap()):
+        if objP is None or not self._camera_params.has_intrinsics():
             return N_markers, R_vec, T_vec, reprojection_error
 
-        if self._camera_params.has_intrinsics():
+        if self._camera_params.has_opencv_camera():
             n_solutions, R_vec, T_vec, reprojection_error = \
                 cv2.solvePnPGeneric(objP, imgP, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, np.empty(1), np.empty(1))
             if n_solutions:
@@ -107,7 +107,7 @@ class ArUcoDetector():
             return N_markers, H
 
         # use undistorted marker corners if possible
-        if self._camera_params.has_intrinsics() or self._camera_params.has_colmap():
+        if self._camera_params.has_intrinsics():
             imgP = transforms.undistort_points(imgP.reshape((-1,2)),self._camera_params).reshape((-1,1,2))
 
         H, status = transforms.estimate_homography(objP, imgP)
@@ -383,9 +383,9 @@ class PoseEstimator:
                     m_id = ids[idx][0]
                     pose = marker.Pose(frame_idx)
                     # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
-                    if self.cam_params.has_intrinsics():
+                    if self.cam_params.has_opencv_camera():
                         _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                    elif self.cam_params.has_colmap():
+                    elif self.cam_params.has_colmap_camera():
                         # we have a camera not supported by OpenCV
                         # undistort points and project to a identity camera space, so we can use opencv functionality
                         points_w  = transforms.unproject_points(corners[idx],self.cam_params)

@@ -54,7 +54,7 @@ class Pose:
         self.T_vec      : np.ndarray  = T_vec
 
     def draw_frame_axis(self, frame, camera_params: ocv.CameraParams, arm_length, sub_pixel_fac = 8):
-        if not camera_params.has_intrinsics() and not camera_params.has_colmap():
+        if not camera_params.has_intrinsics():
             return
         drawing.openCVFrameAxis(frame, camera_params, self.R_vec, self.T_vec, arm_length, 3, sub_pixel_fac)
 

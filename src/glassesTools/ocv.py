@@ -36,7 +36,7 @@ class CameraParams:
         # initialize the colmap cameras
         if colmap_camera_dict:
             self.colmap_camera = pycolmap.Camera(colmap_camera_dict)
-        elif self.has_intrinsics():
+        elif self.has_opencv_camera():
             # turn into colmap camera
             self.colmap_camera = pycolmap.Camera.create(0, pycolmap.CameraModelId.FULL_OPENCV, self.camera_mtx[0,0], *self.resolution)
 
@@ -86,10 +86,12 @@ class CameraParams:
 
         return CameraParams(resolution, cameraMatrix,distCoeff, cameraRotation,cameraPosition, colmap_camera)
 
-    def has_intrinsics(self):
+    def has_opencv_camera(self):
         return (self.camera_mtx is not None) and (self.distort_coeffs is not None)
-    def has_colmap(self):
+    def has_colmap_camera(self):
         return self.colmap_camera is not None
+    def has_intrinsics(self):
+        return self.has_opencv_camera() or self.has_colmap_camera()
 
 
 class CV2VideoReader:

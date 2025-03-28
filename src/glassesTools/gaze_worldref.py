@@ -110,7 +110,7 @@ class Gaze:
         def project_and_draw(img,pos,sz,clr):
             _draw(img,_project(pos),sz,clr)
 
-        if not camera_params.has_intrinsics() and not camera_params.has_colmap():
+        if not camera_params.has_intrinsics():
             if pose is not None and pose.homography_successful():
                 # gaze position on plane by homography
                 _draw(img,pose.plane_to_cam_homography(self.gazePosPlane2D_vidPos_homography,camera_params),3,clr_vidPos)
