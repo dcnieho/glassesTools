@@ -19,19 +19,10 @@ import ffmpeg
 ffmpeg.add_to_path()
 
 
-def image_config(config):
-    print(f"  device_type {config.device_type}")
-    print(f"  device_version {config.device_version}")
-    print(f"  device_serial {config.device_serial}")
-    print(f"  sensor_serial {config.sensor_serial}")
-    print(f"  nominal_rate_hz {config.nominal_rate_hz}")
-    print(f"  image_width {config.image_width}")
-    print(f"  image_height {config.image_height}")
-    print(f"  pixel_format {config.pixel_format}")
-    print(f"  gamma_factor {config.gamma_factor}")
+vrs_file        = r"C:\Users\huml-dkn\Aria\f8f41ed1-39dd-4bcb-92e4-cc62d5670080.vrs"
+mps_folder      = None   # if not provided, folder is guessed based on default path relative to vrs file as created by Aria Studio
+output_folder   = None   # if not provided, folder is made in the directory containing the vrs file
 
-vrs_file = r"C:\Users\huml-dkn\Aria\f8f41ed1-39dd-4bcb-92e4-cc62d5670080.vrs"
-mps_folder = None   # if not provided, folder is guessed based on default path relative to vrs file as created by Aria Studio
 
 print(f"Creating data provider from {vrs_file}")
 provider = data_provider.create_vrs_data_provider(vrs_file)
@@ -62,6 +53,16 @@ et_end_time   = provider.get_last_time_ns(et_id, TimeDomain.DEVICE_TIME)
 print(f'ET camera stream is {(et_end_time-et_start_time)/1000/1000/1000:.3f} s long ({et_start_time}--{et_end_time} ns)')
 print(f'offset between RGB and ET camera at onset, offset is {(rgb_start_time-et_start_time)/1000/1000:.3f},{(rgb_end_time-et_end_time)/1000/1000:.3f} ms')
 
+def image_config(config):
+    print(f"  device_type {config.device_type}")
+    print(f"  device_version {config.device_version}")
+    print(f"  device_serial {config.device_serial}")
+    print(f"  sensor_serial {config.sensor_serial}")
+    print(f"  nominal_rate_hz {config.nominal_rate_hz}")
+    print(f"  image_width {config.image_width}")
+    print(f"  image_height {config.image_height}")
+    print(f"  pixel_format {config.pixel_format}")
+    print(f"  gamma_factor {config.gamma_factor}")
 rgb_config = provider.get_image_configuration(rgb_id)
 print('Information about camera image stream:')
 image_config(rgb_config)
@@ -72,10 +73,11 @@ image_config(et_config)
 # extract mp4 from vrs file
 vrs_path_components = os.path.split(vrs_file)
 vrs_file_stem = os.path.splitext(vrs_path_components[-1])[0]
-output_dir = os.path.join(*vrs_path_components[0:-1],f'export_{vrs_file_stem}')
-if not os.path.isdir(output_dir):
-    os.mkdir(output_dir)
-convert_vrs_to_mp4(vrs_file,os.path.join(output_dir,'worldCamera.mp4'))
+if output_folder is None:
+    output_folder = os.path.join(*vrs_path_components[0:-1],f'export_{vrs_file_stem}')
+if not os.path.isdir(output_folder):
+    os.mkdir(output_folder)
+convert_vrs_to_mp4(vrs_file,os.path.join(output_folder,'worldCamera.mp4'))
 
 # get MPS output
 if mps_folder is None:
@@ -125,7 +127,7 @@ camera_info = {
 camera_info['colmap_camera']['model']                   =     camera_info['colmap_camera']['model'].name
 camera_info['colmap_camera']['has_prior_focal_length']  = int(camera_info['colmap_camera']['has_prior_focal_length'])
 # store to file
-fs = cv2.FileStorage(os.path.join(output_dir, 'calibration.xml'), cv2.FILE_STORAGE_WRITE)
+fs = cv2.FileStorage(os.path.join(output_folder, 'calibration.xml'), cv2.FILE_STORAGE_WRITE)
 for key,value in camera_info.items():
     if isinstance(value,dict):
         fs.startWriteStruct('colmap_camera', cv2.FileNode_MAP)
@@ -155,7 +157,7 @@ for i,s in enumerate(gaze_cpf):
 
 # turn into data frame, save
 gaze_df = pd.DataFrame(samples,columns=['timestamp','gaze_pos_vid_x','gaze_pos_vid_y','gaze_pos_3d_x','gaze_pos_3d_y','gaze_pos_3d_z','gaze_dir_left_x','gaze_dir_left_y','gaze_dir_left_z','gaze_dir_right_x','gaze_dir_right_y','gaze_dir_right_z','gaze_ori_left_x','gaze_ori_left_y','gaze_ori_left_z','gaze_ori_right_x','gaze_ori_right_y','gaze_ori_right_z'])
-gaze_df.to_csv(os.path.join(output_dir, 'gaze.tsv'), sep='\t', float_format="%.8f", index=False, na_rep='nan')
+gaze_df.to_csv(os.path.join(output_folder, 'gaze.tsv'), sep='\t', float_format="%.8f", index=False, na_rep='nan')
 
 # finally, get meta data
 md = provider.get_metadata()
@@ -175,5 +177,5 @@ if os.path.isfile(vrs_json_file):
     if 'companion_version' in md2 and md2['companion_version']:
         metadata['recording_software_version'] = md2['companion_version']
 
-with open(os.path.join(output_dir, 'metadata.json'),'w') as f:
+with open(os.path.join(output_folder, 'metadata.json'),'w') as f:
     json.dump(metadata, f)
