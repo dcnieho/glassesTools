@@ -313,7 +313,6 @@ class Pose:
         return a
 
     def vector_intersect(self, vector: np.ndarray, origin = np.array([0.,0.,0.])):
-
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(vector)):
             return np.full((3,), np.nan)
 
