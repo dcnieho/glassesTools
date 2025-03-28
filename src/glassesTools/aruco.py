@@ -3,7 +3,6 @@ import cv2
 import pathlib
 from typing import Any, Callable
 from enum import Enum, auto
-import pycolmap
 
 from . import annotation, drawing, intervals, marker, ocv, plane, timestamps, transforms, _has_GUI
 if _has_GUI:
@@ -79,17 +78,22 @@ class ArUcoDetector():
                 cv2.solvePnPGeneric(objP, imgP, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, np.empty(1), np.empty(1))
             if n_solutions:
                 N_markers = int(objP.shape[0]/4)
-            return N_markers, R_vec[0], T_vec[0], reprojection_error[0][0]
+            reprojection_error = reprojection_error[0][0]
         else:
-            imgP = imgP.reshape((-1,2))
-            pose = pycolmap.estimate_absolute_pose(imgP,objP.reshape((-1,3)),self._camera_params.colmap_camera)
-            N_markers = int(pose['num_inliers']/4)
-            R_vec = cv2.Rodrigues(pose['cam_from_world'].rotation.matrix())[0]
-            T_vec = pose['cam_from_world'].translation
-            # reprojection error
-            proj_points = transforms.project_points(objP,self._camera_params, rot_vec=R_vec, trans_vec=T_vec)
-            reprojection_error = cv2.norm(proj_points.astype('float32'),imgP,cv2.NORM_L2) / np.sqrt(2*proj_points.shape[0])
-            return N_markers, R_vec, T_vec, reprojection_error
+            # we have a camera not supported by OpenCV
+            # undistort points and project to a identity camera space, so we can use opencv functionality
+            points_w  = transforms.unproject_points(imgP, self._camera_params)
+            points_cam= transforms.project_points(points_w, ocv.CameraParams(self._camera_params.resolution, np.identity(3), np.zeros((5,1))))
+            n_solutions, R_vec, T_vec, _ = cv2.solvePnPGeneric(objP, points_cam.reshape((-1,1,2)), np.identity(3), np.zeros((5,1)), np.empty(1), np.empty(1))
+            # need to compute reprojection error ourselves, output of solvePnPGeneric is meaningless due to arbitrary camera point units
+            if n_solutions:
+                proj_points = transforms.project_points(objP,self._camera_params, rot_vec=R_vec[0], trans_vec=T_vec[0])
+                reprojection_error = cv2.norm(proj_points.astype('float32').reshape((-1,1,2)),imgP,cv2.NORM_L2) / np.sqrt(2*proj_points.shape[0])
+            else:
+                reprojection_error = np.nan
+        if n_solutions:
+            N_markers = int(objP.shape[0]/4)
+        return N_markers, R_vec[0], T_vec[0], reprojection_error
 
     def estimate_homography(self, corners, ids) -> tuple[np.ndarray, bool]:
         objP, imgP = self._match_image_points(corners, ids)
