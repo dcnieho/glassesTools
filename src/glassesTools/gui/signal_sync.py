@@ -32,7 +32,9 @@ class GUI:
         self._dragging  : list[bool] = [False, False]
         self._temp_off  = np.zeros((3,))
         self._should_rescale = True
-        self.is_started : bool = False
+        self._running   : bool = False
+        self._show_window: bool = False
+        self._new_window_title: str = None
         self.is_done    : bool = None
 
         # cache values
@@ -62,6 +64,9 @@ class GUI:
         else:
             self._thread_start_fun()
 
+    def is_running(self) -> bool:
+        return self._running
+
     def _thread_start_fun(self):
         self._should_exit = False
         self._user_closed_window = False
@@ -70,6 +75,7 @@ class GUI:
             self._user_closed_window = True
 
         def post_init():
+            self._running = True
             imgui.get_io().config_viewports_no_decoration = False
             imgui.get_io().config_viewports_no_auto_merge = True
 
@@ -92,19 +98,14 @@ class GUI:
 
     def set_data(self, title: str, ival: int, gazes: dict[int,gaze_headref.Gaze], target_positions: dict[int,TargetPos],
                  offset_t = 0.):
+        if not self.is_running():
+            raise RuntimeError('You can only call this function once the GUI is actually running. check GUI.is_running()')
         if not gazes or not target_positions:
             raise ValueError('No gaze or target position data was provided')
 
         new_title = f'{title} (episode {ival})'
-        # the next can only be called once the gui is actually started. Avoid race condition
-        while not self.is_started:
-            time.sleep(0.01)
-        # this is just for show, doesn't trigger an update. But lets keep them in sync
-        hello_imgui.get_runner_params().app_window_params.window_title = new_title
-        # actually update window title
-        win = glfw_utils.glfw_window_hello_imgui()
-        glfw.set_window_title(win, new_title)
-        hello_imgui.get_runner_params().app_window_params.hidden = False
+        self._new_window_title = new_title
+        self._show_window = True
         with self._data_lock:
             self.offset_t   = offset_t
             self.offset_t_ori = offset_t
@@ -131,14 +132,25 @@ class GUI:
             self._gaze_data_offset['y']     = self.gaze_data['y'].copy()
 
     def _gui_func(self):
-        self.is_started = True
-
         # check if we should exit
         if self._should_exit:
             # and kill
             hello_imgui.get_runner_params().app_shall_exit = True
             # nothing more to do
             return
+        
+        # set window title if wanted
+        if self._new_window_title:
+            # this is just for show, doesn't trigger an update. But lets keep them in sync
+            hello_imgui.get_runner_params().app_window_params.window_title = self._new_window_title
+            # actually update window title
+            win = glfw_utils.glfw_window_hello_imgui()
+            glfw.set_window_title(win, self._new_window_title)
+            self._new_window_title = None
+        
+        # show window
+        if self._show_window:
+            hello_imgui.get_runner_params().app_window_params.hidden = False
 
         # check we have data to plot
         if not self.gaze_data:
