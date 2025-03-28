@@ -4,6 +4,9 @@ import cv2
 import pathlib
 import bisect
 import warnings
+import pycolmap
+import copy
+from typing import Any
 
 
 class CameraParams:
@@ -13,13 +16,45 @@ class CameraParams:
                  # intrinsics
                  camera_mtx: np.ndarray, distort_coeffs: np.ndarray = None,
                  # extrinsics
-                 rotation_vec: np.ndarray = None, position: np.ndarray = None):
+                 rotation_vec: np.ndarray = None, position: np.ndarray = None,
+                 # colmap camera dict
+                 colmap_camera_dict: dict[str,Any] = None):
 
+        # info about camera
         self.resolution     : np.ndarray = resolution
+        # intrinsics
         self.camera_mtx     : np.ndarray = camera_mtx
         self.distort_coeffs : np.ndarray = distort_coeffs
+        # extrinsics
         self.rotation_vec   : np.ndarray = rotation_vec
         self.position       : np.ndarray = position
+
+        # colmap, for more extensive camera models
+        self.colmap_camera: pycolmap.Camera = None
+        self.colmap_camera_no_distortion: pycolmap.Camera = None
+
+        # initialize the colmap cameras
+        if colmap_camera_dict:
+            self.colmap_camera = pycolmap.Camera(colmap_camera_dict)
+        elif self.has_intrinsics():
+            # turn into colmap camera
+            self.colmap_camera = pycolmap.Camera.create(0, pycolmap.CameraModelId.FULL_OPENCV, self.camera_mtx[0,0], *self.resolution)
+
+            cal_params = np.zeros((self.colmap_camera.extra_params_idxs()[-1]+1,))
+            cal_params[self.colmap_camera.focal_length_idxs()]     = [self.camera_mtx[0,0], self.camera_mtx[1,1]]
+            cal_params[self.colmap_camera.principal_point_idxs()]  = self.camera_mtx[0:2,2]
+            if len(self.distort_coeffs)>len(self.colmap_camera.extra_params_idxs()):
+                self.colmap_camera = None
+                print(f'Warning: could not make colmap FULL_OPENCV camera as there are too many distortion parameters {len(self.distort_coeffs)}')
+            else:
+                cal_params[self.colmap_camera.extra_params_idxs()[0:len(self.distort_coeffs)]] = self.distort_coeffs.flatten()
+                self.colmap_camera.params = cal_params
+        if self.colmap_camera is not None:
+            # make version with distortion parameters zeroed out
+            cam_dict = copy.deepcopy(self.colmap_camera.todict())
+            cam_dict['params'][4:] = 0
+            self.colmap_camera_no_distortion = pycolmap.Camera(cam_dict)
+
 
     @staticmethod
     def read_from_file(fileName: str|pathlib.Path) -> 'CameraParams':
@@ -29,19 +64,32 @@ class CameraParams:
 
         fs = cv2.FileStorage(fileName, cv2.FILE_STORAGE_READ)
         resolution      = fs.getNode("resolution").mat()
+        # intrinsics
         cameraMatrix    = fs.getNode("cameraMatrix").mat()
         distCoeff       = fs.getNode("distCoeff").mat()
-        # camera extrinsics for 3D gaze
+        # extrinsics
         cameraRotation  = fs.getNode("rotation").mat()
         if cameraRotation is not None:
             cameraRotation  = cv2.Rodrigues(cameraRotation)[0]  # need rotation vector, not rotation matrix
         cameraPosition  = fs.getNode("position").mat()
+        # colmap camera dict, if available
+        colmap_camera = {}
+        colmap_camera_n = fs.getNode("colmap_camera")
+        if not colmap_camera_n.empty():
+            colmap_camera['camera_id'] = int(colmap_camera_n.getNode('camera_id').real())
+            colmap_camera['model'] = getattr(pycolmap.CameraModelId, colmap_camera_n.getNode('model').string())
+            colmap_camera['width'] = int(colmap_camera_n.getNode('width').real())
+            colmap_camera['height'] = int(colmap_camera_n.getNode('height').real())
+            colmap_camera['params'] = colmap_camera_n.getNode("params").mat()
+            colmap_camera['has_prior_focal_length'] = bool(colmap_camera_n.getNode('width').real())
         fs.release()
 
-        return CameraParams(resolution,cameraMatrix,distCoeff,cameraRotation,cameraPosition)
+        return CameraParams(resolution, cameraMatrix,distCoeff, cameraRotation,cameraPosition, colmap_camera)
 
     def has_intrinsics(self):
         return (self.camera_mtx is not None) and (self.distort_coeffs is not None)
+    def has_colmap(self):
+        return self.colmap_camera is not None
 
 
 class CV2VideoReader:
