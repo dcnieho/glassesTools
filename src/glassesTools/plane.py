@@ -289,7 +289,7 @@ class Pose:
 
         if self._i_homography_mat is None:
             self._i_homography_mat = np.linalg.inv(self.homography_mat)
-        out = transforms.apply_homography(self._i_homography_mat, *point)
+        out = transforms.apply_homography(point, self._i_homography_mat).flatten()
         if camera_params.has_intrinsics():
             out = transforms.distort_points(out, camera_params).flatten()
         return out
@@ -301,7 +301,7 @@ class Pose:
 
         if camera_params.has_intrinsics():
             point_cam = transforms.undistort_points(point_cam, camera_params).flatten()
-        return transforms.apply_homography(self.homography_mat, *point_cam)
+        return transforms.apply_homography(point_cam, self.homography_mat).flatten()
 
     def get_origin_on_image(self, camera_params: ocv.CameraParams) -> np.ndarray:
         if self.pose_successful() and camera_params.has_intrinsics():

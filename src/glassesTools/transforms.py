@@ -53,11 +53,11 @@ def estimate_homography_known_marker(known: list[marker.Marker], detected_corner
             dc = detected_corners[i]
             if dc.shape[0]==1 and dc.shape[1]==4:
                 dc = np.reshape(dc,(4,1,2))
-            img_points.extend( [x.flatten() for x in dc] )
-            obj_points.extend( known[detected_IDs[i]].corners )
+            img_points.extend([x.flatten() for x in dc])
+            obj_points.extend(known[detected_IDs[i]].corners)
 
     if len(img_points) < 4:
-        return None, False
+        return None
 
     # compute Homography
     return estimate_homography(obj_points, img_points)
@@ -66,15 +66,13 @@ def estimate_homography(obj_points, img_points):
     img_points = np.float32(img_points)
     obj_points = np.float32(obj_points)
     h, _ = cv2.findHomography(img_points, obj_points)
-    return h, True
+    return h
 
-def apply_homography(H, x, y):
-    if np.isnan(x) or np.isnan(y):
-        return np.full((2,), np.nan)
+def apply_homography(points, H):
+    if np.any(np.isnan(points)):
+        return np.full_like(points, np.nan)
 
-    src = np.asarray([x, y], dtype='float').reshape((1, -1, 2))
-    dst = cv2.perspectiveTransform(src,H)
-    return dst.flatten()
+    return cv2.perspectiveTransform(points.astype('float').reshape((-1,1,2)),H).reshape((-1,2))
 
 
 def distort_points(points_cam: np.ndarray, cam_params: ocv.CameraParams):

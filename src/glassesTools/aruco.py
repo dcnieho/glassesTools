@@ -110,8 +110,8 @@ class ArUcoDetector():
         if self._camera_params.has_intrinsics():
             imgP = transforms.undistort_points(imgP.reshape((-1,2)),self._camera_params).reshape((-1,1,2))
 
-        H, status = transforms.estimate_homography(objP, imgP)
-        if status:
+        H = transforms.estimate_homography(objP, imgP)
+        if H is not None:
             N_markers = int(objP.shape[0]/4)
         return N_markers, H
 
