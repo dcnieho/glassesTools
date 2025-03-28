@@ -322,10 +322,13 @@ class GUI:
         else:
             self._thread_start_fun()
 
+    def is_running(self) -> bool:
+        return self._running
+
     def set_window_title(self, new_title: str, window_id:int = None):
         if window_id is None:
             window_id = self._get_main_window_id()
-        if self._running and window_id==0:  # main window
+        if self.is_running() and window_id==0:  # main window
             # this is just for show, doesn't trigger an update. But lets keep them in sync
             hello_imgui.get_runner_params().app_window_params.window_title = new_title
             # actually update window title
@@ -374,7 +377,6 @@ class GUI:
         return GUI.main_window_id
 
     def _thread_start_fun(self):
-        self._running = True
         self._lastT=0.
         self._should_exit = False
 
@@ -382,6 +384,7 @@ class GUI:
             self._requests.append(('exit',True))
 
         def post_init():
+            self._running = True
             imgui.get_io().config_viewports_no_decoration = False
             imgui.get_io().config_viewports_no_auto_merge = True
 
