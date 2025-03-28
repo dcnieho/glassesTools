@@ -2,7 +2,7 @@ import numpy as np
 import math
 import cv2
 
-from . import marker
+from . import marker, ocv, transforms
 
 def openCVCircle(img, center_coordinates, radius, color, thickness, sub_pixel_fac):
     p = [np.round(x*sub_pixel_fac) for x in center_coordinates]
@@ -26,14 +26,14 @@ def openCVRectangle(img, p1, p2, color, thickness, sub_pixel_fac):
         p2 = tuple([int(x) for x in p2])
         cv2.rectangle(img, p1, p2, color, thickness, lineType=cv2.LINE_AA, shift=int(math.log2(sub_pixel_fac)))
 
-def openCVFrameAxis(img, camera_matrix, dist_coeffs, rvec,  tvec,  arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.]):
+def openCVFrameAxis(img, cam_params: ocv.CameraParams, rvec,  tvec,  arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.]):
     # same as the openCV function, but with anti-aliasing for a nicer image if subPixelFac>1
     points = np.vstack((np.zeros((1,3)), arm_length*np.eye(3)))+np.vstack(4*[np.asarray(position)])
-    cam_points = cv2.projectPoints(points, rvec, tvec, camera_matrix, dist_coeffs)[0]
+    cam_points = transforms.project_points(points, cam_params, rot_vec=rvec, trans_vec=tvec)
     # z-sort them
     RMat = cv2.Rodrigues(rvec)[0]
     RtMat = np.hstack((RMat, tvec.reshape(3,1)))
-    world_points = np.matmul(RtMat,np.pad(points[1:,:],((0,0),(0,1)),'constant', constant_values=(1.,1.)).T)
+    world_points = np.matmul(RtMat,cv2.convertPointsToHomogeneous(points[1:,:]).reshape((-1,4)).T)
     order = np.argsort(world_points[-1,:])[::-1]
     # draw
     colors = ((0, 0, 255), (0, 255, 0), (255, 0, 0))

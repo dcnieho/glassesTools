@@ -5,7 +5,7 @@ import pathlib
 import math
 import typing
 
-from . import data_files, drawing, marker, ocv
+from . import data_files, drawing, marker, ocv, transforms
 
 class Coordinate(typing.NamedTuple):
     x: float = 0.
@@ -81,7 +81,6 @@ class Plane:
             return self._ref_image_cache[im_size].copy()
 
     def draw(self, img, x, y, sub_pixel_fac=1, color=None, size=6):
-        from . import transforms
         if not math.isnan(x):
             xy = transforms.to_image_pos(x, y, self.bbox, [img.shape[1], img.shape[0]])
             if color is None:
@@ -232,9 +231,9 @@ class Pose:
         return self.homography_N_markers>0
 
     def draw_frame_axis(self, img, camera_params: ocv.CameraParams, arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.]):
-        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or not camera_params.has_intrinsics():
+        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or (not camera_params.has_intrinsics() and not camera_params.has_colmap()):
             return
-        drawing.openCVFrameAxis(img, camera_params.camera_mtx, camera_params.distort_coeffs, self.pose_R_vec, self.pose_T_vec, arm_length, thickness, sub_pixel_fac, position)
+        drawing.openCVFrameAxis(img, camera_params, self.pose_R_vec, self.pose_T_vec, arm_length, thickness, sub_pixel_fac, position)
 
     def cam_frame_to_world(self, point: np.ndarray):
         # NB: world frame is in the plane's coordinate system
@@ -262,20 +261,19 @@ class Pose:
 
         return np.matmul(self._RtMat,np.append(np.array(point),1.).reshape((4,1))).flatten()
 
-    def plane_to_cam_pose(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
+    def plane_to_cam_pose(self, point_plane: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
         # from location on plane (2D) to location on camera image (2D)
-        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)) or not camera_params.has_intrinsics():
+        if (self.pose_R_vec is None) or (self.pose_T_vec is None):
             return np.full((2,), np.nan)
-        return cv2.projectPoints(point, self.pose_R_vec, self.pose_T_vec, camera_params.camera_mtx, camera_params.distort_coeffs)[0].flatten()
+        return transforms.project_points(point_plane, camera_params, rot_vec=self.pose_R_vec, trans_vec=self.pose_T_vec).flatten()
 
     def cam_to_plane_pose(self, point: np.ndarray, camera_params: ocv.CameraParams) -> tuple[np.ndarray,np.ndarray]:
         # from location on camera image (2D) to location on plane (2D)
         # NB: also returns intermediate result (intersection with plane in camera space)
-        from . import transforms
-        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)) or not camera_params.has_intrinsics():
+        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)) or (not camera_params.has_intrinsics() and not camera_params.has_colmap()):
             return np.full((2,), np.nan), np.full((3,), np.nan)
 
-        g3D = transforms.unproject_point(*point, camera_params.camera_mtx, camera_params.distort_coeffs)
+        g3D = transforms.unproject_points(point, camera_params)
 
         # find intersection of 3D gaze with plane
         pos_cam = self.vector_intersect(g3D)  # default vec origin (0,0,0) because we use g3D from camera's view point
@@ -286,29 +284,27 @@ class Pose:
 
     def plane_to_cam_homography(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
         # from location on plane (2D) to location on camera image (2D)
-        from . import transforms
         if self.homography_mat is None:
             return np.full((2,), np.nan)
 
         if self._i_homography_mat is None:
             self._i_homography_mat = np.linalg.inv(self.homography_mat)
         out = transforms.apply_homography(self._i_homography_mat, *point)
-        if camera_params.has_intrinsics():
-            out = transforms.distort_point(*out, camera_params.camera_mtx, camera_params.distort_coeffs)
+        if camera_params.has_intrinsics() or camera_params.has_colmap():
+            out = transforms.distort_points(out, camera_params).flatten()
         return out
 
-    def cam_to_plane_homography(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
+    def cam_to_plane_homography(self, point_cam: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
         # from location on camera image (2D) to location on plane (2D)
-        from . import transforms
         if self.homography_mat is None:
             return np.full((2,), np.nan)
 
-        if camera_params.has_intrinsics():
-            point = transforms.undistort_point(*point, camera_params.camera_mtx, camera_params.distort_coeffs)
-        return transforms.apply_homography(self.homography_mat, *point)
+        if camera_params.has_intrinsics() or camera_params.has_colmap():
+            point_cam = transforms.undistort_points(point_cam, camera_params).flatten()
+        return transforms.apply_homography(self.homography_mat, *point_cam)
 
     def get_origin_on_image(self, camera_params: ocv.CameraParams) -> np.ndarray:
-        if self.pose_successful() and camera_params.has_intrinsics():
+        if self.pose_successful() and (camera_params.has_intrinsics() or camera_params.has_colmap()):
             a = self.plane_to_cam_pose(np.zeros((1,3)), camera_params)
         elif self.homography_successful():
             a = self.plane_to_cam_homography([0., 0.], camera_params)
@@ -317,7 +313,6 @@ class Pose:
         return a
 
     def vector_intersect(self, vector: np.ndarray, origin = np.array([0.,0.,0.])):
-        from . import transforms
 
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(vector)):
             return np.full((3,), np.nan)

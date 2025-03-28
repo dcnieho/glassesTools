@@ -3,8 +3,9 @@ import cv2
 import pathlib
 from typing import Any, Callable
 from enum import Enum, auto
+import pycolmap
 
-from . import annotation, drawing, intervals, marker, ocv, plane, timestamps, _has_GUI
+from . import annotation, drawing, intervals, marker, ocv, plane, timestamps, transforms, _has_GUI
 if _has_GUI:
     from .gui import video_player
 else:
@@ -70,14 +71,25 @@ class ArUcoDetector():
     def _estimate_pose_impl(self, objP, imgP):
         # NB: N_markers also flags success of the pose estimation. Also 0 if not successful or not possible (missing intrinsics)
         N_markers, R_vec, T_vec, reprojection_error = 0, None, None, -1.
-        if objP is None or not self._camera_params.has_intrinsics():
+        if objP is None or (not self._camera_params.has_intrinsics() and not self._camera_params.has_colmap()):
             return N_markers, R_vec, T_vec, reprojection_error
 
-        n_solutions, R_vec, T_vec, reprojection_error = \
-            cv2.solvePnPGeneric(objP, imgP, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, np.empty(1), np.empty(1))
-        if n_solutions:
-            N_markers = int(objP.shape[0]/4)
-        return N_markers, R_vec[0], T_vec[0], reprojection_error[0][0]
+        if self._camera_params.has_intrinsics():
+            n_solutions, R_vec, T_vec, reprojection_error = \
+                cv2.solvePnPGeneric(objP, imgP, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, np.empty(1), np.empty(1))
+            if n_solutions:
+                N_markers = int(objP.shape[0]/4)
+            return N_markers, R_vec[0], T_vec[0], reprojection_error[0][0]
+        else:
+            imgP = imgP.reshape((-1,2))
+            pose = pycolmap.estimate_absolute_pose(imgP,objP.reshape((-1,3)),self._camera_params.colmap_camera)
+            N_markers = int(pose['num_inliers']/4)
+            R_vec = cv2.Rodrigues(pose['cam_from_world'].rotation.matrix())[0]
+            T_vec = pose['cam_from_world'].translation
+            # reprojection error
+            proj_points = transforms.project_points(objP,self._camera_params, rot_vec=R_vec, trans_vec=T_vec)
+            reprojection_error = cv2.norm(proj_points.astype('float32'),imgP,cv2.NORM_L2) / np.sqrt(2*proj_points.shape[0])
+            return N_markers, R_vec, T_vec, reprojection_error
 
     def estimate_homography(self, corners, ids) -> tuple[np.ndarray, bool]:
         objP, imgP = self._match_image_points(corners, ids)
@@ -91,8 +103,8 @@ class ArUcoDetector():
             return N_markers, H
 
         # use undistorted marker corners if possible
-        if self._camera_params.has_intrinsics():
-            imgP = np.vstack([cv2.undistortPoints(x, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, P=self._camera_params.camera_mtx) for x in imgP])
+        if self._camera_params.has_intrinsics() or self._camera_params.has_colmap():
+            imgP = transforms.undistort_points(imgP.reshape((-1,2)),self._camera_params).reshape((-1,1,2))
 
         H, status = transforms.estimate_homography(objP, imgP)
         if status:
@@ -135,7 +147,7 @@ class ArUcoDetector():
         if show_board_axis:
             if pose.pose_successful():
                 # draw axis indicating plane pose (origin and orientation)
-                drawing.openCVFrameAxis(frame, self._camera_params.camera_mtx, self._camera_params.distort_coeffs, pose.pose_R_vec, pose.pose_T_vec, arm_length, 3, sub_pixel_fac)
+                drawing.openCVFrameAxis(frame, self._camera_params, pose.pose_R_vec, pose.pose_T_vec, arm_length, 3, sub_pixel_fac)
 
             if pose.homography_successful():
                 # find where plane origin is expected to be in the image
@@ -366,9 +378,15 @@ class PoseEstimator:
                 for idx in found_markers:
                     m_id = ids[idx][0]
                     pose = marker.Pose(frame_idx)
+                    # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
                     if self.cam_params.has_intrinsics():
-                        # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
                         _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                    elif self.cam_params.has_colmap():
+                        # we have a camera not supported by OpenCV
+                        # undistort points and project to a identity camera space, so we can use opencv functionality
+                        points_w  = transforms.unproject_points(corners[idx],self.cam_params)
+                        points_cam= transforms.project_points(points_w, ocv.CameraParams(self.cam_params.resolution, np.identity(3), np.zeros((5,1))))
+                        cv2.solvePnP(self._individual_marker_object_points[m_id], points_cam, np.identity(3), np.zeros((5,1)), flags=cv2.SOLVEPNP_IPPE_SQUARE)
                     individual_marker_out[m_id] = pose
 
         for e in extra_processing_for_this_frame:
@@ -436,7 +454,7 @@ class PoseEstimator:
                     # draw the detected marker in a different color
                     idx = np.where(ids==m_id)[0][0]
                     drawing.arucoDetectedMarkers(frame, [corners[idx]], ids[idx].reshape((1,1)), sub_pixel_fac=self.sub_pixel_fac, special_highlight=[[m_id],(255,0,255)])
-                if self.show_individual_marker_axes and self.cam_params.has_intrinsics():
+                if self.show_individual_marker_axes:
                     individual_marker_out[m_id].draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['marker_size']/2, self.sub_pixel_fac)
 
             # draw output of extra processing functions

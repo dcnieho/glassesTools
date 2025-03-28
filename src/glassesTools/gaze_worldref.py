@@ -103,14 +103,14 @@ class Gaze:
                             clr_vidPos=(255,255,0), clr_world_pos=(255,0,255), clr_left=(0,0,255), clr_right=(255,0,0), clr_average=(255,0,255)):
         # project to camera, display
         def _project(pos):
-            return cv2.projectPoints(pos.reshape(1,3), np.zeros((1,3)),np.zeros((1,3)), camera_params.camera_mtx,camera_params.distort_coeffs)[0].flatten()
+            return transforms.project_points(pos.reshape(1,3), camera_params).flatten()
         def _draw(img,cam_pos,sz,clr):
             if not math.isnan(cam_pos[0]):
                 drawing.openCVCircle(img, cam_pos, sz, clr, -1, sub_pixel_fac)
         def project_and_draw(img,pos,sz,clr):
             _draw(img,_project(pos),sz,clr)
 
-        if not camera_params.has_intrinsics():
+        if not camera_params.has_intrinsics() and not camera_params.has_colmap():
             if pose is not None and pose.homography_successful():
                 # gaze position on plane by homography
                 _draw(img,pose.plane_to_cam_homography(self.gazePosPlane2D_vidPos_homography,camera_params),3,clr_vidPos)

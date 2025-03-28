@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 
-from . import marker
+from . import marker, ocv
 
 def to_norm_pos(x,y,bbox):
     # transforms input (x,y) which is on a plane in world units
@@ -77,37 +77,70 @@ def apply_homography(H, x, y):
     return dst.flatten()
 
 
-def distort_point(x, y, camera_matrix, dist_coeff):
-    if np.isnan(x) or np.isnan(y):
-        return np.full((2,), np.nan)
+def distort_points(points_cam: np.ndarray, cam_params: ocv.CameraParams):
+    if np.any(np.isnan(points_cam)):
+        return np.full_like(points_cam, np.nan)
 
-    # unproject, ignoring distortion as this is an undistored point
-    points_2d = np.asarray([x, y], dtype='float').reshape((1, -1, 2))
-    points_2d = cv2.undistortPoints(points_2d, camera_matrix, np.asarray([[0.0, 0.0, 0.0, 0.0, 0.0]]))
-    points_3d = cv2.convertPointsToHomogeneous(points_2d)
-    points_3d.shape = -1, 3
+    if cam_params.has_colmap():
+        # unproject, ignoring distortion as this is an undistorted point
+        points_w = cam_params.colmap_camera_no_distortion.cam_from_img(points_cam.reshape((-1,2)))
+        # reproject, applying distortion
+        return cam_params.colmap_camera.img_from_cam(points_w)
+    elif cam_params.has_intrinsics():
+        # unproject, ignoring distortion as this is an undistorted point
+        points_w = cv2.undistortPoints(points_cam.astype('float'), cam_params.camera_mtx, np.zeros((1, 5)))
+        # reproject, applying distortion
+        return cv2.projectPoints(cv2.convertPointsToHomogeneous(points_w), np.zeros((1, 1, 3)), np.zeros((1, 1, 3)), cam_params.camera_mtx, cam_params.distort_coeffs)[0].reshape((-1,2))
+    else:
+        return np.full_like(points_cam, np.nan)
 
-    # reproject, applying distortion
-    points_2d, _ = cv2.projectPoints(points_3d, np.zeros((1, 1, 3)), np.zeros((1, 1, 3)), camera_matrix, dist_coeff)
-    return points_2d.flatten()
+def undistort_points(points_cam: np.ndarray, cam_params: ocv.CameraParams):
+    if np.any(np.isnan(points_cam)):
+        return np.full_like(points_cam, np.nan)
 
-def undistort_point(x, y, camera_matrix, dist_coeff):
-    if np.isnan(x) or np.isnan(y):
-        return np.full((2,), np.nan)
+    if cam_params.has_colmap():
+        # unproject, removing distortion
+        points_w = cam_params.colmap_camera.cam_from_img(points_cam.reshape((-1,2)))
+        # reproject, without applying distortion
+        return cam_params.colmap_camera_no_distortion.img_from_cam(points_w)
+    elif cam_params.has_intrinsics():
+        return cv2.undistortPoints(points_cam.astype('float'), cam_params.camera_mtx, cam_params.distort_coeffs, P=cam_params.camera_mtx).reshape((-1,2)) # P=cameraMatrix to reproject to camera
+    else:
+        return np.full_like(points_cam, np.nan)
 
-    points_2d = np.asarray([x, y], dtype='float').reshape((1, -1, 2))
-    points_2d = cv2.undistortPoints(points_2d, camera_matrix, dist_coeff, P=camera_matrix) # P=cameraMatrix to reproject to camera
-    return points_2d.flatten()
+def unproject_points(points_cam: np.ndarray, cam_params: ocv.CameraParams):
+    if np.any(np.isnan(points_cam)):
+        return np.full((points_cam.shape[0],3), np.nan)
 
-def unproject_point(x, y, camera_matrix, dist_coeff):
-    if np.isnan(x) or np.isnan(y):
-        return np.full((3,), np.nan)
+    if cam_params.has_colmap():
+        return cv2.convertPointsToHomogeneous(cam_params.colmap_camera.cam_from_img(points_cam.reshape((-1,2)))).reshape((-1,3))
+    elif cam_params.has_intrinsics():
+        points_w = cv2.undistortPoints(points_cam.reshape((-1,2)).astype('float'), cam_params.camera_mtx, cam_params.distort_coeffs).reshape((-1,2))
+        return cv2.convertPointsToHomogeneous(points_w).reshape((-1,3))
+    else:
+        return np.full((points_cam.shape[0],3), np.nan)
 
-    points_2d = np.asarray([x, y], dtype='float').reshape((1, -1, 2))
-    points_2d = cv2.undistortPoints(points_2d, camera_matrix, dist_coeff)
-    points_3d = cv2.convertPointsToHomogeneous(points_2d)
-    points_3d.shape = -1, 3
-    return points_3d.flatten()
+def project_points(points_world: np.ndarray, cam_params: ocv.CameraParams, ignore_distortion=False, rot_vec: np.array=None, trans_vec: np.array=None):
+    if np.any(np.isnan(points_world)):
+        return np.full((points_world.shape[0],2), np.nan)
+
+    if cam_params.has_colmap():
+        if rot_vec is not None and trans_vec is not None:
+            RMat = cv2.Rodrigues(rot_vec)[0]
+            RtMat = np.hstack((RMat, trans_vec.reshape(3,1)))
+            points_world = np.matmul(RtMat,cv2.convertPointsToHomogeneous(points_world.reshape((-1,3))).reshape((-1,4)).T).T
+        if ignore_distortion:
+            return cam_params.colmap_camera_no_distortion.img_from_cam(points_world.reshape((-1,3)))
+        else:
+            return cam_params.colmap_camera.img_from_cam(points_world.reshape((-1,3))).reshape((-1,2))
+    elif cam_params.has_intrinsics():
+        return cv2.projectPoints(points_world.astype('float'),
+                                 np.zeros((1, 1, 3)) if rot_vec is None else rot_vec,
+                                 np.zeros((1, 1, 3)) if trans_vec is None else trans_vec,
+                                 cam_params.camera_mtx,
+                                 np.zeros((1, 5)) if ignore_distortion else cam_params.distort_coeffs)[0].reshape((-1,2))
+    else:
+        return np.full((points_world.shape[0],2), np.nan)
 
 
 def intersect_plane_ray(plane_normal, plane_point, ray_direction, ray_point, epsilon=1e-6):

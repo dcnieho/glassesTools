@@ -54,9 +54,9 @@ class Pose:
         self.T_vec      : np.ndarray  = T_vec
 
     def draw_frame_axis(self, frame, camera_params: ocv.CameraParams, arm_length, sub_pixel_fac = 8):
-        if not camera_params.has_intrinsics():
+        if not camera_params.has_intrinsics() and not camera_params.has_colmap():
             return
-        drawing.openCVFrameAxis(frame, camera_params.camera_mtx, camera_params.distort_coeffs, self.R_vec, self.T_vec, arm_length, 3, sub_pixel_fac)
+        drawing.openCVFrameAxis(frame, camera_params, self.R_vec, self.T_vec, arm_length, 3, sub_pixel_fac)
 
 
 def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,Pose]:
