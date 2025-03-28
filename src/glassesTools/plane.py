@@ -307,7 +307,7 @@ class Pose:
         if self.pose_successful() and camera_params.has_intrinsics():
             a = self.plane_to_cam_pose(np.zeros((1,3)), camera_params)
         elif self.homography_successful():
-            a = self.plane_to_cam_homography([0., 0.], camera_params)
+            a = self.plane_to_cam_homography(np.zeros((1,2)), camera_params)
         else:
             a = np.full((2,), np.nan)
         return a

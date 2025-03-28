@@ -155,7 +155,7 @@ class ArUcoDetector():
 
             if pose.homography_successful():
                 # find where plane origin is expected to be in the image
-                target = pose.plane_to_cam_homography([0., 0.], self._camera_params)
+                target = pose.plane_to_cam_homography(np.zeros((1,2)), self._camera_params)
                 # draw target location on image
                 if target[0] >= 0 and target[0] < frame.shape[1] and target[1] >= 0 and target[1] < frame.shape[0]:
                     drawing.openCVCircle(frame, target, 3, (0,0,0), -1, sub_pixel_fac)
