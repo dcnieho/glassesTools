@@ -1,6 +1,5 @@
 
 from shlex import shlex
-import shutil
 import numpy as np
 import pandas as pd
 import pathlib
@@ -41,14 +40,14 @@ def get_validation_setup(config_dir: str|pathlib.Path=None, config_file: str='va
     return validation_config
 
 
-def _read_coord_file(config_dir: str|pathlib.Path|None, file: str) -> pd.DataFrame|None:
+def _read_coord_file(config_dir: str|pathlib.Path|None, file: str, package: str) -> pd.DataFrame|None:
     if config_dir is not None:
         return _data_files.read_coord_file(pathlib.Path(config_dir) / file)
     else:
-        return _data_files.read_coord_file(file, _default_poster_package)
+        return _data_files.read_coord_file(file, package)
 
-def get_targets(config_dir: str|pathlib.Path=None, file='targetPositions.csv') -> pd.DataFrame|None:
-    return _read_coord_file(config_dir, file)
+def get_targets(config_dir: str|pathlib.Path=None, file='targetPositions.csv', package=_default_poster_package) -> pd.DataFrame|None:
+    return _read_coord_file(config_dir, file, package)
 
-def get_markers(config_dir: str|pathlib.Path=None, file='markerPositions.csv') -> pd.DataFrame|None:
-    return _read_coord_file(config_dir, file)
+def get_markers(config_dir: str|pathlib.Path=None, file='markerPositions.csv', package=_default_poster_package) -> pd.DataFrame|None:
+    return _read_coord_file(config_dir, file, package)
