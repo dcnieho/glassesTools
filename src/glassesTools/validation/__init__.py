@@ -143,7 +143,7 @@ class Plane(_plane.Plane):
         if targets is not None:
             targets['center'] = list(targets[['x','y']].values)
             targets['center'] *= self.cell_size_mm
-            targets = targets.drop(['x','y'], axis=1)
+            targets = targets.drop([x for x in targets.columns if x not in ('center','color')], axis=1)
             self.targets = {idx:_marker.Marker(idx,**kwargs) for idx,kwargs in zip(targets.index.values,targets.to_dict(orient='records'))}
             origin = _plane.Coordinate(*targets.loc[validationSetup['centerTarget']].center.copy())  # NB: need origin in scaled space
         else:
