@@ -524,10 +524,11 @@ class EyeTrackerName:
         if imgui.internal.item_add(bb, iid):
             # draw frame
             imgui.internal.render_frame(bb.min, bb.max, imgui.color_convert_float4_to_u32(clr), True, imgui.get_style().frame_rounding)
-            # draw text on top
-            imgui.push_style_color(imgui.Col_.text, txt_clr)
-            imgui.internal.render_text_clipped((bb.min.x+x_padding, bb.min.y), (bb.max.x-x_padding, bb.max.y), et, '', label_size, imgui.get_style().button_text_align, bb)
-            imgui.pop_style_color()
+            # draw text on top (need to go super low-level, as it seems that imgui.internal.render_text_clipped() has some issue on the mac, can't figure it out)
+            align = imgui.get_style().button_text_align
+            pos = imgui.ImVec2(tuple((x-y)*a for x,y,a in zip((bb.get_width()-2*x_padding,bb.get_height()),label_size,align))) + (bb.min.x+x_padding, bb.min.y)
+            imgui.get_current_context().current_window.draw_list.add_text(
+                imgui.get_current_context().font, 0., pos, imgui.get_color_u32(txt_clr), et, None, 0., bb.to_vec4())
 
         if align:
             imgui.end_group()
