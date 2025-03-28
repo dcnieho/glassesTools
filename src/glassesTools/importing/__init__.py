@@ -10,6 +10,7 @@ from .. import eyetracker, naming
 
 from .adhawk_mindlink import preprocessData as adhawk_mindlink
 from .generic import importData as generic
+from .meta_aria_gen1 import importData as meta_aria_gen1
 from .SeeTrue_STONE import preprocessData as SeeTrue_STONE
 from .SMI_ETG import preprocessData as SMI_ETG
 from .tobii_G2 import preprocessData as tobii_G2
@@ -41,6 +42,9 @@ def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker,
         case EyeTracker.Generic:
             from .generic import getRecordingInfo
             rec_info = getRecordingInfo(source_dir, device_name)
+        case EyeTracker.Meta_Aria_Gen_1:
+            from .meta_aria_gen1 import getRecordingInfo
+            rec_info = getRecordingInfo(source_dir)
         case EyeTracker.Pupil_Core:
             from .pupilLabs import getRecordingInfo
             rec_info = getRecordingInfo(source_dir, device)
@@ -89,6 +93,8 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
             rec_info = adhawk_mindlink(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
         case EyeTracker.Generic:
             rec_info = generic(output_dir, source_dir, rec_info, device_name, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
+        case EyeTracker.Meta_Aria_Gen_1:
+            rec_info = meta_aria_gen1(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Pupil_Core:
             rec_info = pupil_core(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Pupil_Invisible:
