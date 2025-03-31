@@ -126,10 +126,6 @@ popup_flags: int = (
 )
 
 def popup(label: str, popup_content: Callable, buttons: dict[str, Callable] = None, closable=True, escape=True, outside=True):
-    if buttons is True:
-        buttons = {
-            ifa6.ICON_FA_CHECK + " Ok": None
-        }
     if not imgui.is_popup_open(label):
         imgui.open_popup(label)
     closed = False

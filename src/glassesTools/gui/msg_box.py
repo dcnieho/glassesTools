@@ -12,7 +12,7 @@ class MsgBox(Enum):
     warn    = auto()
     error   = auto()
 
-def msgbox(title: str, msg: str, type: MsgBox = None, buttons: dict[str, Callable] = True, more: str = None):
+def msgbox(title: str, msg: str, type: MsgBox=None, buttons: dict[str, Callable]='default', button_keymap: dict[int,imgui.Key]=None, more: str=None):
     def popup_content():
         spacing = 2 * imgui.get_style().item_spacing.x
         if type is MsgBox.question:
@@ -53,4 +53,10 @@ def msgbox(title: str, msg: str, type: MsgBox = None, buttons: dict[str, Callabl
                 imgui.input_text_multiline(f"###more_info_{title}", more, (width, height), flags=imgui.InputTextFlags_.read_only)
                 imgui.tree_pop()
         imgui.end_group()
-    return utils.popup(title, popup_content, buttons, closable=False, escape=True, outside=False)
+    if buttons=='default':
+        # special case
+        buttons = {
+            ifa6.ICON_FA_CHECK + " Ok": None
+        }
+        button_keymap = {0:imgui.Key.enter}
+    return utils.popup(title, popup_content, buttons, button_keymap=button_keymap, closable=False, escape=True, outside=False)
