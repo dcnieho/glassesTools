@@ -5,29 +5,41 @@ import shutil
 from ... import aruco
 
 
-def deploy_config(output_dir: str|pathlib.Path):
+def deploy_config(output_dir: str|pathlib.Path, overwrite=False) -> list[str]:
     output_dir = pathlib.Path(output_dir)
     if not output_dir.is_dir():
         raise RuntimeError('the requested directory "%s" does not exist' % output_dir)
 
     # copy over all config files
+    not_copied: list[str] = []
     for r in ['markerPositions.csv', 'targetPositions.csv', 'validationSetup.txt']:
+        out_file = output_dir/r
+        if out_file.exists() and not overwrite:
+            not_copied.append(r)
+            continue
         with importlib.resources.path(__package__, r) as p:
-            shutil.copyfile(p, str(output_dir/r))
+            shutil.copyfile(p, out_file)
 
-    deploy_maker(output_dir)
+    not_copied.extend(deploy_maker(output_dir))
+    return not_copied
 
-def deploy_maker(output_dir: str|pathlib.Path):
+def deploy_maker(output_dir: str|pathlib.Path, overwrite=False) -> list[str]:
     output_dir = pathlib.Path(output_dir)
     if not output_dir.is_dir():
         raise RuntimeError('the requested directory "%s" does not exist' % output_dir)
 
     # copy over all files
+    not_copied: list[str] = []
     for r in ['poster.tex']:
+        out_file = output_dir/r
+        if out_file.exists() and not overwrite:
+            not_copied.append(r)
+            continue
         with importlib.resources.path(__package__, r) as p:
-            shutil.copyfile(p, str(output_dir/r))
+            shutil.copyfile(p, out_file)
 
-    deploy_marker_images(output_dir)
+    deploy_marker_images(output_dir)    # N.B. these can be safely overwritten
+    return not_copied
 
 def deploy_marker_images(output_dir: str|pathlib.Path):
     from .. import Plane

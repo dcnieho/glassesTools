@@ -6,15 +6,21 @@ import math
 
 from ..config import get_markers, get_targets
 
-def deploy_setup_and_script(output_dir: str|pathlib.Path):
+def deploy_setup_and_script(output_dir: str|pathlib.Path, overwrite=False) -> list[str]:
     output_dir = pathlib.Path(output_dir)
     if not output_dir.is_dir():
         raise RuntimeError(f'The requested directory "{output_dir}" does not exist')
 
     # copy over all files
+    not_copied: list[str] = []
     for r in ['markerPositions.csv', 'targetPositions.csv', 'setup.json', 'stim.py']:
+        out_file = output_dir/r
+        if out_file.exists() and not overwrite:
+            not_copied.append(r)
+            continue
         with importlib.resources.path(__package__, r) as p:
-            shutil.copyfile(p, str(output_dir/r))
+            shutil.copyfile(p, out_file)
+    return not_copied
 
 def _get_extent(extent: float, distance: float, psychopy_unit: str) -> float:
     match psychopy_unit:
