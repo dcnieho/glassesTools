@@ -97,6 +97,8 @@ class FilePicker:
         self.loc: pathlib.Path = None
         self.refreshing = False
         self.new_loc = False
+        self.reset_scroll = False
+        self.request_highlight: pathlib.Path = None
         self.select_when_loaded: list[pathlib.Path] = None
         self.history: list[str|pathlib.Path] = []
         self.history_loc = -1
@@ -146,7 +148,7 @@ class FilePicker:
             self.select_when_loaded = paths
             self.goto(paths[0].parent)
 
-    def goto(self, path: str | pathlib.Path, add_history=True):
+    def goto(self, path: str | pathlib.Path, add_history=True, request_highlight: pathlib.Path=None):
         is_root = self._is_root(path)
 
         if not is_root:
@@ -169,6 +171,9 @@ class FilePicker:
         if path!=self.loc:
             self.loc = path
             self.new_loc = True
+            if request_highlight:
+                # determine if requested highlight is a sub-folder/-file of the new location. Ignore if not
+                self.request_highlight = request_highlight if self._get_parent(request_highlight)==self.loc else None
             if add_history:
                 if self.history_loc>=0:
                     # remove any history after current, as we're appending a new location
@@ -234,6 +239,8 @@ class FilePicker:
         self._select_paths(previously_selected)
 
         self.require_sort = True
+        if self.new_loc:
+            self.reset_scroll = self.request_highlight or True
         self.new_loc = False
         if not from_cache:
             self.refreshing = False
@@ -376,7 +383,7 @@ class FilePicker:
             imgui.begin_disabled()
         if imgui.button(ifa6.ICON_FA_ARROW_LEFT) or (not disabled and enable_keyboard_nav and backspace_released and not shift_down):
             self.history_loc -= 1
-            self.goto(self.history[self.history_loc], add_history=False)
+            self.goto(self.history[self.history_loc], add_history=False, request_highlight=self.history[self.history_loc+1])
         if self.history_loc>0: # don't just use disabled var as we may have just changed self.history_loc
             gui_utils.draw_hover_text(self._get_path_display_name(self.history[self.history_loc-1]), '')
             if imgui.begin_popup_context_item(f"##history_back_context"):
@@ -384,7 +391,7 @@ class FilePicker:
                     p = self.history[i]
                     if imgui.selectable(self._get_path_display_name(p), False)[0]:
                         self.history_loc = i
-                        self.goto(p, add_history=False)
+                        self.goto(p, add_history=False, request_highlight=self.history[i+1])
                 imgui.end_popup()
         if disabled:
             imgui.end_disabled()
@@ -395,7 +402,7 @@ class FilePicker:
             imgui.begin_disabled()
         if imgui.button(ifa6.ICON_FA_ARROW_RIGHT) or (not disabled and enable_keyboard_nav and backspace_released and shift_down):
             self.history_loc += 1
-            self.goto(self.history[self.history_loc], add_history=False)
+            self.goto(self.history[self.history_loc], add_history=False, request_highlight=self.history[self.history_loc+1] if len(self.history)>=self.history_loc else None)
         if self.history_loc+1<len(self.history): # don't just use disabled var as we may have just changed self.history_loc
             gui_utils.draw_hover_text(self._get_path_display_name(self.history[self.history_loc+1]), '')
             if imgui.begin_popup_context_item(f"##history_forward_context"):
@@ -403,7 +410,7 @@ class FilePicker:
                     p = self.history[i]
                     if imgui.selectable(self._get_path_display_name(p), False)[0]:
                         self.history_loc = i
-                        self.goto(p, add_history=False)
+                        self.goto(p, add_history=False, request_highlight=self.history[self.history_loc+1] if len(self.history)>=self.history_loc else None)
                 imgui.end_popup()
         if disabled:
             imgui.end_disabled()
@@ -696,6 +703,9 @@ class FilePicker:
             )
             if imgui.begin_table(f"##folder_list",columns=5+self.allow_multiple,flags=table_flags):
                 frame_height = imgui.get_frame_height()
+                if self.reset_scroll==True:
+                    imgui.set_scroll_y(0)
+                    self.reset_scroll = False
 
                 # Setup
                 checkbox_width = frame_height-2*imgui.get_style().frame_padding.y
@@ -759,9 +769,22 @@ class FilePicker:
                     items_to_display = [iid for iid in self.sorted_items if not self.predicate_showable or self.predicate_showable(iid)]
                     clipper = imgui.ListClipper()
                     clipper.begin(len(items_to_display))
+                    if isinstance(self.reset_scroll,pathlib.Path):
+                        items_list = [self.items[k].full_path for k in items_to_display]
+                        try:
+                            clipper.include_item_by_index(items_list.index(self.reset_scroll))
+                        except ValueError:
+                            # item not in list, cancel
+                            self.reset_scroll = False
                     while clipper.step():
                         for iid in items_to_display[clipper.display_start:clipper.display_end]:
                             imgui.table_next_row()
+
+                            if self.reset_scroll==self.items[iid].full_path:
+                                utils.set_all(self.selected, False)
+                                self.selected[iid] = True
+                                imgui.set_scroll_here_y()
+                                self.reset_scroll = False
 
                             selectable_clicked = False
                             checkbox_clicked, checkbox_hovered, checkbox_out = False, False, False
