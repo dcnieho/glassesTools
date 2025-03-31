@@ -149,9 +149,16 @@ class Plane:
         ids = []
         for key in self.markers:
             ids.append(key)
-            corner_points.append(np.vstack(self.markers[key].corners).astype('float32'))
+            corners = np.vstack(self.markers[key].corners).astype('float32')
+            # check we're on the plane
+            if np.any(corners[:,0]<0) or np.any(corners[:,0]>self.plane_size.x) or \
+               np.any(corners[:,1]<0) or np.any(corners[:,1]>self.plane_size.y):
+                center  = ", ".join(map(lambda x: f"{x:.4f}",self.markers[key].center))
+                corners = [", ".join(map(lambda x: f"{x:.4f}",c)) for c in corners]
+                plane_corners = [", ".join(map(lambda x: f"{x:.4f}",c)) for c in (self.bbox[:2],self.bbox[2:])]
+                raise ValueError(f'Marker {key} with center positioned at ({center}), size {self.marker_size:.4f} and rotation {self.markers[key].rot:.1f} deg would\nhave its corners at ({corners[0]}), ({corners[1]}), ({corners[2]}), and ({corners[3]}),\nwhich is outside the defined plane which ranges from ({plane_corners[0]}) to ({plane_corners[1]}). Ensure all\nsizes and positions are in the same unit (e.g. mm) and check the marker position csv file, marker size and plane size.')
+            corner_points.append(corners)
 
-        # manually place the markers on the board
         # get info about marker positions on the board
         corner_points = np.dstack(corner_points)
         corner_points = corner_points-np.expand_dims(np.array([self.bbox[:2]]),2).astype('float32')

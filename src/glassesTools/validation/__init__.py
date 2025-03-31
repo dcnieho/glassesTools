@@ -158,8 +158,15 @@ class Plane(_plane.Plane):
         # add targets
         subPixelFac = 8   # for sub-pixel positioning
         for key in self.targets:
+            # check we're on the plane
+            if np.any(self.targets[key].center[0]<0) or np.any(self.targets[key].center[0]>self.plane_size.x) or \
+               np.any(self.targets[key].center[1]<0) or np.any(self.targets[key].center[1]>self.plane_size.y):
+                center  = ", ".join(map(lambda x: f"{x:.4f}",self.targets[key].center))
+                plane_corners = [", ".join(map(lambda x: f"{x:.4f}",c)) for c in (self.bbox[:2],self.bbox[2:])]
+                raise ValueError(f'Target {key} positioned at ({center}) is outside the defined\nplane which ranges from ({plane_corners[0]}) to ({plane_corners[1]}). Ensure all\nsizes and positions are in the same unit (e.g. mm) and check the target position csv file and plane size.')
+
             # 1. determine position on image
-            circlePos = _transforms.to_image_pos(*self.targets[key].center, self.bbox,[width,height])
+            circlePos = _transforms.to_image_pos(*self.targets[key].center, self.bbox, [width,height])
 
             # 2. draw
             clr = tuple([int(i*255) for i in (colors.to_rgb(self.targets[key].color)[::-1] if self.targets[key].color else (0.,0.,1.))])  # need BGR color ordering
