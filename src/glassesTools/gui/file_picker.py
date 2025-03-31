@@ -1019,12 +1019,11 @@ class DialogProvider:
                     setup_done = True
                 _,new_folder_name = imgui.input_text("##new_folder_name", new_folder_name)
                 imgui.end_table()
-            return 0 if imgui.is_key_released(imgui.Key.enter) else None
         buttons = {
             ifa6.ICON_FA_CHECK+" Make folder": lambda: self.action_provider('make_dir',parent/new_folder_name),
             ifa6.ICON_FA_CIRCLE_XMARK+" Cancel": None
         }
-        gui_utils.push_popup(self.gui, lambda: gui_utils.popup("Make folder", _new_folder_popup, buttons = buttons, closable=True))
+        gui_utils.push_popup(self.gui, lambda: gui_utils.popup("Make folder", _new_folder_popup, buttons=buttons, button_keymap={0:imgui.Key.enter}, closable=True))
 
     def show_rename_path_dialog(self, item: pathlib.Path):
         item_name = item.name
@@ -1046,9 +1045,8 @@ class DialogProvider:
                     setup_done = True
                 _,item_name = imgui.input_text("##new_rename_item", item_name)
                 imgui.end_table()
-            return 0 if imgui.is_key_released(imgui.Key.enter) else None
         buttons = {
             ifa6.ICON_FA_CHECK+" Rename": lambda: self.action_provider('rename_path', item, item.parent / item_name),
             ifa6.ICON_FA_CIRCLE_XMARK+" Cancel": None
         }
-        gui_utils.push_popup(self.gui, lambda: gui_utils.popup("Rename item", _rename_item_popup, buttons = buttons, closable=True))
+        gui_utils.push_popup(self.gui, lambda: gui_utils.popup("Rename item", _rename_item_popup, buttons=buttons, button_keymap={0:imgui.Key.enter}, closable=True))
