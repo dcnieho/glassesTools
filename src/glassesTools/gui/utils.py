@@ -125,7 +125,7 @@ popup_flags: int = (
     imgui.WindowFlags_.always_auto_resize
 )
 
-def popup(label: str, popup_content: Callable, buttons: dict[str, Callable] = None, closable=True, escape=True, outside=True):
+def popup(label: str, popup_content: Callable, buttons: dict[str, Callable]=None, button_keymap: dict[int,imgui.Key]=None, closable=True, escape=True, outside=True):
     if not imgui.is_popup_open(label):
         imgui.open_popup(label)
     closed = False
@@ -134,7 +134,7 @@ def popup(label: str, popup_content: Callable, buttons: dict[str, Callable] = No
         if escape or outside:
             closed = close_weak_popup(check_escape=escape, check_click_outside=outside)
         imgui.begin_group()
-        activate_button = popup_content()
+        popup_content()
         imgui.end_group()
         imgui.spacing()
         if buttons:
@@ -150,9 +150,10 @@ def popup(label: str, popup_content: Callable, buttons: dict[str, Callable] = No
                 else:
                     callback = callbacks
                     disabled = False
+                activate_button = not disabled and button_keymap is not None and i in button_keymap and imgui.is_key_released(button_keymap[i])
                 if disabled:
                     imgui.begin_disabled()
-                if imgui.button(label) or activate_button==i:
+                if imgui.button(label) or activate_button:
                     if callback:
                         callback()
                     imgui.close_current_popup()
