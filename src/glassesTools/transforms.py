@@ -1,7 +1,11 @@
 import numpy as np
 import cv2
+import typing
 
 from . import marker, ocv
+
+M = typing.TypeVar("M", bound=int)
+N = typing.TypeVar("N", bound=int)
 
 def to_norm_pos(x,y,bbox):
     # transforms input (x,y) which is on a plane in world units
@@ -75,7 +79,7 @@ def apply_homography(points, H):
     return cv2.perspectiveTransform(points.astype('float').reshape((-1,1,2)),H).reshape((-1,2))
 
 
-def distort_points(points_cam: np.ndarray, cam_params: ocv.CameraParams):
+def distort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
     if np.any(np.isnan(points_cam)):
         return np.full_like(points_cam, np.nan)
 
@@ -92,7 +96,7 @@ def distort_points(points_cam: np.ndarray, cam_params: ocv.CameraParams):
     else:
         return np.full_like(points_cam, np.nan)
 
-def undistort_points(points_cam: np.ndarray, cam_params: ocv.CameraParams):
+def undistort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
     if np.any(np.isnan(points_cam)):
         return np.full_like(points_cam, np.nan)
 
@@ -106,7 +110,7 @@ def undistort_points(points_cam: np.ndarray, cam_params: ocv.CameraParams):
     else:
         return np.full_like(points_cam, np.nan)
 
-def unproject_points(points_cam: np.ndarray, cam_params: ocv.CameraParams):
+def unproject_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams) -> np.ndarray[tuple[M, typing.Literal[3]], np.dtype[np.float64]]:
     if np.any(np.isnan(points_cam)):
         return np.full((points_cam.shape[0],3), np.nan)
 
@@ -118,7 +122,7 @@ def unproject_points(points_cam: np.ndarray, cam_params: ocv.CameraParams):
     else:
         return np.full((points_cam.shape[0],3), np.nan)
 
-def project_points(points_world: np.ndarray, cam_params: ocv.CameraParams, ignore_distortion=False, rot_vec: np.array=None, trans_vec: np.array=None):
+def project_points(points_world: np.ndarray[tuple[M, typing.Literal[3]], np.dtype[np.float64]], cam_params: ocv.CameraParams, ignore_distortion=False, rot_vec: np.ndarray[tuple[typing.Literal[3]], np.dtype[np.float64]]=None, trans_vec: np.ndarray[tuple[typing.Literal[3]], np.dtype[np.float64]]=None) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
     if np.any(np.isnan(points_world)):
         return np.full((points_world.shape[0],2), np.nan)
 
