@@ -33,6 +33,7 @@ class Plane:
         self.markers            : dict[int,marker.Marker]   = {}
         self.plane_size                                     = plane_size
         self.bbox               : list[float]               = [0., 0., self.plane_size.x, self.plane_size.y]
+        self._origin            : Coordinate                = Coordinate(0., 0.)
 
         # marker specs
         self.aruco_dict                                     = cv2.aruco.getPredefinedDictionary(aruco_dict)
@@ -53,15 +54,18 @@ class Plane:
         self._ref_image_cache   : dict[int, np.ndarray]     = {ref_image_size: img}
 
     def set_origin(self, origin: Coordinate):
-        # set origin of plane. Origin location is on current (not original) plane
-        # so set_origin((5., 0.)) three times in a row shifts the origin rightward by 15 units
-        for i in self.markers:
-            self.markers[i].shift(-np.array(origin))
+        # change from current origin
+        offset = np.array(origin)-self._origin
 
-        self.bbox[0] -= origin.x
-        self.bbox[2] -= origin.x
-        self.bbox[1] -= origin.y
-        self.bbox[3] -= origin.y
+        for i in self.markers:
+            self.markers[i].shift(-offset)
+
+        self.bbox[0] -= offset[0]
+        self.bbox[2] -= offset[0]
+        self.bbox[1] -= offset[1]
+        self.bbox[3] -= offset[1]
+
+        self._origin = origin
 
     def get_ref_image(self, im_size: int=None, as_RGB=False) -> np.ndarray:
         if im_size is None:
