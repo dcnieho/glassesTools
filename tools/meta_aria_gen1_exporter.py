@@ -19,7 +19,7 @@ import ffmpeg
 ffmpeg.add_to_path()
 
 
-vrs_file        = r"C:\Users\huml-dkn\Aria\f8f41ed1-39dd-4bcb-92e4-cc62d5670080.vrs"
+vrs_file        = r"<path>\<file>.vrs"
 mps_folder      = None   # if not provided, folder is guessed based on default path relative to vrs file as created by Aria Studio
 output_folder   = None   # if not provided, folder is made in the directory containing the vrs file
 
