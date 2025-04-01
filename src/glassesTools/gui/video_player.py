@@ -67,6 +67,9 @@ class Button:
     full_tooltip: str = dataclasses.field(init=False, default='')
 
     def __post_init__(self):
+        self.setup_accelerators_tooltip()
+
+    def setup_accelerators_tooltip(self):
         self.has_shift = self.action in [Action.Back_Time, Action.Back_Frame, Action.Forward_Frame, Action.Forward_Time]
         self.repeats = self.has_shift
 
@@ -195,6 +198,24 @@ class GUI:
         self._add_remove_button(self._allow_seek, Action.Forward_Time)
         self._add_remove_button(self._allow_seek, Action.Back_Frame)
         self._add_remove_button(self._allow_seek, Action.Forward_Frame)
+    def set_button_props_for_action(self, action: Action, lbl: str=None, key: imgui.Key=None, tooltip: str=None):
+        if not lbl and not key and not tooltip:
+            # nothing to do
+            return
+        # find button in question
+        button = next((b for k,b in self._buttons.items() if self._buttons[k].action==action), None)
+        if button is None:
+            # no button for this action, nothing to do
+            return
+        if lbl is not None:
+            button.lbl = lbl
+        if key is not None:
+            button.key = key
+        if tooltip is not None:
+            button.tooltip = tooltip
+        # reset accelerators, tooltip
+        button.setup_accelerators_tooltip()
+
     def _add_remove_button(self, add: bool, action: Action, event: annotation.Event=None):
         d_key = (action,event) if event else action
         self._buttons.pop(d_key, None)
