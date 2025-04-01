@@ -147,12 +147,15 @@ class Plane:
         # collect all markers
         corner_points = []
         ids = []
+        # for checking if markers fit
+        x_margin = bbox_extents[0]/width /5     # ignore .2 pixel or less
+        y_margin = bbox_extents[1]/height/5     # ignore .2 pixel or less
         for key in self.markers:
             ids.append(key)
             corners = np.vstack(self.markers[key].corners).astype('float32')
             # check we're on the plane
-            if np.any(corners[:,0]<0) or np.any(corners[:,0]>self.plane_size.x) or \
-               np.any(corners[:,1]<0) or np.any(corners[:,1]>self.plane_size.y):
+            if np.any(corners[:,0]<-x_margin) or np.any(corners[:,0]>self.plane_size.x+x_margin) or \
+               np.any(corners[:,1]<-y_margin) or np.any(corners[:,1]>self.plane_size.y+y_margin):
                 center  = ", ".join(map(lambda x: f"{x:.4f}",self.markers[key].center))
                 corners = [", ".join(map(lambda x: f"{x:.4f}",c)) for c in corners]
                 plane_corners = [", ".join(map(lambda x: f"{x:.4f}",c)) for c in (self.bbox[:2],self.bbox[2:])]
