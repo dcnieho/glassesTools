@@ -104,21 +104,14 @@ class VideoMaker:
         # for VFR video files
         if frame is None:
             # we don't have a valid frame or nothing to do, continue to next
-            if self.has_gui:
-                # do update timeline of the viewers
-                self.gui.update_image(None, frame_ts/1000., frame_idx)
             self._cache = Status.Skip, (frame, frame_idx, frame_ts)
             return self._cache
-
-        # now that all processing is done, handle gui
-        if self.has_gui:
-            self.gui.update_image(frame, frame_ts/1000., frame_idx)
 
         self._cache = Status.Ok, (frame, frame_idx, frame_ts)
         return self._cache
 
     def process_one_frame(self) -> Status:
-        status, (frame, frame_idx, _) = self._process_one_frame_impl()
+        status, (frame, frame_idx, frame_ts) = self._process_one_frame_impl()
         if status==Status.Finished:
             return status
         if frame is None:
@@ -129,6 +122,10 @@ class VideoMaker:
         if frame_idx in self.gaze:
             for g in self.gaze[frame_idx]:
                 g.draw(frame, sub_pixel_fac=self.sub_pixel_fac)
+
+        # now that all processing is done, handle gui
+        if self.has_gui:
+            self.gui.update_image(frame, frame_ts/1000., frame_idx)
 
         # submit frame to be encoded
         img = Image(plane_buffers=[frame.flatten().tobytes()], pix_fmt='bgr24', size=(frame.shape[1], frame.shape[0]))
