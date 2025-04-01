@@ -48,13 +48,13 @@ class Gaze:
         self.gaze_dir_r   : np.ndarray  = gaze_dir_r
         self.gaze_ori_r   : np.ndarray  = gaze_ori_r
 
-    def draw(self, img:np.ndarray, camera_params:ocv.CameraParams=None, sub_pixel_fac=1, clr=(0,255,0), draw_3d_gaze_point=True):
-        drawing.openCVCircle(img, self.gaze_pos_vid, 8, clr, 2, sub_pixel_fac)
+    def draw(self, img:np.ndarray, camera_params:ocv.CameraParams=None, sub_pixel_fac=1, clr=(0,255,0), draw_3d_gaze_point=True, world_clr=(0,255,255), radius=8, world_radius=5, thickness=2, world_thickness=-1):
+        drawing.openCVCircle(img, self.gaze_pos_vid, radius, clr, thickness, sub_pixel_fac)
         # draw 3D gaze point as well, usually coincides with 2D gaze point, but not always. E.g. the Adhawk MindLink may
         # apply a correction for parallax error to the projected gaze point using the vergence signal.
         if draw_3d_gaze_point and self.gaze_pos_3d is not None and camera_params is not None and camera_params.has_intrinsics():
             a = transforms.project_points(np.array(self.gaze_pos_3d).reshape(1,3), camera_params, rot_vec=camera_params.rotation_vec, trans_vec=camera_params.position).flatten()
-            drawing.openCVCircle(img, a, 5, (0,255,255), -1, sub_pixel_fac)
+            drawing.openCVCircle(img, a, world_radius, world_clr, world_thickness, sub_pixel_fac)
 
 
 def read_dict_from_file(file_name:str|pathlib.Path, episodes:list[list[int]]=None, ts_column_suffixes: list[str] = None) -> tuple[dict[int,list[Gaze]], int]:
