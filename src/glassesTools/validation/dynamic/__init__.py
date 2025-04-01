@@ -50,7 +50,21 @@ def _get_position(position: tuple[float,float], distance: float, psychopy_unit: 
         case _:
             raise ValueError(f'PsychoPy unit {psychopy_unit} is not understood')
 
-def convert_setup(output_dir: str|pathlib.Path, config_dir: str|pathlib.Path|None, file_name: str='setup.json'):
+def setup_to_automatic_coding(config_dir: str|pathlib.Path|None, file_name: str='setup.json') -> dict[str, int|list[int]]:
+    # load config used to run validation
+    # if no config dir specified, load default
+    if config_dir is not None:
+        with open(pathlib.Path(config_dir)/file_name, 'r') as f:
+            setup = json.load(f)
+    else:
+        with importlib.resources.open_text(__package__, file_name) as f:
+            setup = json.load(f)
+
+    out = setup["validation"]["segment_marker"]
+    out["border_bits"] = setup["segment_marker"]["border_bits"]
+    return out
+
+def setup_to_plane_config(output_dir: str|pathlib.Path, config_dir: str|pathlib.Path|None, file_name: str='setup.json'):
     output_dir = pathlib.Path(output_dir)
     if not output_dir.is_dir():
         raise RuntimeError(f'The requested directory "{output_dir}" does not exist')
