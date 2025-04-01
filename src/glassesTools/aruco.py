@@ -271,11 +271,12 @@ class PoseEstimator:
         if marker_id in self.individual_markers:
             raise ValueError(f'Cannot register the individual marker with id {marker_id}, it is already registered')
         self.individual_markers[marker_id] = marker_setup
-        marker_size = self.individual_markers[marker_id]['marker_size']
-        self._individual_marker_object_points[marker_id] = np.array([[-marker_size/2,  marker_size/2, 0],
-                                                                     [ marker_size/2,  marker_size/2, 0],
-                                                                     [ marker_size/2, -marker_size/2, 0],
-                                                                     [-marker_size/2, -marker_size/2, 0]])
+        if not self.individual_markers[marker_id]['detect_only']:
+            marker_size = self.individual_markers[marker_id]['size']
+            self._individual_marker_object_points[marker_id] = np.array([[-marker_size/2,  marker_size/2, 0],
+                                                                         [ marker_size/2,  marker_size/2, 0],
+                                                                         [ marker_size/2, -marker_size/2, 0],
+                                                                         [-marker_size/2, -marker_size/2, 0]])
         self._all_aruco_ids.add(marker_id)
 
     def register_extra_processing_fun(self,
@@ -382,15 +383,16 @@ class PoseEstimator:
                 for idx in found_markers:
                     m_id = ids[idx][0]
                     pose = marker.Pose(frame_idx)
-                    # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
-                    if self.cam_params.has_opencv_camera():
-                        _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                    elif self.cam_params.has_colmap_camera():
-                        # we have a camera not supported by OpenCV
-                        # undistort points and project to a identity camera space, so we can use opencv functionality
-                        points_w  = transforms.unproject_points(corners[idx],self.cam_params)
-                        points_cam= transforms.project_points(points_w, ocv.CameraParams(self.cam_params.resolution, np.identity(3), np.zeros((5,1))))
-                        cv2.solvePnP(self._individual_marker_object_points[m_id], points_cam, np.identity(3), np.zeros((5,1)), flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                    if not self.individual_markers[m_id]['detect_only'] and m_id in self._individual_marker_object_points:
+                        # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
+                        if self.cam_params.has_opencv_camera():
+                            _, pose.R_vec, pose.T_vec = cv2.solvePnP(self._individual_marker_object_points[m_id], corners[idx], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                        elif self.cam_params.has_colmap_camera():
+                            # we have a camera not supported by OpenCV
+                            # undistort points and project to a identity camera space, so we can use opencv functionality
+                            points_w  = transforms.unproject_points(corners[idx],self.cam_params)
+                            points_cam= transforms.project_points(points_w, ocv.CameraParams(self.cam_params.resolution, np.identity(3), np.zeros((5,1))))
+                            cv2.solvePnP(self._individual_marker_object_points[m_id], points_cam, np.identity(3), np.zeros((5,1)), flags=cv2.SOLVEPNP_IPPE_SQUARE)
                     individual_marker_out[m_id] = pose
 
         for e in extra_processing_for_this_frame:
@@ -458,8 +460,8 @@ class PoseEstimator:
                     # draw the detected marker in a different color
                     idx = np.where(ids==m_id)[0][0]
                     drawing.arucoDetectedMarkers(frame, [corners[idx]], ids[idx].reshape((1,1)), sub_pixel_fac=self.sub_pixel_fac, special_highlight=[[m_id],(255,0,255)])
-                if self.show_individual_marker_axes:
-                    individual_marker_out[m_id].draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['marker_size']/2, self.sub_pixel_fac)
+                if self.show_individual_marker_axes and not self.individual_markers[m_id]['detect_only']:
+                    individual_marker_out[m_id].draw_frame_axis(frame, self.cam_params, self.individual_markers[m_id]['size']/2, self.sub_pixel_fac)
 
             # draw output of extra processing functions
             for e in extra_processing_for_this_frame:
