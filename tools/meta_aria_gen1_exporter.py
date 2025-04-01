@@ -97,7 +97,7 @@ device_calibration = provider.get_device_calibration()
 rgb_camera_calibration = device_calibration.get_camera_calib(provider.get_label_from_stream_id(rgb_id))
 # get transformation from CPF to rgb camera frame, as per projectaria_tools.core.mps.utils.get_gaze_vector_reprojection
 T_device_CPF = device_calibration.get_transform_device_cpf()
-T_device_rgb_camera = device_calibration.get_transform_device_sensor(provider.get_label_from_stream_id(rgb_id),True)
+T_device_rgb_camera = device_calibration.get_transform_device_sensor(provider.get_label_from_stream_id(rgb_id), True)   # True to get CAD-based transform, as per code from projectaria_tools and feedback from Meta
 if make_upright:
     T_device_rgb_camera = T_device_rgb_camera @ sophus.SE3.from_matrix(np.array([[0, 1, 0, 0], [-1, 0, 0, 0], [0, 0, 1, 0], [0, 0, 0, 1]]))
 T_rgb_camera_cpf = T_device_rgb_camera.inverse() @ T_device_CPF
