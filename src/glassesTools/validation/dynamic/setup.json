@@ -26,8 +26,8 @@
 
     "validation": {
         "segment_marker": {
-            "start_ID": 200,
-            "end_ID": 201
+            "start_IDs": [200, 201],
+            "end_IDs": [201, 200]
         },
 
         "markers": {

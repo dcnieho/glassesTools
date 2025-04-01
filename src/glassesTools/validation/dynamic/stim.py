@@ -244,13 +244,15 @@ def run_validation(win: visual.Window, config: dict):
     task_vars = prepare_validation(win, config["validation"], config["screen"])
 
     # signal validation start
-    segmenter.draw(config["validation"]["segment_marker"]["start_ID"])
+    for m_id in config["validation"]["segment_marker"]["start_IDs"]:
+        segmenter.draw(m_id)
 
     # run validation
     show_validation(win, config["validation"], config["screen"]["refresh_rate"], task_vars)
 
     # signal validation end
-    segmenter.draw(config["validation"]["segment_marker"]["end_ID"])
+    for m_id in config["validation"]["segment_marker"]["end_IDs"]:
+        segmenter.draw(m_id)
 
 def main():
     # read protocol setup
