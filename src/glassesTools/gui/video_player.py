@@ -106,6 +106,7 @@ class GUI:
         self._annotate_tooltips        : dict[annotation.Event, str]       = {}
         self._annotations_frame        : dict[annotation.Event, list[int]] = None
 
+        self._interruptible = True
         self._allow_pause = False
         self._allow_seek = False
         self._allow_annotate: set[annotation.Event] = set()
@@ -179,6 +180,9 @@ class GUI:
             self._window_timeline.pop(window_id)
             self._window_timecode_pos.pop(window_id)
 
+    def set_interruptible(self, interruptible: bool):
+        self._interruptible = interruptible
+        self._add_remove_button(self._interruptible, Action.Quit)
     def set_allow_pause(self, allow_pause: bool):
         self._allow_pause = allow_pause
         self._add_remove_button(self._allow_pause, Action.Pause)
@@ -381,7 +385,10 @@ class GUI:
         self._should_exit = False
 
         def close_callback(window: glfw._GLFWwindow):
-            self._requests.append(('exit',True))
+            if self._interruptible:
+                self._requests.append(('exit',True))
+            else:
+                glfw.set_window_should_close(window, False)
 
         def post_init():
             self._running = True
@@ -562,11 +569,13 @@ class GUI:
         if self._allow_seek:
             buttons.append(self._buttons[Action.Forward_Frame])
             buttons.append(self._buttons[Action.Forward_Time])
-        if self._allow_pause or self._allow_seek:
-            buttons.extend([None, None])
-        buttons.append(self._buttons[Action.Quit])
+        if self._interruptible:
+            if self._allow_pause or self._allow_seek:
+                buttons.extend([None, None])
+            buttons.append(self._buttons[Action.Quit])
         if self._allow_annotate and self._has_timeline(w) and self._annotate_shortcut_key_map:
-            buttons.extend([None, None])
+            if self._allow_pause or self._allow_seek or self._interruptible:
+                buttons.extend([None, None])
             buttons.append(self._buttons[Action.Annotate_Delete])
             annotation_colors = self._window_timeline[w].get_annotation_colors()
             annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], {k:v for k,v in self._annotations_frame.items() if k in self._allow_annotate})
@@ -588,11 +597,11 @@ class GUI:
             return imgui.calc_text_size(b.lbl)
         text_sizes = [_get_text_size(b) for b in buttons]
         button_sizes = [imgui.ImVec2([ts.x+2*padding.x, ts.y+2*padding.y]) for ts in text_sizes]
-        total_button_size = functools.reduce(lambda a,b: imgui.ImVec2(a.x+b.x, max(a.y,b.y)), button_sizes)
+        total_button_size = functools.reduce(lambda a,b: imgui.ImVec2(a.x+b.x, max(a.y,b.y)), button_sizes) if button_sizes else imgui.ImVec2()
         total_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*imgui.get_style().item_spacing.x, total_button_size.y)
 
         # draw them, or info item for tooltip
-        if self._window_show_controls[w]:
+        if self._window_show_controls[w] and buttons:
             buttons_x_pos = (img_space-total_size.x)/2
             # check for overlap with status overlay
             if self._window_timecode_pos[w]=='l':
@@ -625,14 +634,14 @@ class GUI:
         else:
             tt_pos_x = img_margin+img_sz[0]-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
             # check we don't overlap buttons
-            if self._window_show_controls[w] and tt_pos_x<button_cursor_pos[0]+total_size.x:
+            if self._window_show_controls[w] and buttons and tt_pos_x<button_cursor_pos[0]+total_size.x:
                 tt_pos_x = button_cursor_pos[0]+total_size.x+imgui.get_style().item_spacing.x
                 # check we don't go off the screen
                 if tt_pos_x+tooltip_child_size.x>img_space:
                     # best we can do
                     tt_pos_x = img_space-tooltip_child_size.x
         tooltip_cursor_pos = (tt_pos_x, img_sz[1]-tooltip_txt_sz.y-2*imgui.get_style().frame_padding.y)
-        if not self._window_show_controls[w]:
+        if not self._window_show_controls[w] or not buttons:
             txt_sz = tooltip_txt_sz
             button_cursor_pos = tooltip_cursor_pos
             controls_child_size = tooltip_child_size
@@ -664,84 +673,85 @@ class GUI:
                     overlay_text += '\nMouse wheel: hover over timeline to zoom'
                 imgui.set_tooltip(overlay_text)
 
-        imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
-        imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
-        imgui.set_cursor_pos(button_cursor_pos)
-        imgui.begin_child("##controls_overlay", size=controls_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
-        if not self._window_show_controls[w]:
-            _draw_action_tooltip()
+        if buttons:
+            imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
+            imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
+            imgui.set_cursor_pos(button_cursor_pos)
+            imgui.begin_child("##controls_overlay", size=controls_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
+            if not self._window_show_controls[w]:
+                _draw_action_tooltip()
 
-        for b,sz in zip(buttons,button_sizes):
-            if b is None:
-                imgui.dummy(sz)
+            for b,sz in zip(buttons,button_sizes):
+                if b is None:
+                    imgui.dummy(sz)
+                    imgui.same_line()
+                    continue
+                mod_key = 0
+                if b.has_shift and imgui.is_key_down(imgui.Key.mod_shift):
+                    # ensure the shortcut with shift is picked up
+                    mod_key = imgui.Key.mod_shift
+                flags = imgui.InputFlags_.route_global
+                if b.repeats:
+                    flags |= imgui.InputFlags_.repeat
+                imgui.set_next_item_shortcut(b.key|mod_key, flags=flags)
+                lbl = b.lbl
+                if b.action==Action.Pause:
+                    lbl = lbl[1] if self._is_playing else lbl[0]
+                disable = False
+                if b.action==Action.Annotate_Delete:
+                    disable = not annotate_keys # we are not in an interval
+                if disable:
+                    imgui.begin_disabled()
+                if self._window_show_controls[w]:
+                    if b.color is not None:
+                        but_alphas = [imgui.get_style_color_vec4(b).w for b in [imgui.Col_.button, imgui.Col_.button_hovered, imgui.Col_.button_active]]
+                        imgui.push_style_color(imgui.Col_.button,         timeline.color_replace_alpha(b.color,but_alphas[0]).value)
+                        imgui.push_style_color(imgui.Col_.button_hovered, timeline.color_replace_alpha(timeline.color_brighten(b.color, .15),but_alphas[1]).value)
+                        imgui.push_style_color(imgui.Col_.button_active,  timeline.color_replace_alpha(timeline.color_brighten(b.color, .9 ),but_alphas[2]).value)
+                        text_contrast_ratio = 1 / 1.57
+                        text_color = imgui.ImColor(imgui.get_style_color_vec4(imgui.Col_.text))
+                        imgui.push_style_color(imgui.Col_.text,           timeline.color_adjust_contrast(text_color,text_contrast_ratio,b.color).value)
+                    activated = imgui.button(lbl, size=sz)
+                    if b.color is not None:
+                        imgui.pop_style_color(4)
+                else:
+                    activated = imgui.invisible_button(lbl, size=sz)
+                if activated:
+                    match b.action:
+                        case Action.Pause:
+                            self._requests.append(('toggle_pause',None))
+                        case Action.Back_Time:
+                            self._requests.append(('delta_time', -10. if imgui.is_key_down(imgui.Key.mod_shift) else -1.))
+                        case Action.Back_Frame:
+                            self._requests.append(('delta_frame', -10 if imgui.is_key_down(imgui.Key.mod_shift) else -1))
+                        case Action.Forward_Frame:
+                            self._requests.append(('delta_frame',  10 if imgui.is_key_down(imgui.Key.mod_shift) else  1))
+                        case Action.Forward_Time:
+                            self._requests.append(('delta_time',  10. if imgui.is_key_down(imgui.Key.mod_shift) else  1.))
+                        case Action.Quit:
+                            self._requests.append(('exit',None))
+                        case Action.Annotate_Make:
+                            self._requests.append(('add_coding',(b.event, self._current_frame[w][2])))
+                        case Action.Annotate_Delete:
+                            for k,iv in zip(annotate_keys,annotate_ivals):
+                                if len(iv)>1 and self._current_frame[w][2] in iv:
+                                    # on the edge of an episode, return only the edge so we don't delete the whole episode
+                                    self._requests.append(('delete_coding',(k,[self._current_frame[w][2]])))
+                                else:
+                                    self._requests.append(('delete_coding',(k,iv)))
+                if self._window_show_controls[w] and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
+                    imgui.set_tooltip(b.full_tooltip)
+                if disable:
+                    imgui.end_disabled()
                 imgui.same_line()
-                continue
-            mod_key = 0
-            if b.has_shift and imgui.is_key_down(imgui.Key.mod_shift):
-                # ensure the shortcut with shift is picked up
-                mod_key = imgui.Key.mod_shift
-            flags = imgui.InputFlags_.route_global
-            if b.repeats:
-                flags |= imgui.InputFlags_.repeat
-            imgui.set_next_item_shortcut(b.key|mod_key, flags=flags)
-            lbl = b.lbl
-            if b.action==Action.Pause:
-                lbl = lbl[1] if self._is_playing else lbl[0]
-            disable = False
-            if b.action==Action.Annotate_Delete:
-                disable = not annotate_keys # we are not in an interval
-            if disable:
-                imgui.begin_disabled()
-            if self._window_show_controls[w]:
-                if b.color is not None:
-                    but_alphas = [imgui.get_style_color_vec4(b).w for b in [imgui.Col_.button, imgui.Col_.button_hovered, imgui.Col_.button_active]]
-                    imgui.push_style_color(imgui.Col_.button,         timeline.color_replace_alpha(b.color,but_alphas[0]).value)
-                    imgui.push_style_color(imgui.Col_.button_hovered, timeline.color_replace_alpha(timeline.color_brighten(b.color, .15),but_alphas[1]).value)
-                    imgui.push_style_color(imgui.Col_.button_active,  timeline.color_replace_alpha(timeline.color_brighten(b.color, .9 ),but_alphas[2]).value)
-                    text_contrast_ratio = 1 / 1.57
-                    text_color = imgui.ImColor(imgui.get_style_color_vec4(imgui.Col_.text))
-                    imgui.push_style_color(imgui.Col_.text,           timeline.color_adjust_contrast(text_color,text_contrast_ratio,b.color).value)
-                activated = imgui.button(lbl, size=sz)
-                if b.color is not None:
-                    imgui.pop_style_color(4)
-            else:
-                activated = imgui.invisible_button(lbl, size=sz)
-            if activated:
-                match b.action:
-                    case Action.Pause:
-                        self._requests.append(('toggle_pause',None))
-                    case Action.Back_Time:
-                        self._requests.append(('delta_time', -10. if imgui.is_key_down(imgui.Key.mod_shift) else -1.))
-                    case Action.Back_Frame:
-                        self._requests.append(('delta_frame', -10 if imgui.is_key_down(imgui.Key.mod_shift) else -1))
-                    case Action.Forward_Frame:
-                        self._requests.append(('delta_frame',  10 if imgui.is_key_down(imgui.Key.mod_shift) else  1))
-                    case Action.Forward_Time:
-                        self._requests.append(('delta_time',  10. if imgui.is_key_down(imgui.Key.mod_shift) else  1.))
-                    case Action.Quit:
-                        self._requests.append(('exit',None))
-                    case Action.Annotate_Make:
-                        self._requests.append(('add_coding',(b.event, self._current_frame[w][2])))
-                    case Action.Annotate_Delete:
-                        for k,iv in zip(annotate_keys,annotate_ivals):
-                            if len(iv)>1 and self._current_frame[w][2] in iv:
-                                # on the edge of an episode, return only the edge so we don't delete the whole episode
-                                self._requests.append(('delete_coding',(k,[self._current_frame[w][2]])))
-                            else:
-                                self._requests.append(('delete_coding',(k,iv)))
-            if self._window_show_controls[w] and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
-                imgui.set_tooltip(b.full_tooltip)
-            if disable:
-                imgui.end_disabled()
-            imgui.same_line()
-        imgui.end_child()
-        if self._window_show_controls[w] and self._window_show_action_tooltip[w]:
-            imgui.set_cursor_pos(tooltip_cursor_pos)
-            imgui.begin_child("##tooltip_overlay", size=tooltip_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
-            _draw_action_tooltip()
             imgui.end_child()
-        imgui.pop_style_color()
-        imgui.pop_style_var()
+            if self._window_show_controls[w] and self._window_show_action_tooltip[w]:
+                imgui.set_cursor_pos(tooltip_cursor_pos)
+                imgui.begin_child("##tooltip_overlay", size=tooltip_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
+                _draw_action_tooltip()
+                imgui.end_child()
+            imgui.pop_style_color()
+            imgui.pop_style_var()
 
         # draw timeline, if any
         if self._window_timeline[w] is not None:
