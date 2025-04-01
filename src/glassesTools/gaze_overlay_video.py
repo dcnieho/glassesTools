@@ -27,13 +27,14 @@ class Status(Enum):
     Finished = auto()
 
 class VideoMaker:
-    def __init__(self, output_path: str|pathlib.Path, video_file: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path|timestamps.VideoTimestamps, gaze_data_file: str|pathlib.Path|dict[int,list[gaze_headref.Gaze]]):
+    def __init__(self, output_path: str|pathlib.Path, video_file: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path|timestamps.VideoTimestamps, camera_calibration_file: str|pathlib.Path|ocv.CameraParams, gaze_data_file: str|pathlib.Path|dict[int,list[gaze_headref.Gaze]]):
         self.src_video   = pathlib.Path(video_file)
         self.output_path = pathlib.Path(output_path)
         if self.output_path.is_dir():
             self.output_path /= naming.gaze_overlay_video_file
         self.video_ts   = frame_timestamp_file if isinstance(frame_timestamp_file,timestamps.VideoTimestamps) else timestamps.VideoTimestamps(frame_timestamp_file)
         self.video      = ocv.CV2VideoReader(self.src_video, self.video_ts.timestamps)
+        self.cam_params = camera_calibration_file if isinstance(camera_calibration_file,ocv.CameraParams) else ocv.CameraParams.read_from_file(camera_calibration_file)
         self.gaze       = gaze_data_file if isinstance(gaze_data_file,dict) else gaze_headref.read_dict_from_file(gaze_data_file)[0]
 
         self._cache: tuple[Status, tuple[np.ndarray, int, float]] = None  # self._cache[1][1] is frame number
@@ -121,7 +122,7 @@ class VideoMaker:
         # draw gaze
         if frame_idx in self.gaze:
             for g in self.gaze[frame_idx]:
-                g.draw(frame, sub_pixel_fac=self.sub_pixel_fac)
+                g.draw(frame, self.cam_params, sub_pixel_fac=self.sub_pixel_fac)
 
         # now that all processing is done, handle gui
         if self.has_gui:
