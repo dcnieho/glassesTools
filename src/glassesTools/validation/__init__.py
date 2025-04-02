@@ -88,7 +88,6 @@ def get_DataQualityType_explanation(dq: DataQualityType):
 
 
 class Plane(_plane.Plane):
-    poster_image_filename = 'referencePoster.png'
     default_aruco_dict    = cv2.aruco.DICT_4X4_250
 
     def __init__(self, config_dir: str|pathlib.Path|None, validation_config: dict[str,typing.Any]=None, **kwarg):
@@ -118,12 +117,9 @@ class Plane(_plane.Plane):
 
         # call base class
         markers = config.get_markers(config_dir, self.config['markerPosFile'])
-        ref_image_store_path = None
-        if 'ref_image_store_path' in kwarg:
-            ref_image_store_path = kwarg.pop('ref_image_store_path')
-        elif config_dir is not None:
-            ref_image_store_path = config_dir / self.poster_image_filename
-        super(Plane, self).__init__(markers, markerSize, plane_size, Plane.default_aruco_dict, self.config['markerBorderBits'],self.cell_size_mm, "mm", ref_image_store_path=ref_image_store_path, ref_image_size=self.config['referencePosterSize'],**kwarg)
+        if 'ref_image_store_path' not in kwarg:
+            kwarg['ref_image_store_path'] = None
+        super(Plane, self).__init__(markers, markerSize, plane_size, Plane.default_aruco_dict, self.config['markerBorderBits'], self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], **kwarg)
 
         # set center
         self.set_origin(origin)
