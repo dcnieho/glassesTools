@@ -41,6 +41,8 @@ class GUI:
         self._gaze_data_offset  : dict[str, np.ndarray] = {}    # ['ts', 'x', 'y']
         self._gaze_data_plot_pix: dict[str, np.ndarray] = {'x': None, 'y': None}
         self._last_mouse_pos    : dict[int,tuple[float,float]] = {0: None, 1: None}
+        self._plot_size         : dict[int,imgui.ImVec2] = {0: None, 1: None}
+        self._plot_limits       : dict[int,implot.Rect] = {0: None, 1: None}
         self._hovered           : int = None
         self._held              : int = None
         self._drag_origin       : implot.Point = None
@@ -138,7 +140,7 @@ class GUI:
             hello_imgui.get_runner_params().app_shall_exit = True
             # nothing more to do
             return
-        
+
         # set window title if wanted
         if self._new_window_title:
             # this is just for show, doesn't trigger an update. But lets keep them in sync
@@ -147,7 +149,7 @@ class GUI:
             win = glfw_utils.glfw_window_hello_imgui()
             glfw.set_window_title(win, self._new_window_title)
             self._new_window_title = None
-        
+
         # show window
         if self._show_window:
             hello_imgui.get_runner_params().app_window_params.hidden = False
@@ -249,14 +251,24 @@ class GUI:
                     imgui.pop_text_wrap_pos()
                     imgui.end_tooltip()
 
-    def _do_data_drag(self, ax_idx):
-        id_string = f"##gaze_data_drag_{ax_idx}"
+    def _do_data_drag(self, ax_idx: int):
+        ax = 'x' if ax_idx==0 else 'y'
+        id_string = f"##gaze_data_drag_{ax}"
         gid = imgui.get_id(id_string)
         imgui.push_id(id_string)
         p = implot.get_plot_mouse_pos()
-        if self._last_mouse_pos[ax_idx] is None or self._last_mouse_pos[ax_idx].x!=p.x:
+        plot_size = implot.get_plot_size()
+        plot_limits = implot.get_plot_limits()
+        invalidate1 = invalidate2 = False
+        if self._last_mouse_pos[ax_idx] is None or self._last_mouse_pos[ax_idx].x!=p.x or \
+           (invalidate1:=(self._plot_size[ax_idx] is None or self._plot_size[ax_idx]!=plot_size)) or \
+           (invalidate2:=(self._plot_limits[ax_idx] is None or self._plot_limits[ax_idx]!=plot_limits)):
             self._last_mouse_pos[ax_idx] = p
-            distance = self._distance_to_gaze_signal(p, ax_idx)
+            self._plot_size[ax_idx] = plot_size
+            self._plot_limits[ax_idx] = plot_limits
+            if invalidate1 or invalidate2:
+                self._gaze_data_plot_pix[ax] = None
+            distance = self._distance_to_gaze_signal(p, ax)
             if distance < 4.*hello_imgui.dpi_window_size_factor():
                 # hovering
                 self._hovered = ax_idx
@@ -296,8 +308,7 @@ class GUI:
             self._gaze_data_offset['y'] = self.gaze_data['y'] + self._offset_xy[1]
         self._gaze_data_plot_pix = {'x': None, 'y': None}
 
-    def _distance_to_gaze_signal(self, pos: implot.Point, ax_idx: int):
-        ax = 'x' if ax_idx==0 else 'y'
+    def _distance_to_gaze_signal(self, pos: implot.Point, ax: str):
         if self._gaze_data_plot_pix[ax] is None:
             self._gaze_data_plot_pix[ax] = np.array([(p.x,p.y) for p in (implot.plot_to_pixels(implot.Point(x,y)) for x,y in zip(self._gaze_data_offset['ts'], self._gaze_data_offset[ax]))])
 
