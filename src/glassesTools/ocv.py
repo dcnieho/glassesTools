@@ -21,13 +21,13 @@ class CameraParams:
                  colmap_camera_dict: dict[str,Any] = None):
 
         # info about camera
-        self.resolution     : np.ndarray = resolution
+        self.resolution     : np.ndarray = resolution.flatten() if resolution is not None else None
         # intrinsics
         self.camera_mtx     : np.ndarray = camera_mtx
-        self.distort_coeffs : np.ndarray = distort_coeffs
+        self.distort_coeffs : np.ndarray = distort_coeffs.flatten() if distort_coeffs is not None else None
         # extrinsics
-        self.rotation_vec   : np.ndarray = rotation_vec
-        self.position       : np.ndarray = position
+        self.rotation_vec   : np.ndarray = rotation_vec.flatten() if rotation_vec is not None else None
+        self.position       : np.ndarray = position.flatten() if position is not None else None
 
         # colmap, for more extensive camera models
         self.colmap_camera: pycolmap.Camera = None
