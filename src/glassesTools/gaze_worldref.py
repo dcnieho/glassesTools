@@ -193,7 +193,7 @@ def _from_head_impl(pose: plane.Pose, gaze: gaze_headref.Gaze, camera_params: oc
         RCam  = cv2.Rodrigues(camera_rotation)[0]
         if camera_position is None:
             camera_position = np.zeros((3,1))
-        RtCam = np.hstack((RCam, camera_position))
+        RtCam = np.hstack((RCam, camera_position.reshape((3,1))))
 
         # project gaze on video to reference plane using camera pose
         gaze_world.gazePosPlane2D_vidPos_ray, gaze_world.gazePosCam_vidPos_ray = \
