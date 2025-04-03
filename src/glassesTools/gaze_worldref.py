@@ -202,7 +202,7 @@ def _from_head_impl(pose: plane.Pose, gaze: gaze_headref.Gaze, camera_params: oc
         # project world-space gaze point (often binocular gaze point) to plane
         if gaze.gaze_pos_3d is not None:
             # transform 3D gaze point from eye tracker space to camera space
-            g3D = np.matmul(RtCam,np.array(np.append(gaze.gaze_pos_3d, 1)).reshape(4,1))
+            g3D = np.matmul(RtCam,np.append(gaze.gaze_pos_3d, 1).reshape(4,1))
 
             # find intersection with plane (NB: pose is in camera reference frame)
             gaze_world.gazePosCamWorld = pose.vector_intersect(g3D)    # default vec origin (0,0,0) is fine because we work from camera's view point
