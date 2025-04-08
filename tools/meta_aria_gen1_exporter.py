@@ -1,5 +1,5 @@
 # this script requires the following python packages:
-# pip install projectaria-tools moviepy==1.0.3 pycolmap ffmpeg-binaries pandas
+# pip install projectaria-tools moviepy==1.0.3 pycolmap ffmpeg-binaries pandas opencv-python-headless
 import os
 import datetime
 import json
