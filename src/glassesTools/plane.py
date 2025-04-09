@@ -79,7 +79,7 @@ class Plane:
 
         # return
         if as_RGB:
-            return self._ref_image_cache[im_size][:,:,[2,1,0]]    # indexing returns a copy
+            return self._ref_image_cache[im_size][:,:,[2,1,0]].copy()
         else:
             # OpenCV's BGR
             return self._ref_image_cache[im_size].copy()
