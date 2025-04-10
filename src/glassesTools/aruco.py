@@ -45,7 +45,7 @@ def get_dict_size(dictionary_id: int) -> int:
     return cv2.aruco.getPredefinedDictionary(dictionary_id).bytesList.shape[0]
 
 def get_marker_image(size: int, m_id: int, ArUco_dict: int, marker_border_bits: int) -> np.ndarray|None:
-    if m_id>get_dict_size(ArUco_dict):
+    if m_id>=get_dict_size(ArUco_dict):
         return None
     marker_image = np.zeros((size, size), dtype=np.uint8)
     return cv2.aruco.generateImageMarker(cv2.aruco.getPredefinedDictionary(ArUco_dict), m_id, size, marker_image, marker_border_bits)
