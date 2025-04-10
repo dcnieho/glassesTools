@@ -7,7 +7,7 @@ import typing
 import math
 import cv2
 
-from .. import drawing as _drawing, marker as _marker, plane as _plane, transforms as _transforms, utils as _utils
+from .. import aruco, drawing as _drawing, marker as _marker, plane as _plane, transforms as _transforms, utils as _utils
 
 from . import config
 from . import default_poster
@@ -89,7 +89,7 @@ def get_DataQualityType_explanation(dq: DataQualityType):
 
 
 class Plane(_plane.Plane):
-    default_aruco_dict_id = cv2.aruco.DICT_4X4_250
+    default_aruco_dict_id = aruco.default_dict
 
     def __init__(self, config_dir: str|pathlib.Path|None, validation_config: dict[str,typing.Any]=None, **kwarg):
         # NB: if config_dir is None, the default config will be used
