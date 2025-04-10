@@ -16,29 +16,41 @@ else:
 dicts_to_str = {getattr(cv2.aruco,k):k for k in ['DICT_4X4_50', 'DICT_4X4_100', 'DICT_4X4_250', 'DICT_4X4_1000', 'DICT_5X5_50', 'DICT_5X5_100', 'DICT_5X5_250', 'DICT_5X5_1000', 'DICT_6X6_50', 'DICT_6X6_100', 'DICT_6X6_250', 'DICT_6X6_1000', 'DICT_7X7_50', 'DICT_7X7_100', 'DICT_7X7_250', 'DICT_7X7_1000', 'DICT_ARUCO_ORIGINAL', 'DICT_APRILTAG_16H5', 'DICT_APRILTAG_25H9', 'DICT_APRILTAG_36H10', 'DICT_APRILTAG_36H11', 'DICT_ARUCO_MIP_36H12']}
 
 # same number means that the dictionaries are the same (i.e. marker 3 is the same for all the dictionaries of the same family), just different number of markers in the dictionary
-dict_families_map = {
-    cv2.aruco.DICT_4X4_50:          1,
-    cv2.aruco.DICT_4X4_100:         1,
-    cv2.aruco.DICT_4X4_250:         1,
-    cv2.aruco.DICT_4X4_1000:        1,
-    cv2.aruco.DICT_5X5_50:          2,
-    cv2.aruco.DICT_5X5_100:         2,
-    cv2.aruco.DICT_5X5_250:         2,
-    cv2.aruco.DICT_5X5_1000:        2,
-    cv2.aruco.DICT_6X6_50:          3,
-    cv2.aruco.DICT_6X6_100:         3,
-    cv2.aruco.DICT_6X6_250:         3,
-    cv2.aruco.DICT_6X6_1000:        3,
-    cv2.aruco.DICT_7X7_50:          4,
-    cv2.aruco.DICT_7X7_100:         4,
-    cv2.aruco.DICT_7X7_250:         4,
-    cv2.aruco.DICT_7X7_1000:        4,
-    cv2.aruco.DICT_ARUCO_ORIGINAL:  5,
-    cv2.aruco.DICT_APRILTAG_16H5:   6,
-    cv2.aruco.DICT_APRILTAG_25H9:   7,
-    cv2.aruco.DICT_APRILTAG_36H10:  8,
-    cv2.aruco.DICT_APRILTAG_36H11:  9,
-    cv2.aruco.DICT_ARUCO_MIP_36H12: 10
+dict_to_family = {
+    cv2.aruco.DICT_4X4_50:          0,
+    cv2.aruco.DICT_4X4_100:         0,
+    cv2.aruco.DICT_4X4_250:         0,
+    cv2.aruco.DICT_4X4_1000:        0,
+    cv2.aruco.DICT_5X5_50:          1,
+    cv2.aruco.DICT_5X5_100:         1,
+    cv2.aruco.DICT_5X5_250:         1,
+    cv2.aruco.DICT_5X5_1000:        1,
+    cv2.aruco.DICT_6X6_50:          2,
+    cv2.aruco.DICT_6X6_100:         2,
+    cv2.aruco.DICT_6X6_250:         2,
+    cv2.aruco.DICT_6X6_1000:        2,
+    cv2.aruco.DICT_7X7_50:          3,
+    cv2.aruco.DICT_7X7_100:         3,
+    cv2.aruco.DICT_7X7_250:         3,
+    cv2.aruco.DICT_7X7_1000:        3,
+    cv2.aruco.DICT_ARUCO_ORIGINAL:  4,
+    cv2.aruco.DICT_APRILTAG_16H5:   5,
+    cv2.aruco.DICT_APRILTAG_25H9:   6,
+    cv2.aruco.DICT_APRILTAG_36H10:  7,
+    cv2.aruco.DICT_APRILTAG_36H11:  8,
+    cv2.aruco.DICT_ARUCO_MIP_36H12: 9
+}
+family_to_str = {
+    0: ('DICT_4X4', True),
+    1: ('DICT_5X5', True),
+    2: ('DICT_6X6', True),
+    3: ('DICT_7X7', True),
+    4: ('DICT_ARUCO_ORIGINAL', False),
+    5: ('DICT_APRILTAG_16H5', False),
+    6: ('DICT_APRILTAG_25H9', False),
+    7: ('DICT_APRILTAG_36H10', False),
+    8: ('DICT_APRILTAG_36H11', False),
+    9: ('DICT_ARUCO_MIP_36H12', False),
 }
 
 def get_dict_size(dictionary_id: int) -> int:
