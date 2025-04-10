@@ -11,6 +11,7 @@ from .. import drawing as _drawing, marker as _marker, plane as _plane, transfor
 
 from . import config
 from . import default_poster
+from . import dynamic
 
 # NB: using pose information requires a calibrated scene camera
 class DataQualityType(enum.Enum):
