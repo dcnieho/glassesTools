@@ -5,7 +5,7 @@ import pathlib
 import typing
 import enum
 
-from . import data_files, drawing, gaze_headref, ocv, plane, transforms, utils
+from . import data_files, drawing, gaze_headref, json, ocv, plane, transforms, utils
 
 class Type(utils.AutoName):
     Scene_Video_Position    = enum.auto()
@@ -13,7 +13,7 @@ class Type(utils.AutoName):
     Left_Eye_Gaze_Vector    = enum.auto()
     Right_Eye_Gaze_Vector   = enum.auto()
     Average_Gaze_Vector     = enum.auto()
-utils.register_type(utils.CustomTypeEntry(Type,'__enum.gaze_worldref.Type__', utils.enum_val_2_str, lambda x: getattr(Type, x.split('.')[-1])))
+json.register_type(json.TypeEntry(Type,'__enum.gaze_worldref.Type__', utils.enum_val_2_str, lambda x: getattr(Type, x.split('.')[-1])))
 
 class Gaze:
     # description of tsv file used for storage

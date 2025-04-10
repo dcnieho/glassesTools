@@ -1,6 +1,6 @@
 from enum import Enum, auto
 
-from . import utils
+from . import json, utils
 
 class Type(Enum):
     Point       = auto()
@@ -12,7 +12,7 @@ class Event(utils.AutoName):
     Sync_ET_Data= auto()    # episode to be used for synchronization of eye tracker data to scene camera (e.g. using VOR)
     Trial       = auto()    # episode for which to map gaze to plane(s): output for files to be provided to user
 events = [x.value for x in Event]
-utils.register_type(utils.CustomTypeEntry(Event,'__enum.Event__', utils.enum_val_2_str, lambda x: getattr(Event, x.split('.')[1])))
+json.register_type(json.TypeEntry(Event,'__enum.Event__', utils.enum_val_2_str, lambda x: getattr(Event, x.split('.')[1])))
 
 type_map = {
     Event.Validate    : Type.Interval,

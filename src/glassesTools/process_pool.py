@@ -1,11 +1,12 @@
 import enum
+import glassesTools.json
 import pebble
 import multiprocessing
 import typing
 import threading
 import dataclasses
 
-from . import utils
+from . import json, utils
 
 ProcessFuture: typing.TypeAlias = pebble.ProcessFuture
 _UserDataT = typing.TypeVar("_UserDataT")
@@ -33,7 +34,7 @@ class State(enum.IntEnum):
     @property
     def displayable_name(self):
         return self.name.replace("_", " ")
-utils.register_type(utils.CustomTypeEntry(State,'__enum.process.State__', utils.enum_val_2_str, lambda x: getattr(State, x.split('.')[1])))
+json.register_type(json.TypeEntry(State,'__enum.process.State__', utils.enum_val_2_str, lambda x: getattr(State, x.split('.')[1])))
 
 
 class ProcessWaiter(object):

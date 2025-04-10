@@ -5,7 +5,8 @@ import bisect
 import pathlib
 import enum
 
-from . import utils
+from . import json
+
 
 class Timestamp:
     def __init__(self, unix_time: int | float, format="%Y-%m-%d %H:%M:%S"):
@@ -21,7 +22,7 @@ class Timestamp:
         else:
             self.display = datetime.datetime.fromtimestamp(unix_time).strftime(self.format)
 
-utils.register_type(utils.CustomTypeEntry(Timestamp,'__Timestamp__',lambda x: x.value, lambda x: Timestamp(x)))
+json.register_type(json.TypeEntry(Timestamp,'__Timestamp__',lambda x: x.value, lambda x: Timestamp(x)))
 
 
 # for reading video timestamp files

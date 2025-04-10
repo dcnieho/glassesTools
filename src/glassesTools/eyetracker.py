@@ -1,6 +1,6 @@
 import enum
 
-from . import utils
+from . import json, utils
 
 class EyeTracker(utils.AutoName):
     AdHawk_MindLink = enum.auto()
@@ -49,4 +49,4 @@ def string_to_enum(device: str) -> EyeTracker:
         raise ValueError(f"The variable 'device' should be a string with one of the following values: {[e.value for e in EyeTracker]}")
 
 
-utils.register_type(utils.CustomTypeEntry(EyeTracker,'__enum.EyeTracker__', utils.enum_val_2_str, lambda x: getattr(EyeTracker, x.split('.')[1])))
+json.register_type(json.TypeEntry(EyeTracker,'__enum.EyeTracker__', utils.enum_val_2_str, lambda x: getattr(EyeTracker, x.split('.')[1])))

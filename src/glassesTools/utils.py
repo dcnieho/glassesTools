@@ -1,7 +1,5 @@
 import enum
-import json
 import pathlib
-import dataclasses
 import typing
 import types
 import numpy as np
@@ -63,33 +61,6 @@ def enum_str_2_val(x: str, enum_cls: E, patches: dict[str,str]=None) -> E:
     if patches is not None and str_val in patches:
         str_val = patches[str_val]
     return getattr(enum_cls, str_val)
-
-
-@dataclasses.dataclass
-class CustomTypeEntry:
-    type        : typing.Type
-    reg_name    : str
-    to_json     : typing.Callable
-    from_json   : typing.Callable
-
-CUSTOM_TYPE_REGISTRY = []
-def register_type(entry: CustomTypeEntry):
-    CUSTOM_TYPE_REGISTRY.append(entry)
-register_type(CustomTypeEntry(pathlib.Path,'pathlib.Path',str,lambda x: pathlib.Path(x)))
-register_type(CustomTypeEntry(set,'builtin.set',list,lambda x: set(x)))
-
-class CustomTypeEncoder(json.JSONEncoder):
-    def default(self, obj):
-        for t in CUSTOM_TYPE_REGISTRY:
-            if isinstance(obj, t.type):
-                return {t.reg_name: t.to_json(obj)}
-        return json.JSONEncoder.default(self, obj)
-
-def json_reconstitute(d):
-    for t in CUSTOM_TYPE_REGISTRY:
-        if t.reg_name in d:
-            return t.from_json(d[t.reg_name])
-    return d
 
 
 def cartesian_product(*arrays):

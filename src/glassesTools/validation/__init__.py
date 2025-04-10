@@ -7,7 +7,7 @@ import typing
 import math
 import cv2
 
-from .. import aruco, drawing as _drawing, marker as _marker, plane as _plane, transforms as _transforms, utils as _utils
+from .. import aruco, drawing as _drawing, json, marker as _marker, plane as _plane, transforms as _transforms, utils as _utils
 
 from . import config
 from . import default_poster
@@ -26,7 +26,7 @@ class DataQualityType(enum.Enum):
     # so this gets serialized in a user-friendly way by pandas..
     def __str__(self):
         return self.name
-_utils.register_type(_utils.CustomTypeEntry(DataQualityType, 'glassesValidator.DataQualityType', _utils.enum_val_2_str, lambda x: _utils.enum_str_2_val(x, DataQualityType)))
+json.register_type(json.TypeEntry(DataQualityType, 'glassesValidator.DataQualityType', _utils.enum_val_2_str, lambda x: _utils.enum_str_2_val(x, DataQualityType)))
 
 def get_DataQualityType_explanation(dq: DataQualityType):
     ler_name =  "Left eye ray + pose"
