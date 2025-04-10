@@ -44,16 +44,16 @@ dict_families_map = {
 def get_dict_size(dictionary_id: int) -> int:
     return cv2.aruco.getPredefinedDictionary(dictionary_id).bytesList.shape[0]
 
-def get_marker_image(size: int, m_id: int, ArUco_dict: int, marker_border_bits: int) -> np.ndarray|None:
-    if m_id>=get_dict_size(ArUco_dict):
+def get_marker_image(size: int, m_id: int, ArUco_dict_id: int, marker_border_bits: int) -> np.ndarray|None:
+    if m_id>=get_dict_size(ArUco_dict_id):
         return None
     marker_image = np.zeros((size, size), dtype=np.uint8)
-    return cv2.aruco.generateImageMarker(cv2.aruco.getPredefinedDictionary(ArUco_dict), m_id, size, marker_image, marker_border_bits)
+    return cv2.aruco.generateImageMarker(cv2.aruco.getPredefinedDictionary(ArUco_dict_id), m_id, size, marker_image, marker_border_bits)
 
-def deploy_marker_images(output_dir: str|pathlib.Path, size: int, ArUco_dict: int=cv2.aruco.DICT_4X4_250, marker_border_bits: int=1):
+def deploy_marker_images(output_dir: str|pathlib.Path, size: int, ArUco_dict_id: int=cv2.aruco.DICT_4X4_250, marker_border_bits: int=1):
     # Generate the markers
-    for m_id in range(get_dict_size(ArUco_dict)):
-        marker_image = get_marker_image(size, m_id, ArUco_dict, marker_border_bits)
+    for m_id in range(get_dict_size(ArUco_dict_id)):
+        marker_image = get_marker_image(size, m_id, ArUco_dict_id, marker_border_bits)
         if marker_image is not None:
             cv2.imwrite(output_dir / f"{m_id}.png", marker_image)
 
@@ -294,7 +294,7 @@ class PoseEstimator:
         self._detectors[plane].set_intrinsics(self.cam_params)
 
         # check if we can do an optimization of detecting the markers only once for multiple planes (if it makes sense because we have more than one plane)
-        aruco_dicts = [self.plane_setups[p]['aruco_dict'] for p in self.planes if 'aruco_dict' in self.plane_setups[p]]
+        aruco_dicts = [self.plane_setups[p]['aruco_dict_id'] for p in self.planes if 'aruco_dict_id' in self.plane_setups[p]]
         self._single_detect_pass = len(self.planes)>1 and len(aruco_dicts)==len(self.planes) and len(set(aruco_dicts))==1 and all([self.plane_setups[self.planes[0]]['aruco_params']==self.plane_setups[p]['aruco_params'] for p in self.planes])
 
     def add_individual_marker(self, marker_id: int, marker_setup):

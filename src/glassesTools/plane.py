@@ -19,7 +19,7 @@ class Plane:
                  marker_size            : float,                                                    # in "unit" units
                  plane_size             : Coordinate,                                               # in "unit" units
 
-                 aruco_dict                                             = cv2.aruco.DICT_4X4_250,
+                 aruco_dict_id                                          = cv2.aruco.DICT_4X4_250,
                  marker_border_bits                                     = 1,
                  marker_pos_scale_fac                                   = 1.,                       # scale factor for marker positions in the markers input argument
                  unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
@@ -37,7 +37,8 @@ class Plane:
         self._origin            : Coordinate                = Coordinate(0., 0.)
 
         # marker specs
-        self.aruco_dict                                     = cv2.aruco.getPredefinedDictionary(aruco_dict)
+        self.aruco_dict_id                                  = aruco_dict_id
+        self.aruco_dict                                     = cv2.aruco.getPredefinedDictionary(self.aruco_dict_id)
         self.marker_border_bits                             = marker_border_bits
         self.unit                                           = unit
 
