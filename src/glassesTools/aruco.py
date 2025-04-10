@@ -13,17 +13,49 @@ else:
         @property
         def GUI(self) -> Any: ...
 
+dicts_to_str = {getattr(cv2.aruco,k):k for k in ['DICT_4X4_50', 'DICT_4X4_100', 'DICT_4X4_250', 'DICT_4X4_1000', 'DICT_5X5_50', 'DICT_5X5_100', 'DICT_5X5_250', 'DICT_5X5_1000', 'DICT_6X6_50', 'DICT_6X6_100', 'DICT_6X6_250', 'DICT_6X6_1000', 'DICT_7X7_50', 'DICT_7X7_100', 'DICT_7X7_250', 'DICT_7X7_1000', 'DICT_ARUCO_ORIGINAL', 'DICT_APRILTAG_16H5', 'DICT_APRILTAG_25H9', 'DICT_APRILTAG_36H10', 'DICT_APRILTAG_36H11', 'DICT_ARUCO_MIP_36H12']}
 
-def deploy_marker_images(output_dir: str|pathlib.Path, size: int, ArUco_dict: int=cv2.aruco.DICT_4X4_250, markerBorderBits: int=1):
-    # Load the predefined dictionary
-    dictionary = cv2.aruco.getPredefinedDictionary(ArUco_dict)
+# same number means that the dictionaries are the same (i.e. marker 3 is the same for all the dictionaries of the same family), just different number of markers in the dictionary
+dict_families_map = {
+    cv2.aruco.DICT_4X4_50:          1,
+    cv2.aruco.DICT_4X4_100:         1,
+    cv2.aruco.DICT_4X4_250:         1,
+    cv2.aruco.DICT_4X4_1000:        1,
+    cv2.aruco.DICT_5X5_50:          2,
+    cv2.aruco.DICT_5X5_100:         2,
+    cv2.aruco.DICT_5X5_250:         2,
+    cv2.aruco.DICT_5X5_1000:        2,
+    cv2.aruco.DICT_6X6_50:          3,
+    cv2.aruco.DICT_6X6_100:         3,
+    cv2.aruco.DICT_6X6_250:         3,
+    cv2.aruco.DICT_6X6_1000:        3,
+    cv2.aruco.DICT_7X7_50:          4,
+    cv2.aruco.DICT_7X7_100:         4,
+    cv2.aruco.DICT_7X7_250:         4,
+    cv2.aruco.DICT_7X7_1000:        4,
+    cv2.aruco.DICT_ARUCO_ORIGINAL:  5,
+    cv2.aruco.DICT_APRILTAG_16H5:   6,
+    cv2.aruco.DICT_APRILTAG_25H9:   7,
+    cv2.aruco.DICT_APRILTAG_36H10:  8,
+    cv2.aruco.DICT_APRILTAG_36H11:  9,
+    cv2.aruco.DICT_ARUCO_MIP_36H12: 10
+}
 
+def get_dict_size(dictionary_id: int) -> int:
+    return cv2.aruco.getPredefinedDictionary(dictionary_id).bytesList.shape[0]
+
+def get_marker_image(size: int, m_id: int, ArUco_dict: int, marker_border_bits: int) -> np.ndarray|None:
+    if m_id>get_dict_size(ArUco_dict):
+        return None
+    marker_image = np.zeros((size, size), dtype=np.uint8)
+    return cv2.aruco.generateImageMarker(cv2.aruco.getPredefinedDictionary(ArUco_dict), m_id, size, marker_image, marker_border_bits)
+
+def deploy_marker_images(output_dir: str|pathlib.Path, size: int, ArUco_dict: int=cv2.aruco.DICT_4X4_250, marker_border_bits: int=1):
     # Generate the markers
-    for i in range(dictionary.bytesList.shape[0]):
-        markerImage = np.zeros((size, size), dtype=np.uint8)
-        markerImage = cv2.aruco.generateImageMarker(dictionary, i, size, markerImage, markerBorderBits)
-
-        cv2.imwrite(output_dir / f"{i}.png", markerImage)
+    for m_id in range(get_dict_size(ArUco_dict)):
+        marker_image = get_marker_image(size, m_id, ArUco_dict, marker_border_bits)
+        if marker_image is not None:
+            cv2.imwrite(output_dir / f"{m_id}.png", marker_image)
 
 class ArUcoDetector():
     def __init__(self, ArUco_dict: cv2.aruco.Dictionary, params: dict[str]):
