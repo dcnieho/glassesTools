@@ -31,6 +31,7 @@ class Plane:
         self.marker_size                                    = marker_size
         # marker positions
         self.markers            : dict[int,marker.Marker]   = {}
+        self._all_marker_ids    : list[int]                 = []
         self.plane_size                                     = plane_size
         self.bbox               : list[float]               = [0., 0., self.plane_size.x, self.plane_size.y]
         self._origin            : Coordinate                = Coordinate(0., 0.)
@@ -103,6 +104,9 @@ class Plane:
         if marker_pos is None:
             raise RuntimeError(f"No markers could be read from the file {markers}, check it exists and contains markers")
 
+        # keep track of all IDs so we can check for duplicates
+        self._all_marker_ids = marker_pos.index.to_list()
+
         # turn into marker objects
         marker_pos.x *= marker_pos_scale_fac
         marker_pos.y *= marker_pos_scale_fac
@@ -120,6 +124,9 @@ class Plane:
             bl = c + np.matmul(R, np.array([-markerHalfSizeMm,  markerHalfSizeMm]))
 
             self.markers[idx] = marker.Marker(idx, c, corners=[tl, tr, br, bl], rot=rot)
+
+    def get_marker_IDs(self) -> dict[str,list[int]]:
+        return {'plane': self._all_marker_ids}
 
     def get_aruco_board(self) -> cv2.aruco.Board:
         from . import aruco
