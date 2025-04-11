@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import pathlib
-from typing import Any, Callable
+from typing import Any, Callable, TypedDict
 from enum import Enum, auto
 
 from . import annotation, drawing, intervals, marker, ocv, plane, timestamps, transforms, _has_GUI
@@ -59,6 +59,10 @@ class PlaneSetup(TypedDict):
     plane                   : plane.Plane
     aruco_detector_params   : dict[str,Any]
     min_num_markers         : int
+class MarkerSetup(TypedDict):
+    aruco_detector_params   : dict[str,Any]
+    detect_only             : bool
+    size                    : float
 
 def get_dict_size(dictionary_id: int) -> int:
     return cv2.aruco.getPredefinedDictionary(dictionary_id).bytesList.shape[0]
@@ -271,7 +275,7 @@ class PoseEstimator:
 
         self._cache: tuple[Status, dict[str, plane.Pose], dict[str, marker.Pose], dict[str, list[int, Any]], tuple[np.ndarray, int, float]] = None  # self._cache[4][1] is frame number
 
-        self.individual_markers                 : dict[int, dict[str]]  = {}
+        self.individual_markers                 : dict[int, MarkerSetup]= {}
         self._individual_marker_object_points   : dict[int, np.ndarray] = {}
         self.proc_individual_markers_all_frames                         = False
 
@@ -316,7 +320,7 @@ class PoseEstimator:
         aruco_dicts = [self.plane_setups[p]['aruco_dict_id'] for p in self.planes if 'aruco_dict_id' in self.plane_setups[p]]
         self._single_detect_pass = len(self.planes)>1 and len(aruco_dicts)==len(self.planes) and len(set(aruco_dicts))==1 and all([self.plane_setups[self.planes[0]]['aruco_params']==self.plane_setups[p]['aruco_params'] for p in self.planes])
 
-    def add_individual_marker(self, marker_id: int, marker_setup):
+    def add_individual_marker(self, marker_id: int, marker_setup: MarkerSetup):
         if not self._single_detect_pass and len(self.planes)!=1:
             raise ValueError("Detecting and reporting individual markers is only supported when there is a single plane, or all planes have identical ArUco setup")
         if marker_id in self.individual_markers:
