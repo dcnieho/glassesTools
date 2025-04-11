@@ -339,9 +339,9 @@ class PoseEstimator:
         self.extra_proc_visualizer[name]= visualizer
 
     def attach_gui(self, gui: video_player.GUI, episodes: dict[annotation.Event, list[int]] = None, window_id: int = None):
-        self.gui                    = gui
-        self.has_gui                = self.gui is not None
-        self.do_visualize           = self.has_gui
+        self.gui            = gui
+        self.has_gui        = self.gui is not None
+        self.do_visualize   = self.has_gui
 
         if self.has_gui:
             self.gui.set_show_timeline(True, self.video_ts, episodes, window_id)
@@ -351,7 +351,7 @@ class PoseEstimator:
         self.allow_early_exit = allow_early_exit
 
     def set_visualize_on_frame(self, do_visualize: bool):
-        self.do_visualize           = do_visualize
+        self.do_visualize = do_visualize
 
     def set_do_report_frames(self, do_report_frames: bool):
         self._do_report_frames = do_report_frames
