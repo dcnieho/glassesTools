@@ -144,6 +144,14 @@ class Plane:
             board_corner_points.append(marker_corner_points)
         return aruco.create_board(board_corner_points, ids, self.aruco_dict)
 
+    def get_plane_setup(self):
+        from . import aruco
+        return aruco.PlaneSetup(plane = self,
+                                aruco_detector_params = {
+                                    'markerBorderBits': p_def.marker_border_bits
+                                },
+                                min_num_markers = p_def.min_num_markers)
+
     def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
         # get image with markers
         bbox_extents = [self.bbox[2]-self.bbox[0], math.fabs(self.bbox[3]-self.bbox[1])]  # math.fabs to deal with bboxes where (-,-) is bottom left

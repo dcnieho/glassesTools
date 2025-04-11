@@ -55,6 +55,11 @@ family_to_str = {
     9: ('DICT_ARUCO_MIP_36H12', False),
 }
 
+class PlaneSetup(TypedDict):
+    plane                   : plane.Plane
+    aruco_detector_params   : dict[str,Any]
+    min_num_markers         : int
+
 def get_dict_size(dictionary_id: int) -> int:
     return cv2.aruco.getPredefinedDictionary(dictionary_id).bytesList.shape[0]
 
@@ -256,7 +261,7 @@ class PoseEstimator:
         self.cam_params = camera_calibration_file if isinstance(camera_calibration_file,ocv.CameraParams) else ocv.CameraParams.read_from_file(camera_calibration_file)
 
         self.planes                 : list[str]                             = []
-        self.plane_setups           : dict[str, dict[str]]                  = {}
+        self.plane_setups           : dict[str, PlaneSetup]                 = {}
         self.plane_proc_intervals   : dict[str, list[int]|list[list[int]]]  = {}
         self._aruco_boards          : dict[str, cv2.aruco.Board]            = {}
         self._all_aruco_ids         : set[int]                              = set()
@@ -294,7 +299,7 @@ class PoseEstimator:
         if self.has_gui:
             self.gui.stop()
 
-    def add_plane(self, plane: str, planes_setup: dict[str], processing_intervals: list[int]|list[list[int]] = None):
+    def add_plane(self, plane: str, planes_setup: PlaneSetup, processing_intervals: list[int]|list[list[int]] = None):
         if plane in self.planes:
             raise ValueError(f'Cannot register the plane "{plane}", it is already registered')
         self.planes.append(plane)
