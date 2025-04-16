@@ -53,6 +53,9 @@ class Pose:
         self.R_vec      : np.ndarray  = R_vec
         self.T_vec      : np.ndarray  = T_vec
 
+    def pose_successful(self):
+        return self.R_vec is not None and self.T_vec is not None
+
     def draw_frame_axis(self, frame, camera_params: ocv.CameraParams, arm_length, sub_pixel_fac = 8):
         if not camera_params.has_intrinsics():
             return
