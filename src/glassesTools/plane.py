@@ -152,9 +152,9 @@ class Plane:
         from . import aruco
         return aruco.PlaneSetup(plane = self,
                                 aruco_detector_params = {
-                                    'markerBorderBits': p_def.marker_border_bits
+                                    'markerBorderBits': self.marker_border_bits
                                 },
-                                min_num_markers = p_def.min_num_markers)
+                                min_num_markers = self.min_num_markers)
 
     def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
         # get image with markers
