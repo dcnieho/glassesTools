@@ -25,7 +25,8 @@ class Plane:
                  unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
                  package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources
                  ref_image_store_path   : str|pathlib.Path              = None,
-                 ref_image_size                                         = 1920                      # largest dimension
+                 ref_image_size         : int                           = 1920,                     # largest dimension
+                 min_num_markers        : int                           = 3                         # minimum number of markers for gaze to be mapped to this plane
                  ):
 
         self.marker_size                                    = marker_size
@@ -41,6 +42,9 @@ class Plane:
         self.aruco_dict                                     = cv2.aruco.getPredefinedDictionary(self.aruco_dict_id)
         self.marker_border_bits                             = marker_border_bits
         self.unit                                           = unit
+
+        # processing specs
+        self.min_num_markers                                = min_num_markers
 
         # prep markers
         self._load_markers(markers, marker_pos_scale_fac, package_to_read_from)
