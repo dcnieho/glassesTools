@@ -43,7 +43,9 @@ class Recording:
         path = pathlib.Path(path)
         if path.is_dir():
             path /= Recording.default_json_file_name
-        return Recording(**json.load(path), working_directory=path.parent)
+        kwds = json.load(path)
+        kwds['eye_tracker'] = EyeTracker(kwds['eye_tracker'])
+        return Recording(**kwds, working_directory=path.parent)
 
 
     def get_scene_video_path(self) -> pathlib.Path:
