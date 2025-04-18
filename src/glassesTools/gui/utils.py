@@ -150,10 +150,11 @@ def popup(label: str, popup_content: Callable, buttons: dict[str, Callable]=None
                 else:
                     callback = callbacks
                     disabled = False
-                activate_button = not disabled and button_keymap is not None and i in button_keymap and imgui.is_key_released(button_keymap[i])
                 if disabled:
                     imgui.begin_disabled()
-                if imgui.button(label) or activate_button:
+                elif button_keymap is not None and i in button_keymap:
+                    imgui.set_next_item_shortcut(button_keymap[i], flags=imgui.InputFlags_.route_focused)
+                if imgui.button(label):
                     if callback:
                         callback()
                     imgui.close_current_popup()
