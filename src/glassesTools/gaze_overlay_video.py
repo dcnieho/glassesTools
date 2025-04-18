@@ -164,6 +164,9 @@ class VideoMaker:
         self._vid_writer.write_frame(img=img, pts=frame_idx/self._fps)
 
     def finish_video(self):
+        # nothing more to show, so clean up GUI if any
+        if self.has_gui:
+            self.gui.stop()
         self._vid_writer.close()
         # if ffmpeg is on path, add audio to scene video
         if (shutil.which('ffmpeg') is not None) and (shutil.which('ffprobe') is not None):
