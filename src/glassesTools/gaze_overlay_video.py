@@ -120,9 +120,12 @@ class VideoMaker:
         if self.has_gui:
             requests = self.gui.get_requests()
             for r,_ in requests:
-                if r=='exit':   # only request we need to handle
+                if r=='exit':   # only requests we need to handle
                     self._cache = Status.Finished, (None, None, None)
                     return self._cache
+                if r=='close':
+                    self.has_gui = False
+                    self.gui.stop()
 
         # check we're in a current interval, else skip processing
         # NB: have to spool through like this, setting specific frame to read
