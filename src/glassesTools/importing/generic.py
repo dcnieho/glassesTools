@@ -56,7 +56,7 @@ def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=N
             framets = pd.read_csv(output_dir/naming.frame_timestamps_fname, delimiter='\t', index_col='frame_idx')
         gt0 = gaze[min(gaze.keys())][0].timestamp_ori
         gte = gaze[max(gaze.keys())][-1].timestamp_ori
-        rec_info.duration = round(max(gte-gt0,framets.timestamp.iat[-1]))
+        rec_info.duration = float(round(max(gte-gt0,framets.timestamp.iat[-1])))
 
     _store_data(output_dir, None, frameTimestamps, rec_info, source_dir_as_relative_path=source_dir_as_relative_path)
 
