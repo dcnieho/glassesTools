@@ -5,7 +5,7 @@ import math
 import warnings
 
 from . import DataQualityType
-from .. import gaze_worldref, naming, plane, transforms
+from .. import gaze_worldref, naming, pose, transforms
 
 def _get_fields_for_dq_type(dq_type: DataQualityType) -> list[str|None]|None:
     match dq_type:
@@ -35,7 +35,7 @@ def _get_fields_for_dq_type(dq_type: DataQualityType) -> list[str|None]|None:
 
 def compute(
         gazes: str|pathlib.Path|dict[int, list[gaze_worldref.Gaze]],
-        poses: str|pathlib.Path|dict[int, plane.Pose],
+        poses: str|pathlib.Path|dict[int, pose.Pose],
         marker_intervals: str|pathlib.Path|pd.DataFrame,
         validation_intervals: list[list[int]],
         targets: dict[int, np.ndarray],
@@ -56,7 +56,7 @@ def compute(
     if not isinstance(gazes, dict):
         gazes = gaze_worldref.read_dict_from_file(gazes,validation_intervals)
     if not isinstance(poses, dict):
-        poses = plane.read_dict_from_file(poses,validation_intervals)
+        poses = pose.read_dict_from_file(poses,validation_intervals)
     # prep targets
     targets_for_homography = {t_id: np.append(targets[t_id][0:2], distance_mm_for_homography) for t_id in targets}
 
