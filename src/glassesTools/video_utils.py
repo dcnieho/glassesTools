@@ -193,13 +193,13 @@ def get_video_duration(vid_file: pathlib.Path) -> float:
     # get duration of video file in seconds
     if is_isobmmf(vid_file):
         frame_ts = _get_frame_timestamps_from_video(vid_file)
-        return frame_ts[-1]-frame_ts[0]
+        return float(frame_ts[-1]-frame_ts[0])
     else:
         vid = cv2.VideoCapture(vid_file)
         fps = vid.get(cv2.CAP_PROP_FPS)
         totalNoFrames = vid.get(cv2.CAP_PROP_FRAME_COUNT)
         vid.release()
-        return totalNoFrames / fps * 1000
+        return float(totalNoFrames / fps * 1000)
 
 
 def timestamps_to_frame_number(ts,frame_timestamps,mode='nearest',trim=False):
