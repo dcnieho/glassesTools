@@ -84,7 +84,8 @@ class VideoMaker:
 
     def set_vid_pos_look(self, color: tuple[int, int, int]=None, radius: int=None, thickness: int=None):
         if color is not None:
-            self.vid_pos_color = color
+            # provided colors are in RGB, internally we store as BGR
+            self.vid_pos_color = color[::-1]
         if radius is not None:
             self.vid_pos_radius = radius
         if thickness is not None:
@@ -92,7 +93,8 @@ class VideoMaker:
 
     def set_world_pos_look(self, color: tuple[int, int, int]=None, radius: int=None, thickness: int=None):
         if color is not None:
-            self.world_pos_color = color
+            # provided colors are in RGB, internally we store as BGR
+            self.world_pos_color = color[::-1]
         if radius is not None:
             self.world_pos_radius = radius
         if thickness is not None:
