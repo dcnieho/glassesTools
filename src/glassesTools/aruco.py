@@ -116,6 +116,10 @@ class Detector:
     def add_plane(self, name: str, setup: PlaneSetup):
         self._check_dict(setup['plane'].aruco_dict_id, 'plane')
         self.planes[name] = setup
+        if 'aruco_detector_params' in self.planes[name] and self.planes[name]['aruco_detector_params']:
+            self._update_parameters('detector', self.planes[name]['aruco_detector_params'])
+        if 'aruco_refine_params' in self.planes[name] and self.planes[name]['aruco_refine_params']:
+            self._update_parameters('refine'  , self.planes[name]['aruco_refine_params'])
         self._boards[name]= self.planes[name]['plane'].get_aruco_board()
 
         markers = self.planes[name]['plane'].get_marker_IDs()
@@ -127,6 +131,8 @@ class Detector:
     def add_individual_marker(self, marker_id: int, aruco_dict_id: int, setup: MarkerSetup):
         self._check_dict(aruco_dict_id, 'individual marker')
         self.individual_markers[marker_id] = setup
+        if 'aruco_detector_params' in self.individual_markers[marker_id] and self.individual_markers[marker_id]['aruco_detector_params']:
+            self._update_parameters('detector', self.individual_markers[marker_id]['aruco_detector_params'])
         self._all_markers.add(marker_id)
         self._individual_marker_ids.add(marker_id)
         # get marker points in world
@@ -144,24 +150,28 @@ class Detector:
         if self._is_family:
             family = dict_to_family[dict_id]
             if family!=self._family:
-                raise ValueError(f'The dictionary for this new {what}, {dict_to_str[dict_id]}, is not part of the family ({family_to_str[family]}) used for this detector. Use dictionary {dict_to_str[self.dictionary_id]} or smaller.')
+                raise ValueError(f'The dictionary for this new {what}, {dict_to_str[dict_id]}, is not part of the family ({family_to_str[family][0]}) used for this detector. Use dictionary {dict_to_str[self.dictionary_id]} or smaller.')
             elif dict_id>self.dictionary_id:
                 raise ValueError(f'The dictionary for this new {what}, {dict_to_str[dict_id]}, contains more markers than the dictionary used for this detector ({dict_to_str[self.dictionary_id]}). Use a dictionary with more markers when creating this detector.')
         elif dict_id!=self.dictionary_id:
             raise ValueError(f'The dictionary for this new {what}, {dict_to_str[dict_id]}, does not match the dictionary used for this detector ({dict_to_str[self.dictionary_id]}).')
 
     def _update_parameters(self, which: str, new_params: dict):
-        if which=='d':
+        if which=='detector':
             param_dict = self._user_detector_params
             cls = cv2.aruco.DetectorParameters
-        else:
+        elif 'refine':
             param_dict = self._user_refine_params
             cls = cv2.aruco.RefineParameters
+        else:
+            raise ValueError(f'parameter type "{which}" not understood')
         for p in new_params:
             if not hasattr(cls, p):
                 raise AttributeError(f'{p} is not a valid parameter for cv2.aruco.{cls.__name__}')
             if p in param_dict and new_params[p]!=param_dict[p]:
-                raise ValueError(f'You have already set the parameter {p} to {param_dict[p]} and are now trying to set it to {new_params[p]}. Resolve this conflict.')
+                fam_str,is_family = family_to_str[dict_to_family[self.dictionary_id]]
+                dict_str = f'{fam_str} family' if is_family else f'{dict_to_str[self.dictionary_id]} dictionary'
+                raise ValueError(f'You have already set the parameter {p} to {param_dict[p]} and are now trying to set it to {new_params[p]}, in the detector for the {dict_str}. Resolve this conflict by checking this setting for all planes and individual markers using the {dict_str}.')
             param_dict[p] = new_params[p]
 
     def create_detector(self):
