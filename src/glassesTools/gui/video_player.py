@@ -18,7 +18,8 @@ class Action(Enum):
     Back_Frame      = auto()
     Forward_Frame   = auto()
     Pause           = auto()
-    Quit            = auto()
+    Close           = auto()
+    Quit            = auto()    # difference between Close and Quit: Quit requests stopping the whole process, Close only to remove the GUI but keep the process running
     Annotate_Make   = auto()
     Annotate_Delete = auto()
 
@@ -29,6 +30,7 @@ shortcut_key_map = {
     Action.Back_Frame       : imgui.Key.j,
     Action.Forward_Frame    : imgui.Key.k,
     Action.Pause            : imgui.Key.space,
+    Action.Close            : imgui.Key.enter,
     Action.Quit             : imgui.Key.enter,
     Action.Annotate_Delete  : imgui.Key.d
 }
@@ -39,6 +41,7 @@ action_lbl_map: dict[Action, str|tuple[str,str]] = {
     Action.Back_Frame       : ifa6.ICON_FA_BACKWARD_STEP,
     Action.Forward_Frame    : ifa6.ICON_FA_FORWARD_STEP,
     Action.Pause            : (ifa6.ICON_FA_PLAY, ifa6.ICON_FA_PAUSE),  # (no_playing, playing)
+    Action.Close            : "Close GUI",
     Action.Quit             : "Done",
     Action.Annotate_Delete  : ifa6.ICON_FA_TRASH_CAN
 }
@@ -49,6 +52,7 @@ action_tooltip_map = {
     Action.Back_Frame       : "Back 1 frame (with shift 10 frames)",
     Action.Forward_Frame    : "Forward 1 frame (with shift 10 frames)",
     Action.Pause            : "Pause or resume playback",
+    Action.Close            : "Close GUI (keep process running)",
     Action.Quit             : "Done",
     Action.Annotate_Delete  : "Delete annotation"
 }
@@ -110,6 +114,7 @@ class GUI:
         self._annotations_frame        : dict[annotation.Event, list[int]] = None
 
         self._interruptible = True
+        self._detachable = False
         self._allow_pause = False
         self._allow_seek = False
         self._allow_annotate: set[annotation.Event] = set()
@@ -186,6 +191,9 @@ class GUI:
     def set_interruptible(self, interruptible: bool):
         self._interruptible = interruptible
         self._add_remove_button(self._interruptible, Action.Quit)
+    def set_detachable(self, detachable: bool):
+        self._detachable = detachable
+        self._add_remove_button(self._detachable, Action.Close)
     def set_allow_pause(self, allow_pause: bool):
         self._allow_pause = allow_pause
         self._add_remove_button(self._allow_pause, Action.Pause)
@@ -406,7 +414,9 @@ class GUI:
         self._should_exit = False
 
         def close_callback(window: glfw._GLFWwindow):
-            if self._interruptible:
+            if self._detachable:
+                self._requests.append(('close',True))
+            elif self._interruptible:
                 self._requests.append(('exit',True))
             else:
                 glfw.set_window_should_close(window, False)
@@ -590,12 +600,15 @@ class GUI:
         if self._allow_seek:
             buttons.append(self._buttons[Action.Forward_Frame])
             buttons.append(self._buttons[Action.Forward_Time])
-        if self._interruptible:
+        if self._interruptible or self._detachable:
             if self._allow_pause or self._allow_seek:
                 buttons.extend([None, None])
-            buttons.append(self._buttons[Action.Quit])
+            if self._interruptible:
+                buttons.append(self._buttons[Action.Quit])
+            if self._detachable:
+                buttons.append(self._buttons[Action.Close])
         if self._allow_annotate and self._has_timeline(w) and self._annotate_shortcut_key_map:
-            if self._allow_pause or self._allow_seek or self._interruptible:
+            if self._allow_pause or self._allow_seek or self._interruptible or self._detachable:
                 buttons.extend([None, None])
             buttons.append(self._buttons[Action.Annotate_Delete])
             annotation_colors = self._window_timeline[w].get_annotation_colors()
@@ -749,6 +762,8 @@ class GUI:
                             self._requests.append(('delta_frame',  10 if imgui.is_key_down(imgui.Key.mod_shift) else  1))
                         case Action.Forward_Time:
                             self._requests.append(('delta_time',  10. if imgui.is_key_down(imgui.Key.mod_shift) else  1.))
+                        case Action.Close:
+                            self._requests.append(('close',None))
                         case Action.Quit:
                             self._requests.append(('exit',None))
                         case Action.Annotate_Make:
