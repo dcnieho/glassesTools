@@ -282,7 +282,7 @@ class Detector:
         # draw detected markers on the frame
         if plane_marker_color is not None:
             for p in detect_tuple[0]:
-                if not detect_tuple[0][p] or not 'ids' in detect_tuple[0][p] or len(detect_tuple[0][p]['ids'])==0:
+                if not detect_tuple[0][p] or 'ids' not in detect_tuple[0][p] or len(detect_tuple[0][p]['ids'])==0:
                     continue
                 if recovered_plane_marker_color is not None and detect_tuple[0][p]['recovered_ids'] is not None and len(detect_tuple[0][p]['recovered_ids'])>0:
                     special_highlight = [detect_tuple[0][p]['recovered_ids'],recovered_plane_marker_color]
@@ -428,7 +428,7 @@ class Manager:
         return self._detectors[aruco_dict_id].get_individual_marker_points(key[1], detect_tuple)
 
     def _get_detector_cache(self, aruco_dict_id: int, frame_idx: int, frame: np.ndarray, camera_parameters: ocv.CameraParams):
-        if not aruco_dict_id in self._det_cache or self._det_cache[aruco_dict_id][0]!=frame_idx:
+        if aruco_dict_id not in self._det_cache or self._det_cache[aruco_dict_id][0]!=frame_idx:
             if frame is None:
                 return None
             detect_tuple = self._detectors[aruco_dict_id].detect_markers(frame, camera_parameters)
