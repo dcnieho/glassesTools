@@ -138,7 +138,7 @@ class Detector:
         self._all_markers.add(marker_id)
         self._individual_marker_ids.add(marker_id)
         # get marker points in world
-        marker_size = self.individual_markers[marker_id]['size']
+        marker_size = self.individual_markers[marker_id].get('size',None) if not self.individual_markers[marker_id].get('detect_only',False) else None
         if not marker_size or marker_size<0.:
             marker_points = None
         else:
