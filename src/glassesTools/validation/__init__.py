@@ -6,6 +6,7 @@ import pathlib
 import typing
 import math
 import cv2
+import pandas as pd
 
 from .. import aruco, drawing as _drawing, json, marker as _marker, plane as _plane, transforms as _transforms, utils as _utils
 
@@ -91,7 +92,7 @@ def get_DataQualityType_explanation(dq: DataQualityType):
 class Plane(_plane.Plane):
     default_aruco_dict_id = aruco.default_dict
 
-    def __init__(self, config_dir: str|pathlib.Path|None, validation_config: dict[str,typing.Any]=None, **kwarg):
+    def __init__(self, config_dir: str|pathlib.Path|None, validation_config: dict[str,typing.Any]=None, is_dynamic=False, **kwarg):
         # NB: if config_dir is None, the default config will be used
 
         if config_dir is not None:
@@ -113,8 +114,9 @@ class Plane(_plane.Plane):
         plane_size = _plane.Coordinate(self.config['gridCols']*self.cell_size_mm, self.config['gridRows']*self.cell_size_mm)
 
         # get targets first, so that they can be drawn on the reference image
-        self.targets: dict[int,_marker.Marker] = {}
-        origin = self._get_targets(config_dir, self.config)
+        self.targets: dict[int,_marker.Marker]          = {}
+        self.dynamic_markers: dict[int, tuple[int,int]] = {}   # from marker ID to [target ID, marker_N column] (latter for good reporting)
+        origin = self._get_targets(config_dir, self.config, is_dynamic)
 
         # call base class
         markers = config.get_markers(config_dir, self.config['markerPosFile'])
@@ -132,7 +134,7 @@ class Plane(_plane.Plane):
             self.targets[i].shift(-np.array(origin))
         super(Plane, self).set_origin(origin)
 
-    def _get_targets(self, config_dir, validationSetup) -> _plane.Coordinate:
+    def _get_targets(self, config_dir, validationSetup, is_dynamic) -> _plane.Coordinate:
         """ poster space: (0,0) is origin (might be center target), (-,-) bottom left """
 
         # read in target positions
@@ -140,10 +142,22 @@ class Plane(_plane.Plane):
         if targets is not None:
             targets['center'] = list(targets[['x','y']].values)
             targets['center'] *= self.cell_size_mm
+            if is_dynamic:
+                # split of columns indicating markers that signal appearance of a target
+                markers = pd.concat([targets.pop(c) for c in targets.columns if c.startswith('marker_')], axis=1)
             targets = targets.drop([x for x in targets.columns if x not in ('center','color')], axis=1)
             self.targets = {idx:_marker.Marker(idx,**kwargs) for idx,kwargs in zip(targets.index.values,targets.to_dict(orient='records'))}
             origin = _plane.Coordinate(*targets.loc[validationSetup['centerTarget']].center.copy())  # NB: need origin in scaled space
+            # load with dynamic markers, if any
+            if is_dynamic:
+                marker_columns = {c:int(c.removeprefix('marker_')) for c in markers}
+                def _store_markers(r: pd.Series):
+                    for c in marker_columns:
+                        self.dynamic_markers[int(r[c])] = (int(r.name), marker_columns[c])
+                markers.apply(_store_markers, axis=1)
         else:
+            self.targets.clear()
+            self.dynamic_markers.clear()
             origin = _plane.Coordinate(0.,0.)
         return origin
 
@@ -173,3 +187,12 @@ class Plane(_plane.Plane):
             cv2.imwrite(path, img)
 
         return img
+
+    def get_marker_IDs(self) -> dict[str|int,list[tuple[int,int]]]:
+        markers = super(Plane, self).get_marker_IDs()
+        for m in self.dynamic_markers:
+            if self.dynamic_markers[m][1] not in markers:
+                markers[self.dynamic_markers[m][1]] = [(self.aruco_dict_id, m)]
+            else:
+                markers[self.dynamic_markers[m][1]].append((self.aruco_dict_id, m))
+        return markers

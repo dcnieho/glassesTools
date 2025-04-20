@@ -136,7 +136,7 @@ class Plane:
 
             self.markers[idx] = marker.Marker(idx, c, corners=[tl, tr, br, bl], rot=rot)
 
-    def get_marker_IDs(self) -> dict[str,list[tuple[int,int]]]:
+    def get_marker_IDs(self) -> dict[str|int,list[tuple[int,int]]]:
         return {'plane': [(self.aruco_dict_id, m_id) for m_id in self._all_marker_ids]}
 
     def get_aruco_board(self) -> cv2.aruco.Board:
