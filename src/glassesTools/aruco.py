@@ -256,7 +256,7 @@ class Detector:
         if detect_tuple is None:
             detect_tuple = self._last_detect_output
         if plane_name not in detect_tuple[0] or detect_tuple[0][plane_name]['ids'] is None or not detect_tuple[0][plane_name]['img_points']:
-            return None
+            return None, None
         objP, imgP = self._boards[plane_name].matchImagePoints(detect_tuple[0][plane_name]['img_points'], detect_tuple[0][plane_name]['ids'])
         if imgP is None or int(imgP.shape[0]/4)<self.planes[plane_name]['min_num_markers']:
             return None, None
