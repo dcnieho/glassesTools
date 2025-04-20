@@ -196,3 +196,13 @@ class Plane(_plane.Plane):
             else:
                 markers[self.dynamic_markers[m][1]].append((self.aruco_dict_id, m))
         return markers
+
+    def is_dynamic(self):
+        return not not self.dynamic_markers
+
+    def get_dynamic_marker_setup(self):
+        return aruco.MarkerSetup(aruco_detector_params = {
+                                    'markerBorderBits': self.marker_border_bits
+                                },
+                                detect_only = True
+                             )
