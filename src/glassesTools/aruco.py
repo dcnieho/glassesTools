@@ -124,6 +124,8 @@ class Detector:
 
         markers = self.planes[name]['plane'].get_marker_IDs()
         for ms in markers:
+            if ms is not 'plane':
+                continue
             m_ids = {m[1] for m in markers[ms]}
             self._all_markers.update(m_ids)
             self._plane_marker_ids[name] = m_ids
@@ -353,7 +355,10 @@ class Manager:
         for p in self.planes:
             markers = self.planes[p]['plane'].get_marker_IDs()
             for ms in markers:
-                if all_markers.intersection(ms):
+                if ms!='plane':
+                    # N.B.: other marker should be registered by caller as individual markers
+                    continue
+                if all_markers.intersection(markers[ms]):
                     raise RuntimeError('Markers are not unique')
                 all_markers.update(markers[ms])
         for i in self.individual_markers:
