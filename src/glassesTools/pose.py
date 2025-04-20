@@ -383,7 +383,7 @@ class Estimator:
         if planes_for_this_frame:
             # detect fiducials
             plane_points: dict[str, tuple[np.ndarray,np.ndarray]] = {}
-            for p in self.plane_functions:
+            for p in planes_for_this_frame:
                 det_output = self.plane_functions[p](p, frame_idx, frame, self.cam_params)
                 if det_output is not None:
                     plane_points[p] = det_output
@@ -394,7 +394,7 @@ class Estimator:
         if indiv_markers_for_this_frame:
             # detect fiducials
             indiv_marker_points: dict[_T, tuple[np.ndarray,np.ndarray]] = {}
-            for i in self.individual_marker_functions:
+            for i in indiv_markers_for_this_frame:
                 det_output = self.individual_marker_functions[i](i, frame_idx, frame, self.cam_params)
                 if det_output is not None:
                     indiv_marker_points[i] = det_output
