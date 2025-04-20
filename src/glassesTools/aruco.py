@@ -259,14 +259,14 @@ class Detector:
             return None
         objP, imgP = self._boards[plane_name].matchImagePoints(detect_tuple[0][plane_name]['img_points'], detect_tuple[0][plane_name]['ids'])
         if imgP is None or int(imgP.shape[0]/4)<self.planes[plane_name]['min_num_markers']:
-            return None
+            return None, None
         return imgP, objP
 
     def get_individual_marker_points(self, marker_id: int, detect_tuple=None):
         if detect_tuple is None:
             detect_tuple = self._last_detect_output
         if detect_tuple[1]['ids'] is None or not detect_tuple[1]['img_points'] or marker_id not in detect_tuple[1]['ids']:
-            return None
+            return None, None
         img_points = detect_tuple[1]['img_points'][detect_tuple[1]['ids'].flatten().tolist().index(marker_id)]
         return img_points, self._indiv_marker_points[marker_id]
 
@@ -415,7 +415,7 @@ class Manager:
         aruco_dict_id = self._plane_to_detector[plane_name]
         detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, frame, camera_parameters)
         if not detect_tuple[0] or plane_name not in detect_tuple[0] or not detect_tuple[0][plane_name]:
-            return None
+            return None, None
         return self._detectors[aruco_dict_id].get_matching_image_board_points(plane_name, detect_tuple)
 
     def _detect_individual_marker(self, key: tuple[int,int], frame_idx: int, frame: np.ndarray, camera_parameters: ocv.CameraParams):
@@ -424,7 +424,7 @@ class Manager:
         aruco_dict_id = self._individual_marker_to_detector[key]
         detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, frame, camera_parameters)
         if not detect_tuple[1] or detect_tuple[1]['ids'] is None or key[1] not in detect_tuple[1]['ids']:
-            return None
+            return None, None
         return self._detectors[aruco_dict_id].get_individual_marker_points(key[1], detect_tuple)
 
     def _get_detector_cache(self, aruco_dict_id: int, frame_idx: int, frame: np.ndarray, camera_parameters: ocv.CameraParams):

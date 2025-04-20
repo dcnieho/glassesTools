@@ -385,7 +385,7 @@ class Estimator:
             plane_points: dict[str, tuple[np.ndarray,np.ndarray]] = {}
             for p in planes_for_this_frame:
                 det_output = self.plane_functions[p](p, frame_idx, frame, self.cam_params)
-                if det_output is not None:
+                if det_output[0] is not None:
                     plane_points[p] = det_output
             # determine pose
             for p in plane_points:
@@ -396,7 +396,7 @@ class Estimator:
             indiv_marker_points: dict[_T, tuple[np.ndarray,np.ndarray]] = {}
             for i in indiv_markers_for_this_frame:
                 det_output = self.individual_marker_functions[i](i, frame_idx, frame, self.cam_params)
-                if det_output is not None:
+                if det_output[0] is not None:
                     indiv_marker_points[i] = det_output
             # determine pose, if wanted
             for i in indiv_marker_points:
