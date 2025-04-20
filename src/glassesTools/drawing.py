@@ -8,7 +8,7 @@ def openCVCircle(img, center_coordinates, radius, color, thickness, sub_pixel_fa
     p = [np.round(x*sub_pixel_fac) for x in center_coordinates]
     if np.all([not math.isnan(x) and abs(x)<np.iinfo(np.intc).max for x in p]):
         p = tuple([int(x) for x in p])
-        cv2.circle(img, p, radius*sub_pixel_fac, color, thickness, lineType=cv2.LINE_AA, shift=int(math.log2(sub_pixel_fac)))
+        cv2.circle(img, p, int(np.round(radius*sub_pixel_fac)), color, thickness, lineType=cv2.LINE_AA, shift=int(math.log2(sub_pixel_fac)))
 
 def openCVLine(img, start_point, end_point, color, thickness, sub_pixel_fac):
     sp = [np.round(x*sub_pixel_fac) for x in start_point]
