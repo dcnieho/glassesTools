@@ -74,6 +74,8 @@ def plot(
         selected_intervals: pd.DataFrame,
         other_intervals: pd.DataFrame|None,
         targets: dict[int, np.ndarray],
+        gazes: str|pathlib.Path|dict[int, list[gaze_worldref.Gaze]],
+        episode: list[int],
         output_directory: str|pathlib.Path,
         filename_stem: str = naming.fixation_assignment_prefix,
         iteration = 0,
@@ -81,6 +83,24 @@ def plot(
         plot_limits: list[list[float]] = None
     ):
     output_directory = pathlib.Path(output_directory)
+    # if we do not have x and y positions for the gaze intervals, make them
+    if 'xpos' not in selected_intervals.columns or (other_intervals is not None and 'xpos' not in other_intervals.columns):
+        # read input if needed
+        if not isinstance(gazes,dict):
+            gazes = gaze_worldref.read_dict_from_file(gazes)
+        if 'xpos' not in selected_intervals.columns:
+            samples_per_frame = {k:v for (k,v) in gazes.items() if k>=episode[0] and k<=episode[1]}
+            has_ray = np.any(np.logical_not(np.isnan([s.gazePosPlane2D_vidPos_ray for v in gazes.values() for s in v])))
+            field = 'gazePosPlane2D_vidPos_ray' if has_ray else 'gazePosPlane2D_vidPos_homography'
+            for t in selected_intervals.index:
+                st,et = selected_intervals.loc[t,['startT','endT']].to_numpy()
+                gaze = np.vstack([getattr(s,field) for v in samples_per_frame.values() for s in v if s.timestamp>=st and s.timestamp<=et])
+                selected_intervals.loc[t,['xpos','ypos']] = np.nanmedian(gaze,axis=0)
+        if other_intervals is not None and 'xpos' not in other_intervals.columns:
+            for t in other_intervals.index:
+                st,et = other_intervals.loc[t,['startT','endT']].to_numpy()
+                gaze = np.vstack([getattr(s,field) for v in samples_per_frame.values() for s in v if s.timestamp>=st and s.timestamp<=et])
+                other_intervals.loc[t,['xpos','ypos']] = np.nanmedian(gaze,axis=0)
     # make plot of data overlaid on poster, and show for each target which interval was selected
     # prep data
     if other_intervals is not None:
