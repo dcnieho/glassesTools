@@ -85,7 +85,7 @@ def load_aruco_dict(aruco_dict_name: str, border_bits: int):
     str_to_dict: dict[str, int] = {k: getattr(cv2.aruco,k) for k in ['DICT_4X4_50', 'DICT_4X4_100', 'DICT_4X4_250', 'DICT_4X4_1000', 'DICT_5X5_50', 'DICT_5X5_100', 'DICT_5X5_250', 'DICT_5X5_1000', 'DICT_6X6_50', 'DICT_6X6_100', 'DICT_6X6_250', 'DICT_6X6_1000', 'DICT_7X7_50', 'DICT_7X7_100', 'DICT_7X7_250', 'DICT_7X7_1000', 'DICT_ARUCO_ORIGINAL', 'DICT_APRILTAG_16H5', 'DICT_APRILTAG_25H9', 'DICT_APRILTAG_36H10', 'DICT_APRILTAG_36H11', 'DICT_ARUCO_MIP_36H12']}
 
     if aruco_dict_name not in str_to_dict:
-        possible = '"'+'", "'.join(str_to_dict.keys())+'"'
+        possible = '"'+('", "'.join(str_to_dict.keys()))+'"'
         raise ValueError(f'ArUco dictionary with name "{aruco_dict_name}" is not known. Possible values are: {possible}.')
     if border_bits<1:
         raise ValueError('The number of border bits for ArUco markers must be 1 or higher.')
