@@ -105,7 +105,7 @@ def dynamic_markers(
     for t in marker_observations_per_target:
         start, end = marker.get_appearance_starts_ends(marker_observations_per_target[t], max_gap_duration, 1)
         # in case there are multiple (e.g. spotty detection), choose longest
-        durs = np.array(end)-np.array(start)
+        durs = np.array(end)-np.array(start)+1
         maxi = np.argmax(durs)
         ts = marker_observations_per_target[t].loc[[start[maxi], end[maxi]],'timestamp'].to_numpy()
         ts[0] += skip_first_duration
