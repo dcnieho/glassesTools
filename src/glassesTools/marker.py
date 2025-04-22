@@ -4,14 +4,18 @@ import pathlib
 import typing
 import cv2
 
-from . import aruco, data_files, drawing, json, ocv
+from . import data_files, drawing, json, ocv
 
 class MarkerID(typing.NamedTuple):
     m_id:           int
     aruco_dict_id:  int
-json.register_type(json.TypeEntry(MarkerID, '__config.MarkerID__', lambda x: {'m_id':x.m_id, 'aruco_dict_id':aruco.dict_to_str[x.aruco_dict_id]}, lambda x: MarkerID(m_id=x['m_id'], aruco_dict_id=getattr(cv2.aruco,x['aruco_dict_id']))))
 def marker_ID_to_str(m: MarkerID):
+    from . import aruco
     return f'{m.m_id} ({aruco.dict_to_str[m.aruco_dict_id]})'
+def _serialize_marker_id(m: MarkerID):
+    from . import aruco
+    return {'m_id':m.m_id, 'aruco_dict_id':aruco.dict_to_str[m.aruco_dict_id]}
+json.register_type(json.TypeEntry(MarkerID, '__config.MarkerID__', _serialize_marker_id, lambda x: MarkerID(m_id=x['m_id'], aruco_dict_id=getattr(cv2.aruco,x['aruco_dict_id']))))
 
 class Marker:
     def __init__(self, key: int, center: np.ndarray, corners: list[np.ndarray]=None, color: str=None, rot: float=0.):
