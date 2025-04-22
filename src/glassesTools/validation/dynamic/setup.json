@@ -25,6 +25,8 @@
     },
 
     "validation": {
+        "n_repetitions": 1,
+
         "segment_marker": {
             "start_IDs": [200, 201],
             "end_IDs": [201, 200]
@@ -45,7 +47,6 @@
         "targets": {
             "file": "targetPositions.csv",
             "units": "cm",
-            "n_repetitions": 1,
             "first_ID": 1,
             "center_target": 5,
             "duration": 1.0,

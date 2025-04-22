@@ -95,15 +95,6 @@ def prepare_validation(win: visual.Window, config: dict, screen_config: dict):
     # get markers and target positions
     target_positions   = read_coord_file(config["targets"]["file"])
     fiducial_positions = read_coord_file(config["markers"]["file"])
-    # prepare target order
-    targets: list[int] = []
-    if config["targets"]["first_ID"] not in target_positions.index:
-        raise ValueError(f'Target ID set in setup.json->targets->first_ID ({config["targets"]["first_ID"]}) is not in the targets file {config["targets"]["file"]}')
-    ts = [t for t in target_positions.index.to_list() if t!=config["targets"]["first_ID"]]
-    for _ in range(config["targets"]["n_repetitions"]):
-        targets.append(config["targets"]["first_ID"])
-        random.shuffle(ts)
-        targets += ts
 
     # check there are no overlapping ArUco markers
     indicator_IDs = []
@@ -149,7 +140,7 @@ def prepare_validation(win: visual.Window, config: dict, screen_config: dict):
     background = visual.ImageStim(win, visual.BufferImageStim(win, stim=stimList).image)    # because https://github.com/psychopy/psychopy/issues/840
     if screen_config["origin"] is not None:
         background.pos = [-x for x in screen_config["origin"]]
-    return {'background': background, 'target_positions': target_positions, 'fiducial_positions': fiducial_positions, 'targets': targets}
+    return {'background': background, 'target_positions': target_positions, 'fiducial_positions': fiducial_positions}
 
 def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_vars: dict):
     # prepare visual objects
@@ -158,14 +149,21 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
     if (have_cue:=config["targets"]["cue"]["color"] is not None):
         cue = visual.Circle(win, radius=config["targets"]["cue"]["diameter"]/2, units=config["targets"]["units"], fillColor=config["targets"]["cue"]["color"])
 
+    # prepare target order
+    if config["targets"]["first_ID"] not in task_vars['target_positions'].index:
+        raise ValueError(f'Target ID set in setup.json->targets->first_ID ({config["targets"]["first_ID"]}) is not in the targets file {config["targets"]["file"]}')
+    ts = [t for t in task_vars['target_positions'].index.to_list() if t!=config["targets"]["first_ID"]]
+    random.shuffle(ts)
+    targets = [config["targets"]["first_ID"]] + ts
+
     # prepare task parameters
     n_shrink_frames = int(config["targets"]["shrink"]["duration"]*refresh_rate)
     shrink_sizes    = np.linspace(config["targets"]["look"]["diameter_max"]/2, config["targets"]["look"]["diameter_min"]/2, n_shrink_frames)
     n_capture_frames= int(config["targets"]["duration"]*refresh_rate)
 
     # show fixation target sequence
-    old_pos = task_vars['target_positions'].loc[task_vars['targets'][0],['x','y']].tolist()
-    for i in task_vars['targets']:
+    old_pos = task_vars['target_positions'].loc[targets[0],['x','y']].tolist()
+    for i in targets:
         check_escape(win)
 
         # Move target to new position
@@ -240,19 +238,26 @@ def run_validation(win: visual.Window, config: dict):
     win.flip()
     event.waitKeys()
 
-    # prepare validation
-    task_vars = prepare_validation(win, config["validation"], config["screen"])
-
-    # signal validation start
-    for m_id in config["validation"]["segment_marker"]["start_IDs"]:
-        segmenter.draw(m_id)
-
     # run validation
-    show_validation(win, config["validation"], config["screen"]["refresh_rate"], task_vars)
+    for r in range(config["n_repetitions"]):
+        # prepare
+        task_vars = prepare_validation(win, config["validation"], config["screen"])
 
-    # signal validation end
-    for m_id in config["validation"]["segment_marker"]["end_IDs"]:
-        segmenter.draw(m_id)
+        # signal start
+        for m_id in config["validation"]["segment_marker"]["start_IDs"]:
+            segmenter.draw(m_id)
+
+        # show targets
+        show_validation(win, config["validation"], config["screen"]["refresh_rate"], task_vars)
+
+        # signal end
+        for m_id in config["validation"]["segment_marker"]["end_IDs"]:
+            segmenter.draw(m_id)
+
+        # blank screen to separate validation intervals
+        if r!=config["targets"]["n_repetitions"]-1:
+            win.flip()
+            core.wait()
 
 def main():
     # read protocol setup
