@@ -137,7 +137,7 @@ def to_tsv(
     output_directory = pathlib.Path(output_directory)
     # store selected intervals
     selected_intervals = selected_intervals \
-                            .drop(columns=['xpos','ypos']) \
+                            .drop(columns=[c for c in ('xpos','ypos') if c in selected_intervals.columns]) \
                             .rename(columns={'startT': 'start_timestamp', 'endT': 'end_timestamp'})
     selected_intervals.insert(0, 'marker_interval', iteration+1)
 
