@@ -66,7 +66,7 @@ def compute(
     # for each frame during analysis interval, determine offset
     # (angle) of gaze (each eye) to each of the targets
     for idx,iv in enumerate(validation_intervals):
-        samples_per_frame= {k:v for (k,v) in gazes.items() if k>=iv[0] and k<=iv[1]}
+        samples_per_frame = {k:v for (k,v) in gazes.items() if k>=iv[0] and k<=iv[1]}
         if not samples_per_frame:
             raise RuntimeError(f'There is no gaze data on the glassesValidator surface for validation interval (frames {idx[0]} to {idx[1]}), cannot proceed. This may be because there was no gaze during this interval or because the plane was not detected.')
 
