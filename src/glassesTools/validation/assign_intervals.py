@@ -84,7 +84,7 @@ def dynamic_markers(
         missing = [marker_observations[m].empty for m in markers_per_target[t] if m in marker_observations]
         if all(missing):
             missing_str  = '\n- '.join([marker.marker_ID_to_str(m) for m in markers_per_target[t]])
-            raise FileNotFoundError(f'None of the markers for target {t} were observed during the episode from frame {episode[0]} to frame {episode[1]}:\n- {missing_str}')
+            raise RuntimeError(f'None of the markers for target {t} were observed during the episode from frame {episode[0]} to frame {episode[1]}:\n- {missing_str}')
 
     # for each target, determine when its shown by means of the marker observations
     # marker presence signal only contains marker detections (True). We need to fill the gaps in between detections with False (not detected) so we have a continuous signal without gaps
