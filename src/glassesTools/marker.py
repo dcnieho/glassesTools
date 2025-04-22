@@ -124,7 +124,7 @@ def get_appearance_starts_ends(m: pd.DataFrame, max_gap_duration: int, min_durat
     ends   = np.delete(ends,gapi)
     # remove too short
     lengths= ends-starts
-    shorti = np.nonzero(lengths<=min_duration)[0]
+    shorti = np.nonzero(lengths<min_duration)[0]
     starts = np.delete(starts,shorti)
     ends   = np.delete(ends,shorti)
     # turn first and last frames into frame_idx values
