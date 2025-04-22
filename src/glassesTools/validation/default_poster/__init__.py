@@ -42,7 +42,6 @@ def deploy_maker(output_dir: str|pathlib.Path, overwrite=False) -> list[str]:
     return not_copied
 
 def deploy_marker_images(output_dir: str|pathlib.Path):
-    from .. import Plane
     from ..config import get_validation_setup
 
     output_dir = pathlib.Path(output_dir) / "all-markers"
@@ -53,7 +52,7 @@ def deploy_marker_images(output_dir: str|pathlib.Path):
     validationSetup = get_validation_setup()
 
     # generate and store the markers
-    aruco.deploy_marker_images(output_dir, 1000, Plane.default_aruco_dict_id, validationSetup['markerBorderBits'])
+    aruco.deploy_marker_images(output_dir, 1000, validationSetup['arucoDictionary'], validationSetup['markerBorderBits'])
 
 def deploy_default_pdf(output_file_or_dir: str|pathlib.Path):
     output_file_or_dir = pathlib.Path(output_file_or_dir)

@@ -5,6 +5,7 @@ import pandas as pd
 import pathlib
 import importlib.resources
 import typing
+import cv2
 
 from ... import data_files as _data_files
 
@@ -37,6 +38,13 @@ def get_validation_setup(config_dir: str|pathlib.Path=None, config_file: str='va
                 validation_config[key] = float(val)
             except:
                 pass # just keep value as a string
+    # backwards compatibility
+    if 'arucoDictionary' not in validation_config:
+        validation_config['arucoDictionary'] = 'DICT_4X4_250'
+    # check aruco dictionary name, and convert to ID
+    if not hasattr(cv2.aruco,validation_config['arucoDictionary']):
+        raise ValueError(f'ArUco dictionary with name "{validation_config["arucoDictionary"]}" is not known.')
+    validation_config['arucoDictionary'] = getattr(cv2.aruco,validation_config['arucoDictionary'])
     return validation_config
 
 

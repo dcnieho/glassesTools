@@ -114,7 +114,8 @@ def setup_to_plane_config(output_dir: str|pathlib.Path, config_dir: str|pathlib.
     valSetup = {
         'distance': dist,
         'mode': 'cm',
-        'markerBorderBits': setup["validation"]["markers"]["border_bits"],
+        'arucoDictionary': setup["aruco"]["dict"],
+        'markerBorderBits': setup["aruco"]["border_bits"],
         'markerSide': m_size,
         'markerPosFile': 'markerPositions_converted.csv',
         'targetPosFile': 'targetPositions_converted.csv',

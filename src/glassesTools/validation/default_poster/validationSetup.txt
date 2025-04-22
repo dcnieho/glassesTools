@@ -1,6 +1,7 @@
 distance = 60                   % viewing distance, in cm
 mode = cm                       % cm or deg, sets unit for gridCols, gridRows, markerSide and thalerDiameter below
 
+arucoDictionary = DICT_4X4_250
 markerBorderBits = 1
 markerSide = 4.18945            % in cm or deg, see mode
 

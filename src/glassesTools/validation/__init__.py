@@ -91,8 +91,6 @@ def get_DataQualityType_explanation(dq: DataQualityType):
 
 
 class Plane(_plane.Plane):
-    default_aruco_dict_id = aruco.default_dict
-
     def __init__(self, config_dir: str|pathlib.Path|None, validation_config: dict[str,typing.Any]=None, is_dynamic=False, **kwarg):
         # NB: if config_dir is None, the default config will be used
 
@@ -124,7 +122,7 @@ class Plane(_plane.Plane):
         markers = config.get_markers(config_dir, self.config['markerPosFile'])
         if 'ref_image_store_path' not in kwarg:
             kwarg['ref_image_store_path'] = None
-        super(Plane, self).__init__(markers, markerSize, plane_size, Plane.default_aruco_dict_id, self.config['markerBorderBits'], self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], min_num_markers=self.config['minNumMarkers'], **kwarg)
+        super(Plane, self).__init__(markers, markerSize, plane_size, self.config['arucoDictionary'], self.config['markerBorderBits'], self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], min_num_markers=self.config['minNumMarkers'], **kwarg)
 
         # set center
         self.set_origin(origin)
