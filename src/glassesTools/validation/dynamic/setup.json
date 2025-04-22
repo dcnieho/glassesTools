@@ -15,11 +15,15 @@
         "color": "black"
     },
 
+    "aruco": {
+        "dict": "DICT_4X4_250",
+        "border_bits": 1
+    },
+
     "segment_marker": {
         "size": 10.0,
         "units": "cm",
         "margin": 0.1,
-        "border_bits": 1,
         "duration": 1.0,
         "background_color": "white"
     },
@@ -37,7 +41,6 @@
             "size": 4.18945,
             "units": "cm",
             "margin": 0.1,
-            "border_bits": 1,
             "background_color": "white",
             "replace_IDs": [20, 15],
             "replace_ID_start": 100,

@@ -49,14 +49,13 @@ class ABCFixPoint:
 
 class SegmentationMarker:
     def __init__(self, win: visual.Window, refresh_rate: int, duration: float,
-                 marker_size: float, units: str, margin: float, border_bits: int, background_color: str):
+                 marker_size: float, units: str, margin: float, background_color: str):
         self.win = win
         self.refresh_rate = refresh_rate
         self.duration = duration
         self.size = marker_size
         self.units = units
         self.margin = margin
-        self.border_bits = border_bits
         self.background_color = background_color
 
         self._marker    = visual.ImageStim(win, image=None, size=self.size, units=self.units)
@@ -68,7 +67,7 @@ class SegmentationMarker:
 
     def draw(self, m_id: int):
         check_escape(self.win)
-        self._marker.image = get_aruco_marker(m_id, self.size, self.units, self.border_bits, self.win)
+        self._marker.image = get_aruco_marker(m_id, self.size, self.units, self.win)
         n_segment_marker_frames = int(self.duration*self.refresh_rate)
         for _ in range(n_segment_marker_frames):
             self._marker_bg.draw()
@@ -78,12 +77,29 @@ class SegmentationMarker:
 def read_coord_file(file):
     return pd.read_csv(file, dtype=defaultdict(lambda: np.float32, ID='int32', color='str')).dropna(axis=0, how='all').set_index('ID')
 
-_aruco_dict = cv2.aruco.getPredefinedDictionary(cv2.aruco.DICT_4X4_250)
-def get_aruco_marker(m_id: int, size: float, units: str, border_bits: int, win: visual.Window):
+_aruco_dict: cv2.aruco.Dictionary = None
+_aruco_border_bits: int = None
+def load_aruco_dict(aruco_dict_name: str, border_bits: int):
+    global _aruco_dict
+    global _aruco_border_bits
+    str_to_dict: dict[str, int] = {k: getattr(cv2.aruco,k) for k in ['DICT_4X4_50', 'DICT_4X4_100', 'DICT_4X4_250', 'DICT_4X4_1000', 'DICT_5X5_50', 'DICT_5X5_100', 'DICT_5X5_250', 'DICT_5X5_1000', 'DICT_6X6_50', 'DICT_6X6_100', 'DICT_6X6_250', 'DICT_6X6_1000', 'DICT_7X7_50', 'DICT_7X7_100', 'DICT_7X7_250', 'DICT_7X7_1000', 'DICT_ARUCO_ORIGINAL', 'DICT_APRILTAG_16H5', 'DICT_APRILTAG_25H9', 'DICT_APRILTAG_36H10', 'DICT_APRILTAG_36H11', 'DICT_ARUCO_MIP_36H12']}
+
+    if aruco_dict_name not in str_to_dict:
+        possible = '"'+'", "'.join(str_to_dict.keys())+'"'
+        raise ValueError(f'ArUco dictionary with name "{aruco_dict_name}" is not known. Possible values are: {possible}.')
+    if border_bits<1:
+        raise ValueError('The number of border bits for ArUco markers must be 1 or higher.')
+
+    _aruco_dict = cv2.aruco.getPredefinedDictionary(str_to_dict[aruco_dict_name])
+    _aruco_border_bits = border_bits
+
+def get_aruco_marker(m_id: int, size: float, units: str, win: visual.Window):
+    if _aruco_dict is None or _aruco_border_bits is None:
+        RuntimeError('You must call load_aruco_dict() before you try to load an ArUco marker')
     size = tools.monitorunittools.convertToPix(np.array([-.5*size,.5*size]),np.array([0.,0.]),units,win)
     size = int(size[1]-size[0])
     # NB: flipud because PsychoPy draws images loaded from memory upside down
-    return np.flipud(cv2.aruco.generateImageMarker(_aruco_dict, m_id, size, borderBits=border_bits).astype(np.float32)/255.*2-1)
+    return np.flipud(cv2.aruco.generateImageMarker(_aruco_dict, m_id, size, borderBits=_aruco_border_bits).astype(np.float32)/255.*2-1)
 
 def check_escape(win: visual.Window):
     if 'escape' in event.getKeys():
@@ -117,7 +133,7 @@ def prepare_validation(win: visual.Window, config: dict, screen_config: dict):
                                fillColor=config["markers"]["background_color"])
 
         aruco_bg.pos = [marker.x, marker.y]
-        aruco_im.image = get_aruco_marker(m_id, config["markers"]["size"], config["markers"]["units"], config["markers"]["border_bits"], win)
+        aruco_im.image = get_aruco_marker(m_id, config["markers"]["size"], config["markers"]["units"], win)
         aruco_im.pos = [marker.x, marker.y]
 
         stimList.append(aruco_bg)
@@ -194,7 +210,7 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
         # two markers indicate which target is shown (two for redundancy)
         for ri,r in enumerate(config["markers"]["replace_IDs"]):
             m_id = config["markers"]["replace_ID_start"]+ri*config["markers"]["replace_ID_offset"]+i
-            aruco_ims[ri].image = get_aruco_marker(m_id, config["markers"]["size"], config["markers"]["units"], config["markers"]["border_bits"], win)
+            aruco_ims[ri].image = get_aruco_marker(m_id, config["markers"]["size"], config["markers"]["units"], win)
             aruco_ims[ri].pos   = task_vars['fiducial_positions'].loc[r,['x','y']].tolist()
 
         # move to next target
@@ -227,7 +243,7 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
 def run_validation(win: visual.Window, config: dict):
     # prepare trial segmentation
     segmenter = SegmentationMarker(win, config["screen"]["refresh_rate"], config["segment_marker"]["duration"],
-                                    config["segment_marker"]["size"], config["segment_marker"]["units"], config["segment_marker"]["margin"], config["segment_marker"]["border_bits"], config["segment_marker"]["background_color"])
+                                   config["segment_marker"]["size"], config["segment_marker"]["units"], config["segment_marker"]["margin"], config["segment_marker"]["background_color"])
     # prepare instruction (NB, doesn't respect origin, so set origin as pos)
     textstim = visual.TextStim(win, text="", height=config["instruction_text"]["height"], color=config["instruction_text"]["color"], wrapWidth=9999., pos=config["screen"]["origin"])
 
@@ -238,11 +254,11 @@ def run_validation(win: visual.Window, config: dict):
     win.flip()
     event.waitKeys()
 
+    # prepare validation
+    task_vars = prepare_validation(win, config["validation"], config["screen"])
+
     # run validation
     for r in range(config["n_repetitions"]):
-        # prepare
-        task_vars = prepare_validation(win, config["validation"], config["screen"])
-
         # signal start
         for m_id in config["validation"]["segment_marker"]["start_IDs"]:
             segmenter.draw(m_id)
