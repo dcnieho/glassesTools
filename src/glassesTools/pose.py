@@ -340,8 +340,9 @@ class Estimator:
 
         if should_exit or (self.allow_early_exit and \
             (
-                intervals.beyond_last_interval(frame_idx, self.plane_intervals) and \
-                (not self.extra_proc_intervals or intervals.beyond_last_interval(frame_idx, self.extra_proc_intervals))
+                (not self.plane_intervals             or intervals.beyond_last_interval(frame_idx, self.plane_intervals)) and \
+                (not self.individual_marker_intervals or intervals.beyond_last_interval(frame_idx, self.individual_marker_intervals)) and \
+                (not self.extra_proc_intervals        or intervals.beyond_last_interval(frame_idx, self.extra_proc_intervals))
             )):
             self._cache = Status.Finished, None, None, None, (None, None, None)
             return self._cache
