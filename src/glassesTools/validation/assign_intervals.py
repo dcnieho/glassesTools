@@ -75,7 +75,8 @@ def dynamic_markers(
         marker_observations: dict[marker.MarkerID, pd.DataFrame],   # {marker: dataframe}
         episode: list[int],
         skip_first_duration: float,
-        max_gap_duration: int
+        max_gap_duration: int,
+        min_duration: int
     ) -> tuple[pd.DataFrame, None]:
     # make local copy of marker_observations, containing only the rows that are relevant for the current episode
     marker_observations = {m:mo.loc[(mo['frame_idx']>=episode[0]) & (mo['frame_idx']<=episode[1]),:] for m,mo in marker_observations.items()}
@@ -103,7 +104,9 @@ def dynamic_markers(
     selected_intervals = pd.DataFrame(columns=['startT','endT'])
     selected_intervals.index.name = 'target'
     for t in marker_observations_per_target:
-        start, end = marker.get_appearance_starts_ends(marker_observations_per_target[t], max_gap_duration, 1)
+        start, end = marker.get_appearance_starts_ends(marker_observations_per_target[t], max_gap_duration, min_duration)
+        if start.size==0:
+            continue
         # in case there are multiple (e.g. spotty detection), choose longest
         durs = np.array(end)-np.array(start)+1
         maxi = np.argmax(durs)
