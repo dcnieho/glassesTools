@@ -142,7 +142,6 @@ def compute(
             df['order'] = df['order'].astype(np.int64)
 
         # now compute
-        samples_per_frame = {k:v for (k,v) in gazes.items() if k>=iv[0] and k<=iv[1]}
         for t in targets:
             if (idx+1,t) not in marker_intervals.index:
                 continue
