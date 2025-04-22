@@ -7,6 +7,7 @@ import typing
 import math
 import cv2
 import pandas as pd
+from collections import defaultdict
 
 from .. import aruco, drawing as _drawing, json, marker as _marker, plane as _plane, transforms as _transforms, utils as _utils
 
@@ -115,7 +116,8 @@ class Plane(_plane.Plane):
 
         # get targets first, so that they can be drawn on the reference image
         self.targets: dict[int,_marker.Marker]          = {}
-        self.dynamic_markers: dict[int, tuple[int,int]] = {}   # from marker ID to [target ID, marker_N column] (latter for good reporting)
+        self.dynamic_markers: dict[int, tuple[int,int]] = {}   # {marker ID: (target ID, marker_N column in target file)} (keep latter around for good error reporting)
+        self._dynamic_markers_cache: dict[int, tuple[int,int]] = None   # different format, for efficient return from get_marker_IDs()
         origin = self._get_targets(config_dir, self.config, is_dynamic)
 
         # call base class
@@ -159,6 +161,7 @@ class Plane(_plane.Plane):
             self.targets.clear()
             self.dynamic_markers.clear()
             origin = _plane.Coordinate(0.,0.)
+        self._dynamic_markers_cache = None
         return origin
 
     def _store_reference_image(self, path: pathlib.Path, width: int) -> np.ndarray:
@@ -189,13 +192,12 @@ class Plane(_plane.Plane):
         return img
 
     def get_marker_IDs(self) -> dict[str|int,list[tuple[int,int]]]:
-        markers = super(Plane, self).get_marker_IDs()
-        for m in self.dynamic_markers:
-            if self.dynamic_markers[m][1] not in markers:
-                markers[self.dynamic_markers[m][1]] = [(self.aruco_dict_id, m)]
-            else:
-                markers[self.dynamic_markers[m][1]].append((self.aruco_dict_id, m))
-        return markers
+        if self._dynamic_markers_cache is None:
+            self._dynamic_markers_cache = defaultdict(list)
+            # {marker ID: (target ID, marker_N column in target file)} -> {marker_N column in target file: [(aruco_dict, marker_id)]}
+            for m in self.dynamic_markers:
+                self._dynamic_markers_cache[self.dynamic_markers[m][1]].append((self.aruco_dict_id, m))
+        return super(Plane, self).get_marker_IDs() | self._dynamic_markers_cache
 
     def is_dynamic(self):
         return not not self.dynamic_markers
