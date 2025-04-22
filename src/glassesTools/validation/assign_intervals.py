@@ -3,7 +3,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import pathlib
 
-from .. import naming
+from .. import gaze_worldref, marker, naming
 
 # assign intervals to targets based on distance
 def distance(
@@ -69,6 +69,48 @@ def distance(
         selected_intervals.loc[t] = fixations.iloc[selected[i]]
     other_intervals = fixations.loc[np.logical_not(used),['xpos','ypos','startT']]
     return selected_intervals, None if other_intervals.empty else other_intervals
+
+def dynamic_markers(
+        markers_per_target: dict[int,list[marker.MarkerID]],        # {target: [marker,...]}, one or multiple markers per target
+        marker_observations: dict[marker.MarkerID, pd.DataFrame],   # {marker: dataframe}
+        episode: list[int],
+        skip_first_duration: float,
+        max_gap_duration: int
+    ) -> tuple[pd.DataFrame, None]:
+    # make local copy of marker_observations, containing only the rows that are relevant for the current episode
+    marker_observations = {m:mo.loc[(mo['frame_idx']>=episode[0]) & (mo['frame_idx']<=episode[1]),:] for m,mo in marker_observations.items()}
+    # check we have data for at least one of the markers for a given target
+    for t in markers_per_target:
+        missing = [marker_observations[m].empty for m in markers_per_target[t] if m in marker_observations]
+        if all(missing):
+            missing_str  = '\n- '.join([marker.marker_ID_to_str(m) for m in markers_per_target[t]])
+            raise FileNotFoundError(f'None of the markers for target {t} were observed during the episode from frame {episode[0]} to frame {episode[1]}:\n- {missing_str}')
+
+    # for each target, determine when its shown by means of the marker observations
+    # marker presence signal only contains marker detections (True). We need to fill the gaps in between detections with False (not detected) so we have a continuous signal without gaps
+    marker_observations = {m: marker.expand_detection(marker_observations[m], fill_value=False).set_index('frame_idx') for m in marker_observations}
+    # merge all markers for the target (in case there are more, any of them signals target presence, so be more robust to choppy detection)
+    marker_observations_per_target: dict[int, pd.DataFrame] = {}
+    for t in markers_per_target:
+        for m in markers_per_target[t]:
+            if t not in marker_observations_per_target:
+                marker_observations_per_target[t] = marker_observations[m]
+            else:
+                marker_observations_per_target[t]['marker_presence'] &= marker_observations[m]['marker_presence']
+    # for each target, see when it is presented using the marker presence signal
+    selected_intervals = pd.DataFrame(columns=['startT','endT'])
+    selected_intervals.index.name = 'target'
+    for t in marker_observations_per_target:
+        start, end = marker.get_appearance_starts_ends(marker_observations_per_target[t], max_gap_duration, 1)
+        # in case there are multiple (e.g. spotty detection), choose longest
+        durs = np.array(end)-np.array(start)
+        maxi = np.argmax(durs)
+        ts = marker_observations_per_target[t].loc[[start[maxi], end[maxi]],'timestamp'].to_numpy()
+        ts[0] += skip_first_duration
+        if ts[0]>=ts[1]:
+            continue
+        selected_intervals.loc[t] = ts
+    return selected_intervals, None
 
 def plot(
         selected_intervals: pd.DataFrame,
