@@ -241,6 +241,9 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
         old_pos = pos
 
 def run_validation(win: visual.Window, config: dict):
+    # prepare fiducials
+    load_aruco_dict(config["aruco"]["dict"], config["aruco"]["border_bits"])
+
     # prepare trial segmentation
     segmenter = SegmentationMarker(win, config["screen"]["refresh_rate"], config["segment_marker"]["duration"],
                                    config["segment_marker"]["size"], config["segment_marker"]["units"], config["segment_marker"]["margin"], config["segment_marker"]["background_color"])
@@ -258,7 +261,7 @@ def run_validation(win: visual.Window, config: dict):
     task_vars = prepare_validation(win, config["validation"], config["screen"])
 
     # run validation
-    for r in range(config["n_repetitions"]):
+    for r in range(config["validation"]["n_repetitions"]):
         # signal start
         for m_id in config["validation"]["segment_marker"]["start_IDs"]:
             segmenter.draw(m_id)
@@ -273,7 +276,7 @@ def run_validation(win: visual.Window, config: dict):
         # blank screen to separate validation intervals
         if r!=config["targets"]["n_repetitions"]-1:
             win.flip()
-            core.wait()
+            core.wait(1.)
 
 def main():
     # read protocol setup
