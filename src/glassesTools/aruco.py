@@ -7,10 +7,14 @@ from . import drawing, ocv, plane, pose
 
 default_dict = cv2.aruco.DICT_4X4_250
 
-dict_to_str: dict[int,str] = {getattr(cv2.aruco,k):k for k in ['DICT_4X4_50', 'DICT_4X4_100', 'DICT_4X4_250', 'DICT_4X4_1000', 'DICT_5X5_50', 'DICT_5X5_100', 'DICT_5X5_250', 'DICT_5X5_1000', 'DICT_6X6_50', 'DICT_6X6_100', 'DICT_6X6_250', 'DICT_6X6_1000', 'DICT_7X7_50', 'DICT_7X7_100', 'DICT_7X7_250', 'DICT_7X7_1000', 'DICT_ARUCO_ORIGINAL', 'DICT_APRILTAG_16H5', 'DICT_APRILTAG_25H9', 'DICT_APRILTAG_36H10', 'DICT_APRILTAG_36H11', 'DICT_ARUCO_MIP_36H12']}
+dict_id_to_str: dict[int,str] = {getattr(cv2.aruco,k):k for k in ['DICT_4X4_50', 'DICT_4X4_100', 'DICT_4X4_250', 'DICT_4X4_1000', 'DICT_5X5_50', 'DICT_5X5_100', 'DICT_5X5_250', 'DICT_5X5_1000', 'DICT_6X6_50', 'DICT_6X6_100', 'DICT_6X6_250', 'DICT_6X6_1000', 'DICT_7X7_50', 'DICT_7X7_100', 'DICT_7X7_250', 'DICT_7X7_1000', 'DICT_ARUCO_ORIGINAL', 'DICT_APRILTAG_16H5', 'DICT_APRILTAG_25H9', 'DICT_APRILTAG_36H10', 'DICT_APRILTAG_36H11', 'DICT_ARUCO_MIP_36H12']}
+def str_to_dict_id(aruco_dict_name: str):
+    if not hasattr(cv2.aruco,aruco_dict_name):
+        raise ValueError(f'ArUco dictionary with name "{aruco_dict_name}" is not known.')
+    return getattr(cv2.aruco,aruco_dict_name)
 
 # same number means that the dictionaries are the same (i.e. marker 3 is the same for all the dictionaries of the same family), just different number of markers in the dictionary
-dict_to_family = {
+dict_id_to_family = {
     cv2.aruco.DICT_4X4_50:          0,
     cv2.aruco.DICT_4X4_100:         0,
     cv2.aruco.DICT_4X4_250:         0,
@@ -65,7 +69,7 @@ def reduce_to_families(dictionary_ids: list[int]) -> tuple[list[int],dict[int,in
     # first organize by family
     by_family: dict[int,list[int]] = {}
     for d in aruco_dicts:
-        f = dict_to_family[d]
+        f = dict_id_to_family[d]
         if f not in by_family:
             by_family[f] = []
         by_family[f].append(d)
@@ -94,7 +98,7 @@ def deploy_marker_images(output_dir: str|pathlib.Path, size: int, ArUco_dict_id:
 class Detector:
     def __init__(self, dictionary_id: int):
         self.dictionary_id  = dictionary_id
-        self._family        = dict_to_family[self.dictionary_id]
+        self._family        = dict_id_to_family[self.dictionary_id]
         self._is_family     = family_to_str[self._family][1]
 
         self.planes             : dict[str, PlaneSetup]         = {}
@@ -150,13 +154,13 @@ class Detector:
 
     def _check_dict(self, dict_id: int, what: str):
         if self._is_family:
-            family = dict_to_family[dict_id]
+            family = dict_id_to_family[dict_id]
             if family!=self._family:
-                raise ValueError(f'The dictionary for this new {what}, {dict_to_str[dict_id]}, is not part of the family ({family_to_str[family][0]}) used for this detector. Use dictionary {dict_to_str[self.dictionary_id]} or smaller.')
+                raise ValueError(f'The dictionary for this new {what}, {dict_id_to_str[dict_id]}, is not part of the family ({family_to_str[family][0]}) used for this detector. Use dictionary {dict_id_to_str[self.dictionary_id]} or smaller.')
             elif dict_id>self.dictionary_id:
-                raise ValueError(f'The dictionary for this new {what}, {dict_to_str[dict_id]}, contains more markers than the dictionary used for this detector ({dict_to_str[self.dictionary_id]}). Use a dictionary with more markers when creating this detector.')
+                raise ValueError(f'The dictionary for this new {what}, {dict_id_to_str[dict_id]}, contains more markers than the dictionary used for this detector ({dict_id_to_str[self.dictionary_id]}). Use a dictionary with more markers when creating this detector.')
         elif dict_id!=self.dictionary_id:
-            raise ValueError(f'The dictionary for this new {what}, {dict_to_str[dict_id]}, does not match the dictionary used for this detector ({dict_to_str[self.dictionary_id]}).')
+            raise ValueError(f'The dictionary for this new {what}, {dict_id_to_str[dict_id]}, does not match the dictionary used for this detector ({dict_id_to_str[self.dictionary_id]}).')
 
     def _update_parameters(self, which: str, new_params: dict):
         if which=='detector':
@@ -171,8 +175,8 @@ class Detector:
             if not hasattr(cls, p):
                 raise AttributeError(f'{p} is not a valid parameter for cv2.aruco.{cls.__name__}')
             if p in param_dict and new_params[p]!=param_dict[p]:
-                fam_str,is_family = family_to_str[dict_to_family[self.dictionary_id]]
-                dict_str = f'{fam_str} family' if is_family else f'{dict_to_str[self.dictionary_id]} dictionary'
+                fam_str,is_family = family_to_str[dict_id_to_family[self.dictionary_id]]
+                dict_str = f'{fam_str} family' if is_family else f'{dict_id_to_str[self.dictionary_id]} dictionary'
                 raise ValueError(f'You have already set the parameter {p} to {param_dict[p]} and are now trying to set it to {new_params[p]}, in the detector for the {dict_str}. Resolve this conflict by checking this setting for all planes and individual markers using the {dict_str}.')
             param_dict[p] = new_params[p]
 
@@ -327,7 +331,7 @@ class Manager:
     def add_individual_marker(self, marker_id: int, aruco_dict_id: int, marker_setup: MarkerSetup, processing_intervals: list[int]|list[list[int]] = None):
         key = (aruco_dict_id, marker_id)
         if key in self.individual_markers:
-            raise ValueError(f'Cannot register the individual marker with id {marker_id} from dict {dict_to_str[aruco_dict_id]}, it is already registered')
+            raise ValueError(f'Cannot register the individual marker with id {marker_id} from dict {dict_id_to_str[aruco_dict_id]}, it is already registered')
         self.individual_markers[key]                = marker_setup
         self.individual_markers_proc_intervals[key] = processing_intervals
 

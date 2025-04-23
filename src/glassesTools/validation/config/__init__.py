@@ -7,7 +7,7 @@ import importlib.resources
 import typing
 import cv2
 
-from ... import data_files as _data_files
+from ... import aruco as _aruco, data_files as _data_files
 
 
 def _read_glassesValidator_config_file(file):
@@ -42,9 +42,7 @@ def get_validation_setup(config_dir: str|pathlib.Path=None, config_file: str='va
     if 'arucoDictionary' not in validation_config:
         validation_config['arucoDictionary'] = 'DICT_4X4_250'
     # check aruco dictionary name, and convert to ID
-    if not hasattr(cv2.aruco,validation_config['arucoDictionary']):
-        raise ValueError(f'ArUco dictionary with name "{validation_config["arucoDictionary"]}" is not known.')
-    validation_config['arucoDictionary'] = getattr(cv2.aruco,validation_config['arucoDictionary'])
+    validation_config['arucoDictionary'] = _aruco.str_to_dict_id(validation_config['arucoDictionary'])
     return validation_config
 
 

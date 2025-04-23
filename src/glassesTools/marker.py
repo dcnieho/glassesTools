@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import pathlib
 import typing
-import cv2
 
 from . import data_files, drawing, json, ocv
 
@@ -11,11 +10,15 @@ class MarkerID(typing.NamedTuple):
     aruco_dict_id:  int
 def marker_ID_to_str(m: MarkerID):
     from . import aruco
-    return f'{m.m_id} ({aruco.dict_to_str[m.aruco_dict_id]})'
+    return f'{m.m_id} ({aruco.dict_id_to_str[m.aruco_dict_id]})'
 def _serialize_marker_id(m: MarkerID):
     from . import aruco
-    return {'m_id':m.m_id, 'aruco_dict_id':aruco.dict_to_str[m.aruco_dict_id]}
-json.register_type(json.TypeEntry(MarkerID, '__config.MarkerID__', _serialize_marker_id, lambda x: MarkerID(m_id=x['m_id'], aruco_dict_id=getattr(cv2.aruco,x['aruco_dict_id']))))
+    return {'m_id':m.m_id, 'aruco_dict':aruco.dict_id_to_str[m.aruco_dict_id]}
+def _deserialize_marker_id(m: dict[str,str|int]):
+    from . import aruco
+    return MarkerID(m_id = m['m_id'],
+                    aruco_dict_id = aruco.str_to_dict_id(m['aruco_dict_id' if 'aruco_dict_id' in m else 'aruco_dict']))
+json.register_type(json.TypeEntry(MarkerID, '__config.MarkerID__', _serialize_marker_id, _deserialize_marker_id))
 
 class Marker:
     def __init__(self, key: int, center: np.ndarray, corners: list[np.ndarray]=None, color: str=None, rot: float=0.):
