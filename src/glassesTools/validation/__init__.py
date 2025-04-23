@@ -113,9 +113,9 @@ class Plane(_plane.Plane):
         plane_size = _plane.Coordinate(self.config['gridCols']*self.cell_size_mm, self.config['gridRows']*self.cell_size_mm)
 
         # get targets first, so that they can be drawn on the reference image
-        self.targets: dict[int,_marker.Marker]          = {}
-        self.dynamic_markers: dict[int, tuple[int,int]] = {}   # {marker ID: (target ID, marker_N column in target file)} (keep latter around for good error reporting)
-        self._dynamic_markers_cache: dict[int, tuple[int,int]] = None   # different format, for efficient return from get_marker_IDs()
+        self.targets: dict[int,_marker.Marker]                  = {}
+        self.dynamic_markers: dict[int, tuple[int,int]]         = {}        # {marker ID: (target ID, marker_N column in target file)} (keep latter around for good error reporting)
+        self._dynamic_markers_cache: dict[int, _marker.MarkerID]= None      # different format, for efficient return from get_marker_IDs()
         origin = self._get_targets(config_dir, self.config, is_dynamic)
 
         # call base class
@@ -189,12 +189,12 @@ class Plane(_plane.Plane):
 
         return img
 
-    def get_marker_IDs(self) -> dict[str|int,list[tuple[int,int]]]:
+    def get_marker_IDs(self) -> dict[str|int,list[_marker.MarkerID]]:
         if self._dynamic_markers_cache is None:
             self._dynamic_markers_cache = defaultdict(list)
-            # {marker ID: (target ID, marker_N column in target file)} -> {marker_N column in target file: [(aruco_dict, marker_id)]}
+            # {marker ID: (target ID, marker_N column in target file)} -> {marker_N column in target file: [(marker_id, aruco_dict)]}
             for m in self.dynamic_markers:
-                self._dynamic_markers_cache[self.dynamic_markers[m][1]].append((self.aruco_dict_id, m))
+                self._dynamic_markers_cache[self.dynamic_markers[m][1]].append(_marker.MarkerID(m, self.aruco_dict_id))
         return super(Plane, self).get_marker_IDs() | self._dynamic_markers_cache
 
     def is_dynamic(self):
