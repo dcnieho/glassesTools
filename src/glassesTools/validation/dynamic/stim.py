@@ -85,7 +85,7 @@ def load_aruco_dict(aruco_dict_name: str, border_bits: int):
     str_to_dict: dict[str, int] = {k: getattr(cv2.aruco,k) for k in ['DICT_4X4_50', 'DICT_4X4_100', 'DICT_4X4_250', 'DICT_4X4_1000', 'DICT_5X5_50', 'DICT_5X5_100', 'DICT_5X5_250', 'DICT_5X5_1000', 'DICT_6X6_50', 'DICT_6X6_100', 'DICT_6X6_250', 'DICT_6X6_1000', 'DICT_7X7_50', 'DICT_7X7_100', 'DICT_7X7_250', 'DICT_7X7_1000', 'DICT_ARUCO_ORIGINAL', 'DICT_APRILTAG_16H5', 'DICT_APRILTAG_25H9', 'DICT_APRILTAG_36H10', 'DICT_APRILTAG_36H11', 'DICT_ARUCO_MIP_36H12']}
 
     if aruco_dict_name not in str_to_dict:
-        possible = '"'+('", "'.join(str_to_dict.keys()))+'"'
+        possible = '"'+'", "'.join(str_to_dict.keys())+'"'
         raise ValueError(f'ArUco dictionary with name "{aruco_dict_name}" is not known. Possible values are: {possible}.')
     if border_bits<1:
         raise ValueError('The number of border bits for ArUco markers must be 1 or higher.')
@@ -152,10 +152,8 @@ def prepare_validation(win: visual.Window, config: dict, screen_config: dict):
             stimList.append(circle)
             circle.draw()
 
-    # Get screenshot of background, so that we can draw unchanging things at once
+    # Get screenshot of background, so that we can draw unchanging things at once 
     background = visual.ImageStim(win, visual.BufferImageStim(win, stim=stimList).image)    # because https://github.com/psychopy/psychopy/issues/840
-    if screen_config["origin"] is not None:
-        background.pos = [-x for x in screen_config["origin"]]
     return {'background': background, 'target_positions': target_positions, 'fiducial_positions': fiducial_positions}
 
 def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_vars: dict):
@@ -178,15 +176,15 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
     n_capture_frames= int(config["targets"]["duration"]*refresh_rate)
 
     # show fixation target sequence
-    old_pos = task_vars['target_positions'].loc[targets[0],['x','y']].tolist()
+    old_pos = task_vars['target_positions'].loc[targets[0],['x','y']].to_numpy()
     for i in targets:
         check_escape(win)
 
         # Move target to new position
         pos   = task_vars['target_positions'].loc[i,['x','y']].tolist()
         d     = np.sqrt((old_pos[0]-pos[0])**2 + (old_pos[1]-pos[1])**2)
-        old_pos_pix = tools.monitorunittools.convertToPix([0.,0.],old_pos,config["targets"]["units"],win)
-        pos_pix     = tools.monitorunittools.convertToPix([0.,0.],    pos,config["targets"]["units"],win)
+        old_pos_pix = tools.monitorunittools.convertToPix(np.array([0.,0.]),old_pos,config["targets"]["units"],win)
+        pos_pix     = tools.monitorunittools.convertToPix(np.array([0.,0.]),    pos,config["targets"]["units"],win)
         d_pix = np.sqrt((old_pos_pix[0]-pos_pix[0])**2 + (old_pos_pix[1]-pos_pix[1])**2)
         # Target should move at constant speed regardless of distance to cover, duration contains time to move
         # over width of whole screen. Adjust time to proportion of screen width covered by current move
@@ -247,8 +245,8 @@ def run_validation(win: visual.Window, config: dict):
     # prepare trial segmentation
     segmenter = SegmentationMarker(win, config["screen"]["refresh_rate"], config["segment_marker"]["duration"],
                                    config["segment_marker"]["size"], config["segment_marker"]["units"], config["segment_marker"]["margin"], config["segment_marker"]["background_color"])
-    # prepare instruction (NB, doesn't respect origin, so set origin as pos)
-    textstim = visual.TextStim(win, text="", height=config["instruction_text"]["height"], color=config["instruction_text"]["color"], wrapWidth=9999., pos=config["screen"]["origin"])
+    # prepare instruction
+    textstim = visual.TextStim(win, text="", height=config["instruction_text"]["height"], color=config["instruction_text"]["color"], wrapWidth=9999.)
 
 
     # validation instruction
@@ -274,7 +272,7 @@ def run_validation(win: visual.Window, config: dict):
             segmenter.draw(m_id)
 
         # blank screen to separate validation intervals
-        if r!=config["targets"]["n_repetitions"]-1:
+        if r!=config["validation"]["n_repetitions"]-1:
             win.flip()
             core.wait(1.)
 
@@ -294,7 +292,6 @@ def main():
                             color=config["screen"]["background_color"],
                             screen=config["screen"]["which_monitor"] or 0,
                             units=config["screen"]["units"],
-                            viewPos=config["screen"]["origin"],
                             allowGUI=False,
                             multiSample=True,
                             numSamples=4,

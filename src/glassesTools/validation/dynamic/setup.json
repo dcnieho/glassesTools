@@ -5,13 +5,12 @@
         "viewing_distance": 63.0,
         "refresh_rate": 60,
         "resolution": [1920, 1080],
-        "origin": null,
         "units": "cm",
-        "background_color": "grey"
+        "background_color": "white"
     },
 
     "instruction_text": {
-        "height": 1.5,
+        "height": 0.8,
         "color": "black"
     },
 
@@ -21,7 +20,7 @@
     },
 
     "segment_marker": {
-        "size": 10.0,
+        "size": 6.0,
         "units": "cm",
         "margin": 0.1,
         "duration": 1.0,
