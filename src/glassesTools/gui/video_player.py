@@ -41,7 +41,7 @@ action_lbl_map: dict[Action, str|tuple[str,str]] = {
     Action.Back_Frame       : ifa6.ICON_FA_BACKWARD_STEP,
     Action.Forward_Frame    : ifa6.ICON_FA_FORWARD_STEP,
     Action.Pause            : (ifa6.ICON_FA_PLAY, ifa6.ICON_FA_PAUSE),  # (no_playing, playing)
-    Action.Close            : "Close GUI",
+    Action.Close            : "Continue in background",
     Action.Quit             : "Done",
     Action.Annotate_Delete  : ifa6.ICON_FA_TRASH_CAN
 }
@@ -52,7 +52,7 @@ action_tooltip_map = {
     Action.Back_Frame       : "Back 1 frame (with shift 10 frames)",
     Action.Forward_Frame    : "Forward 1 frame (with shift 10 frames)",
     Action.Pause            : "Pause or resume playback",
-    Action.Close            : "Close GUI (keep process running)",
+    Action.Close            : "Close GUI, but keep process running in background",
     Action.Quit             : "Done",
     Action.Annotate_Delete  : "Delete annotation"
 }
