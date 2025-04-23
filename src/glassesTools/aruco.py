@@ -124,7 +124,7 @@ class Detector:
 
         markers = self.planes[name]['plane'].get_marker_IDs()
         for ms in markers:
-            if ms is not 'plane':
+            if ms!='plane':
                 continue
             m_ids = {m[1] for m in markers[ms]}
             self._all_markers.update(m_ids)
