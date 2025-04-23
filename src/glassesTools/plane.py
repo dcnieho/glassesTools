@@ -116,7 +116,7 @@ class Plane:
         marker_dict_size = aruco.get_dict_size(self.aruco_dict_id)
         for m_id in self._all_marker_ids:
             if m_id>=marker_dict_size:
-                raise ValueError(f'This plane is set up using the dictionary {aruco.dicts_to_str[self.aruco_dict_id]} which only has {marker_dict_size} markers, which means that valid IDs are 0-{marker_dict_size-1}. However, this plane is configured to contain a marker number {m_id} that is not a valid marker for this dictionary.')
+                raise ValueError(f'This plane is set up using the dictionary {aruco.dict_to_str[self.aruco_dict_id]} which only has {marker_dict_size} markers, which means that valid IDs are 0-{marker_dict_size-1}. However, this plane is configured to contain a marker number {m_id} that is not a valid marker for this dictionary.')
 
         # turn into marker objects
         marker_pos.x *= marker_pos_scale_fac
