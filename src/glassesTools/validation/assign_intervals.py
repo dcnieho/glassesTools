@@ -141,13 +141,17 @@ def plot(
             field = 'gazePosPlane2D_vidPos_ray' if has_ray else 'gazePosPlane2D_vidPos_homography'
             for t in selected_intervals.index:
                 st,et = selected_intervals.loc[t,['startT','endT']].to_numpy()
-                gaze = np.vstack([getattr(s,field) for v in samples_per_frame.values() for s in v if s.timestamp>=st and s.timestamp<=et])
-                selected_intervals.loc[t,['xpos','ypos']] = np.nanmedian(gaze,axis=0)
+                data = [getattr(s,field) for v in samples_per_frame.values() for s in v if s.timestamp>=st and s.timestamp<=et]
+                if data:
+                    gaze = np.vstack(data)
+                    selected_intervals.loc[t,['xpos','ypos']] = np.nanmedian(gaze,axis=0)
         if other_intervals is not None and 'xpos' not in other_intervals.columns:
             for t in other_intervals.index:
                 st,et = other_intervals.loc[t,['startT','endT']].to_numpy()
-                gaze = np.vstack([getattr(s,field) for v in samples_per_frame.values() for s in v if s.timestamp>=st and s.timestamp<=et])
-                other_intervals.loc[t,['xpos','ypos']] = np.nanmedian(gaze,axis=0)
+                data = [getattr(s,field) for v in samples_per_frame.values() for s in v if s.timestamp>=st and s.timestamp<=et]
+                if data:
+                    gaze = np.vstack(data)
+                    other_intervals.loc[t,['xpos','ypos']] = np.nanmedian(gaze,axis=0)
     # make plot of data overlaid on poster, and show for each target which interval was selected
     # prep data
     if other_intervals is not None:
