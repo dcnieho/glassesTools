@@ -3,6 +3,8 @@ import importlib.resources
 import shutil
 import json
 import math
+import pandas as pd
+from collections import defaultdict
 
 from ..config import get_markers, get_targets
 from ... import aruco, marker
@@ -149,3 +151,47 @@ def setup_to_plane_config(output_dir: str|pathlib.Path, config_dir: str|pathlib.
         segmentation_markers[o] = [marker.MarkerID(m, aruco_dict_id) for m in setup["validation"]["segment_marker"][s]]
     segmentation_markers['marker_border_bits'] = setup["aruco"]["border_bits"]
     return segmentation_markers
+
+
+# for analysis
+def get_marker_observations(validation_plane: 'validation.Plane', working_dir: pathlib.Path) -> tuple[dict[int, pd.DataFrame], dict[int,list[marker.MarkerID]]]:
+    # organize markers
+    markers_per_target: dict[int,list[marker.MarkerID]] = defaultdict(list)
+    for m in validation_plane.dynamic_markers:
+        t = validation_plane.dynamic_markers[m][0]
+        markers_per_target[t].append(marker.MarkerID(m, validation_plane.aruco_dict_id))
+    markers_per_target = dict(markers_per_target)   # get rid of defaultdict now its no longer needed so we get normal indexing
+
+    # determine what marker files to read
+    all_marker_ids = [m for ms in markers_per_target for m in markers_per_target[ms]]
+    # for each target, check at least one of the marker files exists
+    for t in markers_per_target:
+        missing = [not marker.get_file_name(m.m_id, m.aruco_dict_id, working_dir).is_file() for m in markers_per_target[t]]
+        if all(missing):
+            file_missing = [marker.get_file_name(m.m_id, m.aruco_dict_id, None) for m in markers_per_target[t]]
+            missing_str  = '\n- '.join(file_missing)
+            raise FileNotFoundError(f'None of the marker files for target {t} were found:\n- {missing_str}')
+        # remove missing from list of markers to load
+        if any(missing):
+            for i,m in enumerate(missing):
+                if not m:
+                    continue
+                all_marker_ids.remove(markers_per_target[t][i])
+
+    # load all markers and recode so we just have a boolean indicating when markers are present
+    marker_observations = {m: marker.read_dataframe_from_file(m.m_id, m.aruco_dict_id, working_dir).set_index('frame_idx') for m in all_marker_ids}
+    marker_observations = {m: marker.code_for_presence(marker_observations[m], allow_failed=True) for m in marker_observations if not marker_observations[m].empty}
+
+    # target presentations may be encoded by multiple markers simultaneously
+    # merge all markers for the target to be more robust to choppy detection
+    marker_observations_per_target: dict[int, pd.DataFrame] = {}
+    for t in markers_per_target:
+        for m in markers_per_target[t]:
+            if m not in marker_observations or marker_observations[m].empty:
+                continue
+            if t not in marker_observations_per_target:
+                marker_observations_per_target[t] = marker_observations[m]
+            else:
+                marker_observations_per_target[t] = marker_observations_per_target[t].combine_first(marker_observations[m])
+
+    return marker_observations_per_target, markers_per_target
