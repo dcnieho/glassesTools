@@ -92,7 +92,7 @@ def dynamic_markers(
     marker_observations_per_target: dict[int, pd.DataFrame] = {}
     for t in markers_per_target:
         for m in markers_per_target[t]:
-            if m not in marker_observations:
+            if m not in marker_observations or marker_observations[m].empty:
                 continue
             if t not in marker_observations_per_target:
                 marker_observations_per_target[t] = marker_observations[m]
