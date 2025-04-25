@@ -79,7 +79,7 @@ def dynamic_markers(
         min_duration: int
     ) -> tuple[pd.DataFrame, None]:
     # make local copy of marker_observations, containing only the rows that are relevant for the current episode
-    marker_observations = {m:mo.loc[(mo['frame_idx']>=episode[0]) & (mo['frame_idx']<=episode[1]),:] for m,mo in marker_observations.items()}
+    marker_observations = {m:mo.loc[episode[0]:episode[1],:] for m,mo in marker_observations.items()}
     # check we have data for at least one of the markers for a given target
     for t in markers_per_target:
         missing = [marker_observations[m].empty for m in markers_per_target[t] if m in marker_observations]
