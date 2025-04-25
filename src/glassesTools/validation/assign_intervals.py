@@ -88,8 +88,6 @@ def dynamic_markers(
             raise RuntimeError(f'None of the markers for target {t} were observed during the episode from frame {episode[0]} to frame {episode[1]}:\n- {missing_str}')
 
     # for each target, determine when its shown by means of the marker observations
-    # marker presence signal only contains marker detections (True). We need to fill the gaps in between detections with False (not detected) so we have a continuous signal without gaps
-    marker_observations = {m: marker.expand_detection(marker_observations[m], fill_value=False).set_index('frame_idx') for m in marker_observations if not marker_observations[m].empty}
     # merge all markers for the target (in case there are more, any of them signals target presence, so be more robust to choppy detection)
     marker_observations_per_target: dict[int, pd.DataFrame] = {}
     for t in markers_per_target:
