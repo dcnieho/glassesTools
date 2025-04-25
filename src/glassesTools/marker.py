@@ -119,15 +119,23 @@ def _code_for_presence_impl(markers: pd.DataFrame, lbl_extra:str, allow_failed=F
         new_col_lbl,
         True if allow_failed else markers[[c for c in markers.columns if c not in ['frame_idx']]].notnull().all(axis='columns')
     )
-    markers = markers[['frame_idx',new_col_lbl]]
+    markers = markers[['frame_idx',new_col_lbl]] if 'frame_idx' in markers else markers[[new_col_lbl]]
     markers = markers.astype({new_col_lbl: bool}) # ensure the new column is bool
     return markers
 
 def expand_detection(markers: pd.DataFrame, fill_value):
-    min_fr_idx = markers['frame_idx'].min()
-    max_fr_idx = markers['frame_idx'].max()
-    new_index = pd.Index(range(min_fr_idx,max_fr_idx+1), name='frame_idx')
-    return markers.set_index('frame_idx').reindex(new_index, fill_value=fill_value).reset_index()
+    if 'frame_idx' in markers.columns:
+        min_fr_idx = markers['frame_idx'].min()
+        max_fr_idx = markers['frame_idx'].max()
+        new_index = pd.Index(range(min_fr_idx,max_fr_idx+1), name='frame_idx')
+        return markers.set_index('frame_idx').reindex(new_index, fill_value=fill_value).reset_index()
+    else:
+        if markers.index.name!='frame_idx':
+            raise ValueError(f'It was expected that the name of the index is "frame_idx". It was "{markers.index.name}" instead. This may mean this dataframe does not contain the expected information. Cannot continue.')
+        min_fr_idx = markers.index.min()
+        max_fr_idx = markers.index.max()
+        new_index = pd.Index(range(min_fr_idx,max_fr_idx+1), name='frame_idx')
+        return markers.reindex(new_index, fill_value=fill_value)
 
 def get_appearance_starts_ends(m: pd.DataFrame, max_gap_duration: int, min_duration: int):
     vals   = np.pad(m['marker_presence'].values.astype(int), (1, 1), 'constant', constant_values=(0, 0))
