@@ -97,7 +97,11 @@ def dynamic_markers(
             if t not in marker_observations_per_target:
                 marker_observations_per_target[t] = marker_observations[m]
             else:
-                # if we have multiple markers encoding target presence, finding any of them is enough
+                # if we have multiple markers encoding target presence, finding any of them is enough to indicate that a target was being shown
+                # so combine the detection of these multiple markers
+                # first make sure any new observations are added
+                marker_observations_per_target[t] = marker_observations_per_target[t].combine_first(marker_observations[m])
+                # then combine
                 marker_observations_per_target[t].loc[:,'marker_presence'] |= marker_observations[m]['marker_presence']
     # for each target, see when it is presented using the marker presence signal
     selected_intervals = pd.DataFrame(columns=['startT','endT'])
