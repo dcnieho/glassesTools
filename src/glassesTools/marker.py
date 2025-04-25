@@ -2,8 +2,9 @@ import numpy as np
 import pandas as pd
 import pathlib
 import typing
+from collections import defaultdict
 
-from . import data_files, drawing, json, ocv
+from . import data_files, drawing, json, naming, ocv
 
 class MarkerID(typing.NamedTuple):
     m_id:           int
@@ -85,8 +86,21 @@ def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None
 
 def write_list_to_file(poses: list[Pose], fileName:str|pathlib.Path, skip_failed=False):
     data_files.write_array_to_file(poses, fileName,
-                                    Pose._columns_compressed,
-                                    skip_all_nan=skip_failed)
+                                   Pose._columns_compressed,
+                                   skip_all_nan=skip_failed)
+
+def get_file_name(marker_id: int, aruco_dict_id: int, folder: str|pathlib.Path|None) -> pathlib.Path:
+    from . import aruco
+    file_name = f'{naming.marker_pose_prefix}{aruco.dict_id_to_str[aruco_dict_id]}_{marker_id}.tsv'
+    if folder is None:
+        return file_name
+    folder = pathlib.Path(folder)
+    return folder / file_name
+
+def read_dataframe_from_file(marker_id: int, aruco_dict_id: int, folder: str|pathlib.Path) -> pd.DataFrame:
+    file = get_file_name(marker_id, aruco_dict_id, folder)
+    return pd.read_csv(file,sep='\t', dtype=defaultdict(lambda: float, **Pose._non_float))
+
 
 @typing.overload
 def code_for_presence(markers: pd.DataFrame, allow_failed=False) -> pd.DataFrame: ...
