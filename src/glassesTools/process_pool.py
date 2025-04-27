@@ -111,7 +111,7 @@ class ProcessPool:
                 self._jobs[job_id] = PoolJob(self._pool.schedule(fn, args=args, kwargs=kwargs), user_data)
                 if done_callback:
                     self._jobs[job_id].future._waiters.append(ProcessWaiter(job_id, user_data, done_callback))
-                # register cleanup
+                # Finally, register our internal cleanup to run last
                 self._jobs[job_id].future._waiters.append(ProcessWaiter(job_id, user_data, self._job_done_callback))
                 return job_id, self._jobs[job_id].future
 
