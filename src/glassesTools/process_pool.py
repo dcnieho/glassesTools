@@ -194,6 +194,9 @@ class JobDescription(typing.Generic[_UserDataT]):
         # True if job is scheduled to the pool
         return self._pool_job_id is not None and self.get_state() in [State.Pending, State.Running]
 
+    def is_finished(self):
+        return self._final_state is not None
+
 class JobScheduler(typing.Generic[_UserDataT]):
     def __init__(self, pool: ProcessPool, job_is_valid_checker : typing.Callable[[_UserDataT], bool]|None = None):
         self.jobs               : dict[int, JobDescription[_UserDataT]] = {}
@@ -256,7 +259,8 @@ class JobScheduler(typing.Generic[_UserDataT]):
                 if not self._job_is_valid_checker(job.user_data):
                     self.cancel_job(job_id)
             # remove finished job from pending jobs if its still there
-            if job._final_state is not None and job_id in self._pending_jobs:
+            job.get_state() # update state
+            if job.is_finished() and job_id in self._pending_jobs:
                 self._pending_jobs.remove(job_id)
             # check how many scheduled jobs we have
             if job.is_scheduled():
