@@ -1,5 +1,4 @@
 import enum
-import glassesTools.json
 import pebble
 import multiprocessing
 import typing
