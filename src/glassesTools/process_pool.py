@@ -109,9 +109,10 @@ class ProcessPool:
             with self._job_id_provider:
                 job_id = self._job_id_provider.get_count()
                 self._jobs[job_id] = PoolJob(self._pool.schedule(fn, args=args, kwargs=kwargs), user_data)
-                self._jobs[job_id].future._waiters.append(ProcessWaiter(job_id, user_data, self._job_done_callback))
                 if done_callback:
                     self._jobs[job_id].future._waiters.append(ProcessWaiter(job_id, user_data, done_callback))
+                # register cleanup
+                self._jobs[job_id].future._waiters.append(ProcessWaiter(job_id, user_data, self._job_done_callback))
                 return job_id, self._jobs[job_id].future
 
     def _job_done_callback(self, future: ProcessFuture, job_id: int, user_data: _UserDataT, state: State):
