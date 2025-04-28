@@ -34,7 +34,7 @@ def draw_hover_text(hover_text: str, text="(?)", force=False, hovered_flags=imgu
     return False
 
 
-def draw_process_state(state: process_pool.State, have_hover_popup=True):
+def draw_process_state(state: process_pool.State, have_hover_popup=True, progress: tuple[float,str]=None):
     symbol_size = imgui.calc_text_size(ifa6.ICON_FA_CIRCLE)
     match state:
         case process_pool.State.Not_Run:
@@ -46,10 +46,13 @@ def draw_process_state(state: process_pool.State, have_hover_popup=True):
             imspinner.spinner_bounce_dots(f'waitBounceDots', radius, thickness, color=imgui.get_style_color_vec4(imgui.Col_.text))
             hover_text = 'Pending'
         case process_pool.State.Running:
-            spinner_radii = [x/22/2*symbol_size.x for x in [22, 16, 10]]
-            lw = 3.5/22/2*symbol_size.x
-            imspinner.spinner_ang_triple(f'runSpinner', *spinner_radii, lw, c1=imgui.get_style_color_vec4(imgui.Col_.text), c2=colors.warning, c3=imgui.get_style_color_vec4(imgui.Col_.text))
-            hover_text = 'Running'
+            if progress is not None:
+                imgui.text(f'{progress[0]:.0f}%')
+            else:
+                spinner_radii = [x/22/2*symbol_size.x for x in [22, 16, 10]]
+                lw = 3.5/22/2*symbol_size.x
+                imspinner.spinner_ang_triple(f'runSpinner', *spinner_radii, lw, c1=imgui.get_style_color_vec4(imgui.Col_.text), c2=colors.warning, c3=imgui.get_style_color_vec4(imgui.Col_.text))
+            hover_text = 'Running'+(f' ({progress[1]})' if progress is not None else '')
         case process_pool.State.Completed:
             imgui.text_colored(colors.ok, ifa6.ICON_FA_CIRCLE_CHECK)
             hover_text = 'Completed'
