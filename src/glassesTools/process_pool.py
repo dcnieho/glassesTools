@@ -226,22 +226,24 @@ class JobProgress:
     def update(self, n=1):
         self.n += n
         should_print = self._printer is not None and self.n%self.print_interval==0
-        if self.n-self.last_update_n >= self.update_interval or should_print or self.n==self.total:
+        if not self.progress_str or self.n-self.last_update_n>=self.update_interval or should_print or self.n==self.total:
             cur_t = self._time()
             dt = cur_t - self.last_update_t
             dn = self.n - self.last_update_n
             if self.smoothing and dt and dn:
                 self._ema_dn(dn)
                 self._ema_dt(dt)
+                rate = self._ema_dn()/dts if (dts:=self._ema_dt()) else None
+            else:
+                rate = dn/dt if dt else None
+
+            inv_rate = 1 / rate if rate else None
+            rate_fmt     = (f'{rate:5.2f}'     if     rate else '?') + ' ' + self.unit + '/s'
+            rate_inv_fmt = (f'{inv_rate:5.2f}' if inv_rate else '?') + ' s/' + self.unit
+            rate_str = rate_inv_fmt if inv_rate and inv_rate > 1 else rate_fmt
 
             elapsed = cur_t - self.start_t
             elapsed_str = _format_interval(elapsed)
-
-            rate = self._ema_dn() / self._ema_dt()
-            inv_rate = 1 / rate if rate else None
-            rate_noinv_fmt = (f'{rate:5.2f}' if rate else '?') + ' ' + self.unit + '/s'
-            rate_inv_fmt = (f'{inv_rate:5.2f}' if inv_rate else '?') + ' s/' + self.unit
-            rate_str = rate_inv_fmt if inv_rate and inv_rate > 1 else rate_noinv_fmt
 
             remaining = (self.total - self.n) / rate if rate and self.total else 0
             remaining_str = _format_interval(remaining) if rate else '?'
