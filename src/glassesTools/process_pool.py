@@ -1,9 +1,11 @@
 import enum
+import multiprocessing.managers
 import pebble
 import multiprocessing
 import typing
 import threading
 import dataclasses
+import time
 
 from . import json, utils
 
@@ -163,10 +165,113 @@ class JobPayload(typing.NamedTuple):
     args:   tuple
     kwargs: dict
 
+class _EMA(object):
+    """
+    Exponential moving average: smoothing to give progressively lower
+    weights to older values.
+    N.B.: copied from tqdm
+
+    smoothing  : float, optional
+        Smoothing factor in range [0, 1], [default: 0.3].
+        Ranges from 0 (yields old value) to 1 (yields new value).
+    """
+    def __init__(self, smoothing=0.3):
+        self.alpha = smoothing
+        self.last = 0
+        self.calls = 0
+
+    def __call__(self, x=None):
+        beta = 1 - self.alpha
+        if x is not None:
+            self.last = self.alpha * x + beta * self.last
+            self.calls += 1
+        return self.last / (1 - beta ** self.calls) if self.calls else self.last
+
+def _format_interval(t):
+    mins, s = divmod(int(t), 60)
+    h, m = divmod(mins, 60)
+    return f'{h:d}:{m:02d}:{s:02d}' if h else f'{m:02d}:{s:02d}'
+
+class JobProgress:
+    # based on tqdm, much reduced functionality
+    def __init__(self, initial: int=0, total: int=999999, unit: str="it", update_interval: int=1, smoothing: float=.3, printer: typing.Callable[[str], None]=None, print_interval: int = 100):
+        self.n              = initial
+        self.total          = total
+        self.unit           = unit
+        self.update_interval= update_interval
+        self.smoothing      = 0.3
+
+        self._printer       = printer
+        self.print_interval = print_interval
+
+        self._ema_dn        = _EMA(smoothing)
+        self._ema_dt        = _EMA(smoothing)
+        self._time          = time.time
+
+        self.percentage     = 0.
+        self.progress_str   = ''
+
+        self.last_update_n  = initial
+        self.last_update_t  = self._time()
+        self.start_t        = self.last_update_t
+
+    def set_total(self, total: int):
+        self.total = total
+    def set_unit(self, unit: str):
+        self.unit = unit
+    def set_intervals(self, update_interval: int, print_interval: int):
+        self.update_interval= max(1,update_interval)
+        self.print_interval = max(1,print_interval)
+
+    def update(self, n=1):
+        self.n += n
+        should_print = self._printer is not None and self.n%self.print_interval==0
+        if self.n-self.last_update_n >= self.update_interval or should_print or self.n==self.total:
+            cur_t = self._time()
+            dt = cur_t - self.last_update_t
+            dn = self.n - self.last_update_n
+            if self.smoothing and dt and dn:
+                self._ema_dn(dn)
+                self._ema_dt(dt)
+
+            elapsed = cur_t - self.start_t
+            elapsed_str = _format_interval(elapsed)
+
+            rate = self._ema_dn() / self._ema_dt()
+            inv_rate = 1 / rate if rate else None
+            rate_noinv_fmt = (f'{rate:5.2f}' if rate else '?') + ' ' + self.unit + '/s'
+            rate_inv_fmt = (f'{inv_rate:5.2f}' if inv_rate else '?') + ' s/' + self.unit
+            rate_str = rate_inv_fmt if inv_rate and inv_rate > 1 else rate_noinv_fmt
+
+            remaining = (self.total - self.n) / rate if rate and self.total else 0
+            remaining_str = _format_interval(remaining) if rate else '?'
+
+            self.percentage = (self.n / self.total) * 100
+            percentage_str = f'{self.percentage:3.0f}%'
+
+            self.progress_str = f'{self.n}/{self.total} ({percentage_str}) [{elapsed_str}<{remaining_str}, {rate_str}]'
+
+            self.last_update_n = self.n
+            self.last_update_t = cur_t
+        if should_print:
+            self._printer(self.progress_str)
+
+    def get_progress(self):
+        return (self.percentage, self.progress_str)
+
+    def set_start_time_to_now(self):
+        self.last_update_t  = self._time()
+        self.start_t        = self.last_update_t
+
+    def set_finished(self):
+        self.update(self.total-self.n)
+multiprocessing.managers.BaseManager.register('JobProgress', JobProgress)
+
 @dataclasses.dataclass
 class JobDescription(typing.Generic[_UserDataT]):
     user_data:          _UserDataT
     payload:            JobPayload
+    progress:           JobProgress
     done_callback:      typing.Callable[[ProcessFuture, _UserDataT, int, State], None]
 
     exclusive_id:       typing.Optional[int]      = None # if set, only one task with a given id can be run at a time, rest are kept in waiting. E.g. to ensure only one task needing a gui is run at a time
@@ -207,14 +312,21 @@ class JobScheduler(typing.Generic[_UserDataT]):
         self._job_is_valid_checker  = job_is_valid_checker
         self._pool                  = pool
 
+        self._manager               = multiprocessing.managers.BaseManager(ctx=multiprocessing.get_context("spawn"))
+        self._manager.start()
+
     def add_job(self,
                 user_data: _UserDataT, payload: JobPayload, done_callback: typing.Callable[[ProcessFuture, _UserDataT, int, State], None],
+                progress_indicator: JobProgress=None,
                 exclusive_id: typing.Optional[int] = None, priority: int = None, depends_on: typing.Optional[set[int]] = None) -> int:
         with self._job_id_provider:
             job_id = self._job_id_provider.get_count()
-        self.jobs[job_id] = JobDescription(user_data, payload, done_callback, exclusive_id, priority, depends_on)
+        self.jobs[job_id] = JobDescription(user_data, payload, progress_indicator, done_callback, exclusive_id, priority, depends_on)
         self._pending_jobs.append(job_id)
         return job_id
+
+    def get_progress_indicator(self, **kwargs):
+        return self._manager.JobProgress(**kwargs)
 
     def cancel_job(self, job_id: int):
         if job_id not in self.jobs:
@@ -278,9 +390,12 @@ class JobScheduler(typing.Generic[_UserDataT]):
                 break
             job_id = job_ids[0]
             to_schedule = self.jobs[job_id]
+            extra_kwargs = {}
+            if to_schedule.progress is not None:
+                extra_kwargs['progress_indicator'] = to_schedule.progress
 
             to_schedule._pool_job_id, to_schedule._future = \
-                self._pool.run(to_schedule.payload.fn, to_schedule.user_data, to_schedule.done_callback, *to_schedule.payload.args, **to_schedule.payload.kwargs)
+                self._pool.run(to_schedule.payload.fn, to_schedule.user_data, to_schedule.done_callback, *to_schedule.payload.args, **extra_kwargs, **to_schedule.payload.kwargs)
             self._pending_jobs.remove(job_id)
             if to_schedule.exclusive_id is not None:
                 exclusive_ids.add(to_schedule.exclusive_id)
