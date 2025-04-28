@@ -194,18 +194,18 @@ class Estimator:
 
         self._cache: tuple[Status, dict[str, Pose], dict[_T, marker.Pose], dict[str, list[int, typing.Any]], tuple[np.ndarray, int, float]] = None  # self._cache[4][1] is frame number
 
-        self.gui                    : video_player.GUI  = None
-        self.has_gui                                    = False
-        self.allow_early_exit                           = True
+        self.gui                    : video_player.GUI          = None
+        self.has_gui                                            = False
+        self.allow_early_exit                                   = True
+        self.progress_updater       : typing.Callable[[], None] = None
 
-        self.do_visualize                               = False
-        self.sub_pixel_fac                              = 8
-        self.plane_axis_arm_length                      = 25
-        self.individual_marker_axis_arm_length          = 25
-        self.show_extra_processing_output               = True
+        self.do_visualize                                       = False
+        self.sub_pixel_fac                                      = 8
+        self.plane_axis_arm_length                              = 25
+        self.individual_marker_axis_arm_length                  = 25
+        self.show_extra_processing_output                       = True
 
-        self._first_frame                               = True
-        self._do_report_frames                          = True
+        self._first_frame                                       = True
 
     def __del__(self):
         if self.has_gui:
@@ -262,11 +262,11 @@ class Estimator:
         # if False, processing will not stop because last frame with a defined plane or extra processing is reached
         self.allow_early_exit = allow_early_exit
 
+    def set_progress_updater(self, progress_updater: typing.Callable[[], None]):
+        self.progress_updater = progress_updater
+
     def set_visualize_on_frame(self, do_visualize: bool):
         self.do_visualize = do_visualize
-
-    def set_do_report_frames(self, do_report_frames: bool):
-        self._do_report_frames = do_report_frames
 
     def get_video_info(self) -> tuple[int, int, float]:
         return int(self.video.get_prop(cv2.CAP_PROP_FRAME_WIDTH)), \
@@ -346,8 +346,8 @@ class Estimator:
             )):
             self._cache = Status.Finished, None, None, None, (None, None, None)
             return self._cache
-        if self._do_report_frames:
-            self.video.report_frame()
+        if self.progress_updater:
+            self.progress_updater()
 
         if self.has_gui:
             if self._first_frame and frame is not None:
