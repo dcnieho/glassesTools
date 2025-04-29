@@ -181,11 +181,11 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
         check_escape(win)
 
         # Move target to new position
-        pos   = task_vars['target_positions'].loc[i,['x','y']].tolist()
-        d     = np.sqrt((old_pos[0]-pos[0])**2 + (old_pos[1]-pos[1])**2)
+        pos   = task_vars['target_positions'].loc[i,['x','y']].to_numpy()
+        d     = np.hypot(old_pos[0]-pos[0], old_pos[1]-pos[1])
         old_pos_pix = tools.monitorunittools.convertToPix(np.array([0.,0.]),old_pos,config["targets"]["units"],win)
         pos_pix     = tools.monitorunittools.convertToPix(np.array([0.,0.]),    pos,config["targets"]["units"],win)
-        d_pix = np.sqrt((old_pos_pix[0]-pos_pix[0])**2 + (old_pos_pix[1]-pos_pix[1])**2)
+        d_pix = np.hypot(old_pos_pix[0]-pos_pix[0], old_pos_pix[1]-pos_pix[1])
         # Target should move at constant speed regardless of distance to cover, duration contains time to move
         # over width of whole screen. Adjust time to proportion of screen width covered by current move
         move_duration = max(config["targets"]["move"]["min_duration"], config["targets"]["move"]["duration"]*d_pix/win.size[0])
