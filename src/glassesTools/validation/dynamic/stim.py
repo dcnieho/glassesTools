@@ -143,11 +143,11 @@ def prepare_validation(win: visual.Window, config: dict, screen_config: dict):
         aruco_im.draw()
 
     # draw placeholder circles at all target positions
-    if (use_file_color:='color' in target_positions.columns) or config["targets"]["placeholder_color"]:
+    if (use_file_color:='color' in target_positions.columns) or config["targets"]["placeholder"]["color"]:
         # if color specified in the the target_positions file, use that. Else, fall back on placeholder color
         # specified in config. If neither is specified, do not draw placeholders
         for _, target in target_positions.iterrows():
-            circle = visual.Circle(win, radius=config["targets"]["placeholder"]["diameter"]/2, units=config["targets"]["units"], fillColor=target.color if use_file_color else config["targets"]["placeholder_color"])
+            circle = visual.Circle(win, radius=config["targets"]["placeholder"]["diameter"]/2, units=config["targets"]["units"], fillColor=target.color if use_file_color else config["targets"]["placeholder"]["color"])
             circle.pos = [target.x, target.y]
             stimList.append(circle)
             circle.draw()
