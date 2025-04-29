@@ -152,7 +152,7 @@ def prepare_validation(win: visual.Window, config: dict, screen_config: dict):
             stimList.append(circle)
             circle.draw()
 
-    # Get screenshot of background, so that we can draw unchanging things at once 
+    # Get screenshot of background, so that we can draw unchanging things at once
     background = visual.ImageStim(win, visual.BufferImageStim(win, stim=stimList).image)    # because https://github.com/psychopy/psychopy/issues/840
     return {'background': background, 'target_positions': target_positions, 'fiducial_positions': fiducial_positions}
 
@@ -172,7 +172,7 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
 
     # prepare task parameters
     n_shrink_frames = int(config["targets"]["shrink"]["duration"]*refresh_rate)
-    shrink_sizes    = np.linspace(config["targets"]["look"]["diameter_max"]/2, config["targets"]["look"]["diameter_min"]/2, n_shrink_frames)
+    shrink_sizes    = np.linspace(config["targets"]["look"]["diameter_max"], config["targets"]["look"]["diameter_min"], n_shrink_frames)
     n_capture_frames= int(config["targets"]["duration"]*refresh_rate)
 
     # show fixation target sequence

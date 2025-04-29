@@ -62,7 +62,7 @@
             },
             "move": {
                 "duration": 2.5,
-                "diameter": 0.7,
+                "diameter": 1.0,
                 "min_duration": 1.0,
                 "move_with_acceleration": true
             },
@@ -70,8 +70,8 @@
                 "duration": 0.4
             },
             "look": {
-                "diameter_min": 0.7,
-                "diameter_max": 1.5,
+                "diameter_min": 0.5,
+                "diameter_max": 1.0,
                 "outer_color": "black",
                 "inner_color": "white"
             }
