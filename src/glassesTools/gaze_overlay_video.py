@@ -41,6 +41,7 @@ class VideoMaker:
 
         self.gui                    : video_player.GUI  = None
         self.has_gui                                    = False
+        self.progress_updater       : typing.Callable[[], None] = None
 
         self.do_visualize                               = False
         self.sub_pixel_fac                              = 8
@@ -53,7 +54,6 @@ class VideoMaker:
         self.world_pos_thickness    : int               = -1
 
         self._first_frame                               = True
-        self._do_report_frames                          = True
 
         # set up output video
         self._fps= 1000/self.video_ts.get_IFI()
@@ -75,12 +75,13 @@ class VideoMaker:
 
         if self.has_gui:
             self.gui.set_show_timeline(True, self.video_ts, None, window_id)
+            self.gui.set_frame_size(self._res)
 
     def set_visualize_on_frame(self, do_visualize: bool):
         self.do_visualize           = do_visualize
 
-    def set_do_report_frames(self, do_report_frames: bool):
-        self._do_report_frames = do_report_frames
+    def set_progress_updater(self, progress_updater: typing.Callable[[], None]):
+        self.progress_updater = progress_updater
 
     def set_vid_pos_look(self, color: tuple[int, int, int]=None, radius: int=None, thickness: int=None):
         if color is not None:
@@ -100,10 +101,9 @@ class VideoMaker:
         if thickness is not None:
             self.world_pos_thickness = thickness
 
-    def _process_one_frame_impl(self, wanted_frame_idx:int = None) -> tuple[Status, tuple[np.ndarray, int, float]]:
+    def _read_frame(self, wanted_frame_idx:int = None) -> tuple[Status, tuple[np.ndarray, int, float]]:
         if self._first_frame and self.has_gui:
             self.gui.set_playing(True)
-            self.gui.set_frame_size(self._res)
             self._first_frame = False
 
         if wanted_frame_idx is not None and self._cache is not None and self._cache[1][1]==wanted_frame_idx:
@@ -114,8 +114,6 @@ class VideoMaker:
         if should_exit:
             self._cache = Status.Finished, (None, None, None)
             return self._cache
-        if self._do_report_frames:
-            self.video.report_frame()
 
         if self.has_gui:
             requests = self.gui.get_requests()
@@ -140,7 +138,7 @@ class VideoMaker:
         return self._cache
 
     def process_one_frame(self) -> Status:
-        status, (frame, frame_idx, frame_ts) = self._process_one_frame_impl()
+        status, (frame, frame_idx, frame_ts) = self._read_frame()
         if status==Status.Finished:
             return status
         if frame is None:
@@ -162,6 +160,9 @@ class VideoMaker:
         # submit frame to be encoded
         img = Image(plane_buffers=[frame.flatten().tobytes()], pix_fmt='bgr24', size=(frame.shape[1], frame.shape[0]))
         self._vid_writer.write_frame(img=img, pts=frame_idx/self._fps)
+
+        if self.progress_updater:
+            self.progress_updater()
 
     def finish_video(self):
         # nothing more to show, so clean up GUI if any
