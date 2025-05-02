@@ -221,11 +221,10 @@ def formatGazeData(inputDir: str|pathlib.Path, sceneVideoDimensions: list[int], 
     """
 
     # convert the json file to pandas dataframe
-    df,scene_video_ts_offset = json2df(inputDir / 'livedata.json', sceneVideoDimensions)
+    df = json2df(inputDir / 'livedata.json', sceneVideoDimensions)
 
-    # read video file, create array of frame timestamps
+    # get array of frame timestamps for video file
     frameTimestamps = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
-    frameTimestamps['timestamp'] += scene_video_ts_offset
 
     # use the frame timestamps to assign a frame number to each data point
     frameIdx = video_utils.timestamps_to_frame_number(df.index,frameTimestamps['timestamp'].to_numpy())
@@ -238,13 +237,12 @@ def formatGazeData(inputDir: str|pathlib.Path, sceneVideoDimensions: list[int], 
     return df, frameTimestamps
 
 
-def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> tuple[pd.DataFrame, float]:
+def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> pd.DataFrame:
     """
     convert the livedata.json file to a pandas dataframe
     """
     # dicts to store sync points
     vtsSync : list[tuple[int,int]]          = []    # scene video timestamp sync
-    evtsSync: list[tuple[int,int]]          = []    # eye video timestamp sync (only if eye video was recorded)
     gazeData: dict[int, dict[str, float]]   = {}    # gaze data
 
     with open(jsonFile, 'r') as file:
@@ -260,11 +258,6 @@ def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> tupl
         ### a number of different dictKeys are possible, respond accordingly
         if 'vts' in entry.keys(): # "vts" key signfies a scene video timestamp (first frame, first keyframe, and ~1/min afterwards)
             vtsSync.append((entry['ts'], entry['vts'] if not isError else math.nan))
-            continue
-
-        ### a number of different dictKeys are possible, respond accordingly
-        if 'evts' in entry.keys(): # "evts" key signfies an eye video timestamp (first frame, first keyframe, and ~1/min afterwards)
-            evtsSync.append((entry['ts'], entry['evts'] if not isError else math.nan))
             continue
 
         # contains eye or gaze position data
@@ -299,17 +292,9 @@ def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> tupl
             gazeData[entry['ts']]['gaze_pos_3d_y'] = entry['gp3'][1] if not isError else math.nan
             gazeData[entry['ts']]['gaze_pos_3d_z'] = entry['gp3'][2] if not isError else math.nan
 
-    # find out t0. Do the same as GlassesViewer so timestamps are compatible
-    # that is t0 is at timestamp of last video start (scene or eye)
-    vtsSync  = np.array( vtsSync)
-    evtsSync = np.array(evtsSync)
-    t0s = [vtsSync[vtsSync[:,1]==0,0]]
-    if len(evtsSync)>0:
-        t0s.append(evtsSync[evtsSync[:,1]==0,0])
-    t0 = max(t0s)
-
-    # get timestamp offset for scene video
-    scene_video_ts_offset = (t0s[0]-t0) / 1000.0
+    # find out t0 for video in gaze time
+    vtsSync = np.array( vtsSync)
+    t0 = max([vtsSync[vtsSync[:,1]==0,0]])
 
     # put gaze data into dataframe, convert timestamps from us to ms
     df = pd.DataFrame.from_dict(gazeData, orient='index')
@@ -319,4 +304,4 @@ def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> tupl
     jsonFile.unlink(missing_ok=True)
 
     # return the dataframe
-    return df, scene_video_ts_offset
+    return df
