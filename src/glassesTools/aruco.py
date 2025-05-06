@@ -264,7 +264,7 @@ class Detector:
         objP, imgP = self._boards[plane_name].matchImagePoints(detect_tuple[0][plane_name]['img_points'], detect_tuple[0][plane_name]['ids'])
         if imgP is None or int(imgP.shape[0]/4)<self.planes[plane_name]['min_num_markers']:
             return None, None
-        return imgP, objP
+        return objP, imgP
 
     def get_individual_marker_points(self, marker_id: int, detect_tuple=None):
         if detect_tuple is None:
@@ -272,7 +272,7 @@ class Detector:
         if detect_tuple[1]['ids'] is None or not detect_tuple[1]['img_points'] or marker_id not in detect_tuple[1]['ids']:
             return None, None
         img_points = detect_tuple[1]['img_points'][detect_tuple[1]['ids'].flatten().tolist().index(marker_id)]
-        return img_points, self._indiv_marker_points[marker_id]
+        return self._indiv_marker_points[marker_id], img_points
 
     def visualize(self, frame, detect_tuple=None, sub_pixel_fac=8, plane_marker_color=(0,255,0), recovered_plane_marker_color=(255,255,0), individual_marker_color=(255,0,255), unexpected_marker_color=(150,253,253), rejected_marker_color=None):
         if detect_tuple is None:

@@ -273,53 +273,16 @@ class Estimator:
                int(self.video.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)), \
                    self.video.get_prop(cv2.CAP_PROP_FPS)
 
-    def estimate_pose(self, object_points, img_points) -> tuple[int, np.ndarray, np.ndarray, float]:
-        # NB: N_markers also flags success of the pose estimation. Also 0 if not successful or not possible (missing intrinsics)
-        N_markers, R_vec, T_vec, reprojection_error = 0, None, None, -1.
-        if object_points is None or not self.cam_params.has_intrinsics():
-            return N_markers, R_vec, T_vec, reprojection_error
+    def estimate_pose(self, object_points: np.ndarray, img_points: np.ndarray, flags=cv2.SOLVEPNP_ITERATIVE) -> tuple[int, np.ndarray, np.ndarray, float]:
+        return estimate_pose(object_points, img_points, self.cam_params, flags)
 
-        if self.cam_params.has_opencv_camera():
-            n_solutions, R_vec, T_vec, reprojection_error = \
-                cv2.solvePnPGeneric(object_points, img_points, self.cam_params.camera_mtx, self.cam_params.distort_coeffs, np.empty(1), np.empty(1))
-            if n_solutions:
-                N_markers = int(object_points.shape[0]/4)
-            reprojection_error = reprojection_error[0][0]
-        else:
-            # we have a camera not supported by OpenCV
-            # undistort points and project to a identity camera space, so we can use opencv functionality
-            points_w  = transforms.unproject_points(img_points, self.cam_params)
-            points_cam= transforms.project_points(points_w, ocv.CameraParams(self.cam_params.resolution, np.identity(3), np.zeros((5,1))))
-            n_solutions, R_vec, T_vec, _ = cv2.solvePnPGeneric(object_points, points_cam.reshape((-1,1,2)), np.identity(3), np.zeros((5,1)), np.empty(1), np.empty(1))
-            # need to compute reprojection error ourselves, output of solvePnPGeneric is meaningless due to arbitrary camera point units
-            if n_solutions:
-                proj_points = transforms.project_points(object_points,self.cam_params, rot_vec=R_vec[0], trans_vec=T_vec[0])
-                reprojection_error = cv2.norm(proj_points.astype('float32').reshape((-1,1,2)),img_points,cv2.NORM_L2) / np.sqrt(2*proj_points.shape[0])
-            else:
-                reprojection_error = np.nan
-        if n_solutions:
-            N_markers = int(object_points.shape[0]/4)
-        return N_markers, R_vec[0], T_vec[0], reprojection_error
-
-    def estimate_homography(self, object_points, img_points) -> tuple[np.ndarray, bool]:
-        # NB: N_markers also flags success of the pose estimation. Also 0 if not successful or not possible (missing intrinsics)
-        N_markers, H = 0, None
-        if object_points is None:
-            return N_markers, H
-
-        # use undistorted marker corners if possible
-        if self.cam_params.has_intrinsics():
-            img_points = transforms.undistort_points(img_points.reshape((-1,2)),self.cam_params).reshape((-1,1,2))
-
-        H = transforms.estimate_homography(object_points, img_points)
-        if H is not None:
-            N_markers = int(object_points.shape[0]/4)
-        return N_markers, H
+    def estimate_homography(self, object_points: np.ndarray, img_points: np.ndarray) -> tuple[int, np.ndarray]:
+        return estimate_homography(object_points, img_points, self.cam_params)
 
     # higher level functions for detecting + pose estimation
-    def estimate_pose_and_homography(self, frame_idx, img_points, object_points) -> tuple[Pose, dict[str]]:
+    def estimate_pose_and_homography(self, frame_idx: int, object_points: np.ndarray, img_points: np.ndarray) -> tuple[Pose, dict[str]]:
         pose = Pose(frame_idx)
-        if img_points is not None and object_points is not None:
+        if object_points is not None and img_points is not None and img_points.shape[0]>=4: # at least four image points needed
             # get camera pose
             pose.pose_N_markers, pose.pose_R_vec, pose.pose_T_vec, pose.pose_reprojection_error = \
                 self.estimate_pose(object_points, img_points)
@@ -402,16 +365,8 @@ class Estimator:
             # determine pose, if wanted
             for i in indiv_marker_points:
                 mpose = marker.Pose(frame_idx)
-                if indiv_marker_points[i][1] is not None:   # object points may not be available (e.g. when marker size is not set)
-                    # can only get marker pose if we have a calibrated camera (need intrinsics), else at least flag that marker was found
-                    if self.cam_params.has_opencv_camera():
-                        _, mpose.R_vec, mpose.T_vec = cv2.solvePnP(indiv_marker_points[i][1], indiv_marker_points[i][0], self.cam_params.camera_mtx, self.cam_params.distort_coeffs, flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                    elif self.cam_params.has_colmap_camera():
-                        # we have a camera not supported by OpenCV
-                        # undistort points and project to a identity camera space, so we can use opencv functionality
-                        points_w  = transforms.unproject_points(indiv_marker_points[i][0],self.cam_params)
-                        points_cam= transforms.project_points(points_w, ocv.CameraParams(self.cam_params.resolution, np.identity(3), np.zeros((5,1))))
-                        cv2.solvePnP(indiv_marker_points[i][1], points_cam, np.identity(3), np.zeros((5,1)), flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                if indiv_marker_points[i][0] is not None:   # object points may not be available (e.g. when marker size is not set)
+                    _, mpose.R_vec, mpose.T_vec, _ = self.estimate_pose(*indiv_marker_points[i], flags=cv2.SOLVEPNP_IPPE_SQUARE)
                 individual_marker_out[i] = mpose
 
         for e in extra_processing_for_this_frame:
@@ -469,3 +424,43 @@ class Estimator:
                 extra_processing_out[e].append(extra_proc[e])
 
         return poses_out, individual_markers_out, extra_processing_out
+
+def estimate_pose(object_points: np.ndarray, img_points: np.ndarray, cam_params: ocv.CameraParams, flags=cv2.SOLVEPNP_ITERATIVE) -> tuple[int, np.ndarray, np.ndarray, float]:
+    # NB: N_markers also flags success of the pose estimation: it will also be 0 if not successful or not possible (e.g., missing intrinsics)
+    N_points, R_vec, T_vec, reprojection_error = 0, None, None, -1.
+    if object_points is None or not cam_params.has_intrinsics() or object_points.shape[0]<4:   # minimum 4 points needed
+        return N_points, R_vec, T_vec, reprojection_error
+
+    if cam_params.has_opencv_camera():
+        N_solutions, R_vec, T_vec, reprojection_error = \
+            cv2.solvePnPGeneric(object_points, img_points, cam_params.camera_mtx, cam_params.distort_coeffs, np.empty(1), np.empty(1), flags=flags)
+        N_points = object_points.shape[0] if N_solutions else 0
+        reprojection_error = reprojection_error[0][0]
+    else:
+        # we have a camera not supported by OpenCV
+        # undistort points and project to a identity camera space, so we can use opencv functionality
+        points_w  = transforms.unproject_points(img_points, cam_params)
+        points_cam= transforms.project_points(points_w, ocv.CameraParams(cam_params.resolution, np.identity(3), np.zeros((5,1))))
+        N_points, R_vec, T_vec, _ = cv2.solvePnPGeneric(object_points, points_cam.reshape((-1,1,2)), np.identity(3), np.zeros((5,1)), np.empty(1), np.empty(1), flags=flags)
+        # need to compute reprojection error ourselves, output of solvePnPGeneric is meaningless due to arbitrary camera point units
+        if N_points:
+            proj_points = transforms.project_points(object_points,cam_params, rot_vec=R_vec[0], trans_vec=T_vec[0])
+            reprojection_error = cv2.norm(proj_points.astype('float32').reshape((-1,1,2)),img_points,cv2.NORM_L2) / np.sqrt(2*proj_points.shape[0])
+        else:
+            reprojection_error = np.nan
+    return N_points, R_vec[0], T_vec[0], reprojection_error
+
+def estimate_homography(object_points: np.ndarray, img_points: np.ndarray, cam_params: ocv.CameraParams) -> tuple[int, np.ndarray]:
+    # NB: N_points also flags success of the pose estimation: it is 0 if not successful
+    N_points, H = 0, None
+    if object_points is None or object_points.shape[0]<4:   # minimum 4 points needed
+        return N_points, H
+
+    # use undistorted marker corners if possible
+    if cam_params is not None and cam_params.has_intrinsics():
+        img_points = transforms.undistort_points(img_points.reshape((-1,2)),cam_params).reshape((-1,1,2))
+
+    H = transforms.estimate_homography(object_points, img_points)
+    if H is not None:
+        N_points = object_points.shape[0]
+    return N_points, H
