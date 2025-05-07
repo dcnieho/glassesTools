@@ -179,15 +179,15 @@ class Estimator:
         self.video      = ocv.CV2VideoReader(video_file, self.video_ts.timestamps)
         self.cam_params = camera_calibration_file if isinstance(camera_calibration_file,ocv.CameraParams) else ocv.CameraParams.read_from_file(camera_calibration_file)
 
-        self.plane_functions    : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray]|None]] = {}
+        self.plane_functions    : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray]]] = {}
         self.plane_intervals    : dict[str, list[int]|list[list[int]]]                                  = {}
         self.plane_visualizers  : dict[str, typing.Callable[[str,int,np.ndarray,np.ndarray], None]|None]= {}
 
-        self.individual_marker_functions    : dict[_T, typing.Callable[[_T,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray|None|None]]] = {}
+        self.individual_marker_functions    : dict[_T, typing.Callable[[_T,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray|None]]] = {}
         self.individual_marker_intervals    : dict[_T, list[int]|list[list[int]]]                                   = {}
         self.individual_marker_visualizers  : dict[_T, typing.Callable[[_T,int,np.ndarray,np.ndarray], None]|None]  = {}
 
-        self.extra_proc_functions   : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], typing.Any]]   = {}
+        self.extra_proc_functions   : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], list[typing.Any]]] = {}
         self.extra_proc_intervals   : dict[str, list[int]|list[list[int]]]                                  = {}
         self.extra_proc_parameters  : dict[str, dict[str,typing.Any]]                                       = {}
         self.extra_proc_visualizers : dict[str, typing.Callable[[str,int,np.ndarray,typing.Any], None]|None]= {}
@@ -237,7 +237,7 @@ class Estimator:
 
     def register_extra_processing_fun(self,
                                       name: str,
-                                      func: typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], typing.Any],
+                                      func: typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], list[typing.Any]],
                                       processing_intervals: list[int]|list[list[int]],
                                       func_parameters: dict[str],
                                       visualizer: typing.Callable[[str,int,np.ndarray,typing.Any], None]):
