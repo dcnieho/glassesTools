@@ -370,7 +370,9 @@ class Estimator:
                 individual_marker_out[i] = mpose
 
         for e in extra_processing_for_this_frame:
-            extra_processing_out[e] = [frame_idx, *self.extra_proc_functions[e](e, frame_idx, frame, self.cam_params, **self.extra_proc_parameters[e])]
+            eproc = self.extra_proc_functions[e](e, frame_idx, frame, self.cam_params, **self.extra_proc_parameters[e])
+            if eproc is not None:
+                extra_processing_out[e] = [frame_idx, *eproc]
 
         # now that all processing is done, handle visualization, if any
         if self.do_visualize:
@@ -386,7 +388,7 @@ class Estimator:
                         continue
                     self.individual_marker_visualizers[i](i, frame_idx, frame, indiv_marker_points[i][0])
             for e in extra_processing_for_this_frame:
-                if self.show_extra_processing_output and self.extra_proc_visualizers[e]:
+                if self.show_extra_processing_output and self.extra_proc_visualizers[e] and e in extra_processing_out:
                     self.extra_proc_visualizers[e](e, frame, *extra_processing_out[e])
 
             # now also draw pose, if wanted
