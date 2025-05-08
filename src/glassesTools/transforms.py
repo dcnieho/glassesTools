@@ -73,14 +73,14 @@ def estimate_homography(obj_points, img_points):
     return h
 
 def apply_homography(points, H):
-    if np.any(np.isnan(points)):
+    if np.all(np.isnan(points)):
         return np.full_like(points, np.nan)
 
     return cv2.perspectiveTransform(points.astype('float').reshape((-1,1,2)),H).reshape((-1,2))
 
 
 def distort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
-    if np.any(np.isnan(points_cam)):
+    if np.all(np.isnan(points_cam)):
         return np.full_like(points_cam, np.nan)
 
     if cam_params.has_colmap_camera():
@@ -97,7 +97,7 @@ def distort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[
         return np.full_like(points_cam, np.nan)
 
 def undistort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
-    if np.any(np.isnan(points_cam)):
+    if np.all(np.isnan(points_cam)):
         return np.full_like(points_cam, np.nan)
 
     if cam_params.has_colmap_camera():
@@ -111,7 +111,7 @@ def undistort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtyp
         return np.full_like(points_cam, np.nan)
 
 def unproject_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams) -> np.ndarray[tuple[M, typing.Literal[3]], np.dtype[np.float64]]:
-    if np.any(np.isnan(points_cam)):
+    if np.all(np.isnan(points_cam)):
         return np.full((points_cam.shape[0],3), np.nan)
 
     if cam_params.has_colmap_camera():
@@ -123,7 +123,7 @@ def unproject_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtyp
         return np.full((points_cam.shape[0],3), np.nan)
 
 def project_points(points_world: np.ndarray[tuple[M, typing.Literal[3]], np.dtype[np.float64]], cam_params: ocv.CameraParams, ignore_distortion=False, rot_vec: np.ndarray[tuple[typing.Literal[3]], np.dtype[np.float64]]=None, trans_vec: np.ndarray[tuple[typing.Literal[3]], np.dtype[np.float64]]=None) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
-    if np.any(np.isnan(points_world)):
+    if np.all(np.isnan(points_world)):
         return np.full((points_world.shape[0],2), np.nan)
 
     if cam_params.has_colmap_camera():
