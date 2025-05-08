@@ -158,4 +158,4 @@ def intersect_plane_ray(plane_normal, plane_point, ray_direction, ray_point, eps
 
 
 def angle_between(v1, v2):
-    return (180.0 / np.pi) * np.arctan2(np.linalg.norm(np.cross(v1,v2)), np.dot(v1,v2))
+    return (180.0 / np.pi) * np.arctan2(np.linalg.norm(np.cross(v1,v2),axis=min((1,v1.ndim-1,v2.ndim-1))), np.vecdot(v1,v2))
