@@ -147,7 +147,6 @@ def project_points(points_world: np.ndarray[tuple[M, typing.Literal[3]], np.dtyp
 
 def intersect_plane_ray(plane_normal, plane_point, ray_direction, ray_point, epsilon=1e-6):
     # from https://rosettacode.org/wiki/Find_the_intersection_of_a_line_with_a_plane#Python
-
     ndotu = plane_normal.dot(ray_direction)
     if abs(ndotu) < epsilon:
         # raise RuntimeError("no intersection or line is within plane")
