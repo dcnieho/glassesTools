@@ -37,6 +37,8 @@ def load(file: pathlib.Path):
     with open(file, 'r') as f:
         return json.load(f, object_hook=json_decoder)
 
+def loads(payload: str):
+    return json.loads(payload, object_hook=json_decoder)
 
 
 @dataclasses.dataclass
