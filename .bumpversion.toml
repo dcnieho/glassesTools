@@ -1,5 +1,5 @@
 [tool.bumpversion]
-current_version = "1.22.3"
+current_version = "1.22.4"
 
 [[tool.bumpversion.files]]
 filename = "src/glassesTools/version.py"
