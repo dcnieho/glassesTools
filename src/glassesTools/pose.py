@@ -360,12 +360,12 @@ class Estimator:
             indiv_marker_points: dict[_T, tuple[np.ndarray,np.ndarray]] = {}
             for i in indiv_markers_for_this_frame:
                 det_output = self.individual_marker_functions[i](i, frame_idx, frame, self.cam_params)
-                if det_output[0] is not None:
+                if det_output[1] is not None:   # object points may not be available (e.g. when marker size is not set), so check for image points
                     indiv_marker_points[i] = det_output
             # determine pose, if wanted
             for i in indiv_marker_points:
                 mpose = marker.Pose(frame_idx)
-                if indiv_marker_points[i][0] is not None:   # object points may not be available (e.g. when marker size is not set)
+                if indiv_marker_points[i][0] is not None:   # object points may not be available (e.g. when marker size is not set). If so, skip pose estimation
                     _, mpose.R_vec, mpose.T_vec, _ = self.estimate_pose(*indiv_marker_points[i], flags=cv2.SOLVEPNP_IPPE_SQUARE)
                 individual_marker_out[i] = mpose
 
