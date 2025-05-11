@@ -4,15 +4,21 @@ import typing
 import shutil
 import json
 import os
+from enum import auto
 
-from . import json, video_utils
+from . import json, utils, video_utils
 
+class Type(utils.AutoName):
+    External      = auto()
+    Head_attached = auto()
+json.register_type(json.TypeEntry(Type,'__enum.camera_recording.Type__', utils.enum_val_2_str, lambda x: getattr(Type, x.split('.')[1])))
 
 @dataclasses.dataclass
 class Recording:
     default_json_file_name      : typing.ClassVar[str] = 'recording_info.json'
 
     name                        : str
+    type                        : Type
     video_file                  : str
     source_directory            : pathlib.Path
     working_directory           : pathlib.Path  = ""
@@ -33,7 +39,14 @@ class Recording:
         path = pathlib.Path(path)
         if path.is_dir():
             path /= Recording.default_json_file_name
-        return Recording(**json.load(path), working_directory=path.parent)
+        kwds = json.load(path)
+        # roundtrip the enum
+        if 'type' in kwds:
+            kwds['type'] = Type(kwds['type'])
+        # backwards compat
+        if 'type' not in kwds:
+            kwds['type'] = Type.External
+        return Recording(**kwds, working_directory=path.parent)
 
 
     def get_video_path(self):
