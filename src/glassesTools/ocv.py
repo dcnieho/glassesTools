@@ -92,6 +92,8 @@ class CameraParams:
         return self.colmap_camera is not None
     def has_intrinsics(self):
         return self.has_opencv_camera() or self.has_colmap_camera()
+    def has_extrinsics(self):
+        return (self.rotation_vec is not None) and (self.position is not None)
 
 
 class CV2VideoReader:
