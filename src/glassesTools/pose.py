@@ -16,26 +16,28 @@ else:
 class Pose:
     # description of tsv file used for storage
     _columns_compressed = {'frame_idx':1,
-                           'pose_N_markers': 1, 'pose_reprojection_error': 1, 'pose_R_vec': 3, 'pose_T_vec': 3,
-                           'homography_N_markers': 1, 'homography_mat': 9}
-    _non_float          = {'frame_idx': int, 'pose_ok': bool, 'pose_N_markers': int, 'homography_N_markers': int}
+                           'pose_N_points': 1, 'pose_reprojection_error': 1, 'pose_R_vec': 3, 'pose_T_vec': 3,
+                           'homography_N_points': 1, 'homography_mat': 9}
+    _non_float          = {'frame_idx': int, 'pose_ok': bool, 'pose_N_points': int, 'homography_N_points': int}
+    # backwards compatibility
+    _column_patches     = {'pose_N_markers': ('pose_N_points', lambda x: x*4), 'homography_N_markers': ('homography_N_points', lambda x: x*4)}
 
     def __init__(self,
                  frame_idx              : int,
-                 pose_N_markers         : int       = 0,
+                 pose_N_points          : int       = 0,
                  pose_reprojection_error: float     = -1.,
                  pose_R_vec             : np.ndarray= None,
                  pose_T_vec             : np.ndarray= None,
-                 homography_N_markers   : int       = 0,
+                 homography_N_points    : int       = 0,
                  homography_mat         : np.ndarray= None):
         self.frame_idx              : int         = frame_idx
         # pose
-        self.pose_N_markers         : int         = pose_N_markers        # number of ArUco markers this pose estimate is based on. 0 if failed
+        self.pose_N_points          : int         = pose_N_points       # number of image points (4 per marker if based on ArUco markers) this pose estimate is based on. 0 if failed or otherwise not available
         self.pose_reprojection_error: float       = pose_reprojection_error
         self.pose_R_vec             : np.ndarray  = pose_R_vec
         self.pose_T_vec             : np.ndarray  = pose_T_vec
         # homography
-        self.homography_N_markers   : int         = homography_N_markers  # number of ArUco markers this homongraphy estimate is based on. 0 if failed
+        self.homography_N_points    : int         = homography_N_points # number of image points (4 per marker if based on ArUco markers) this homongraphy estimate is based on. 0 if failed or otherwise not available
         self.homography_mat         : np.ndarray  = homography_mat.reshape(3,3) if homography_mat is not None else homography_mat
 
         # internals
@@ -48,9 +50,9 @@ class Pose:
         self._i_homography_mat  = None
 
     def pose_successful(self):
-        return self.pose_N_markers>0
+        return self.pose_N_points>0
     def homography_successful(self):
-        return self.homography_N_markers>0
+        return self.homography_N_points>0
 
     def draw_frame_axis(self, img, camera_params: ocv.CameraParams, arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.]):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or not camera_params.has_intrinsics():
@@ -284,11 +286,11 @@ class Estimator:
         pose = Pose(frame_idx)
         if object_points is not None and img_points is not None and img_points.shape[0]>=4: # at least four image points needed
             # get camera pose
-            pose.pose_N_markers, pose.pose_R_vec, pose.pose_T_vec, pose.pose_reprojection_error = \
+            pose.pose_N_points, pose.pose_R_vec, pose.pose_T_vec, pose.pose_reprojection_error = \
                 self.estimate_pose(object_points, img_points)
 
             # also get homography (direct image plane to plane in world transform)
-            pose.homography_N_markers, pose.homography_mat = \
+            pose.homography_N_points, pose.homography_mat = \
                 self.estimate_homography(object_points, img_points)
         return pose
 
