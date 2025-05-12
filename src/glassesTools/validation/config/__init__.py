@@ -5,7 +5,6 @@ import pandas as pd
 import pathlib
 import importlib.resources
 import typing
-import cv2
 
 from ... import aruco as _aruco, data_files as _data_files
 
