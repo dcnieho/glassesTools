@@ -146,15 +146,15 @@ class Pose:
                     self._RMat = cv2.Rodrigues(self.pose_R_vec)[0]
                 self._RtMat = np.hstack((self._RMat, self.pose_T_vec.reshape(3,1)))
 
-            # get poster normal
+            # get plane normal
             self._plane_normal = self._RMat[:,2]     # equivalent to: np.matmul(self._RMat, np.array([0., 0., 1.]))
-            # get point on poster (just use origin)
+            # get point on plane (just use plane's origin, doesn't matter which point)
             self._plane_point  = self._RtMat[:,3]    # equivalent to: np.matmul(self._RtMat, np.array([0., 0., 0., 1.]))
 
         # normalize vector
         vector /= np.linalg.norm(vector)
 
-        # find intersection of 3D gaze with poster
+        # find intersection of vector (e.g. 3D gaze) with plane
         return transforms.intersect_plane_ray(self._plane_normal, self._plane_point, vector.flatten(), origin.flatten())
 
 
