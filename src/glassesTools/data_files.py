@@ -63,8 +63,12 @@ def read_file(file_name              : str|pathlib.Path,
               subset_var                                         = 'frame_idx'):
 
     # interrogate destination object
-    cols_compressed: dict[str, int] = object._columns_compressed
-    dtypes         : dict[str, Any] = object._non_float
+    cols_compressed: dict[str, int]                 = object._columns_compressed
+    dtypes         : dict[str, Any]                 = object._non_float
+    column_patches : dict[str, tuple[str,Callable]] = object._column_patches if hasattr(object,'_column_patches') else None
+    # add patches, if any, to dtypes so these column are read correctly to
+    if column_patches is not None:
+        dtypes |= {on:dtypes[nn] for on,(nn,_) in column_patches.items()}
 
     # read file and select, if wanted
     df = pd.read_csv(file_name, delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **dtypes))
@@ -73,6 +77,17 @@ def read_file(file_name              : str|pathlib.Path,
         for e in episodes[1:]:
             sel |= (df[subset_var] >= e[0]) & (df[subset_var] <= e[1])
         df = df[sel]
+
+    # if we have column renaming to do, do it now
+    if column_patches is not None:
+        # apply operations, if any
+        for on in column_patches:
+            op = column_patches[on][1]
+            if on not in df.columns or op is None:
+                continue
+            df[on] = op(df[on])
+        # rename columns
+        df = df.rename(columns={on:nn for on,(nn,_) in column_patches.items()})
 
     # figure out what the data columns are
     cols_uncompressed = uncompress_columns(cols_compressed)
