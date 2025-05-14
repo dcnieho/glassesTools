@@ -90,10 +90,7 @@ def checkRecording(inputDir: str|pathlib.Path, recInfo: Recording):
     for ext in ('tsv','mkv'):
         file = f'{recInfo.name}.{ext}'
         if not (inputDir / file).is_file():
-            if use_return:
-                return False
-            else:
-                raise RuntimeError(f'Recording {recInfo.name} not found: {file} file not found in {inputDir}.')
+            raise RuntimeError(f'Recording {recInfo.name} not found: {file} file not found in {inputDir}.')
 
     return True
 
