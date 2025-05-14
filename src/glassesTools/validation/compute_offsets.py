@@ -194,7 +194,7 @@ def compute(
 
                     # get offset
                     ang2D               = transforms.angle_between(vTarget,vGaze)
-                    # decompose in horizontal/vertical (in poster space)
+                    # decompose in horizontal/vertical (in plane space)
                     onPlaneAngle        = math.atan2(gazePlane[i,1]-targets[t][1], gazePlane[i,0]-targets[t][0])
                     offset[out_idx,idq,:]= ang2D*np.array([math.cos(onPlaneAngle), math.sin(onPlaneAngle)])
 
