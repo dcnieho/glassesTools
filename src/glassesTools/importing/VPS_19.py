@@ -13,7 +13,6 @@ import shutil
 import pathlib
 import json
 import pandas as pd
-import os
 import datetime
 
 from ..recording import Recording

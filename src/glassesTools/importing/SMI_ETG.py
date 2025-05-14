@@ -12,7 +12,6 @@ The output directory will contain:
 """
 
 import shutil
-import os
 import pathlib
 import cv2
 import pandas as pd
