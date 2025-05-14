@@ -110,7 +110,7 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
         case EyeTracker.Tobii_Glasses_3:
             rec_info = tobii_G3(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.VPS_19:
-            rec_info = VPS_19(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
+            rec_info = VPS_19(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
 
     return rec_info
 
