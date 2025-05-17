@@ -211,14 +211,16 @@ def compute(
 
                 df.loc[idxer[idx+1,:,t],'acc_x'] = np.nanmedian(offset[:,:,0],axis=0)
                 df.loc[idxer[idx+1,:,t],'acc_y'] = np.nanmedian(offset[:,:,1],axis=0)
-                df.loc[idxer[idx+1,:,t],'acc'  ] = np.nanmedian(np.hypot(offset[:,:,0],offset[:,:,1]),axis=0)
+                # NB: below is equivalent to computing offset of median gaze vector from target
+                df.loc[idxer[idx+1,:,t],'acc'  ] = np.hypot(df.loc[idxer[idx+1,:,t],'acc_x'], df.loc[idxer[idx+1,:,t],'acc_y'])
 
-                df.loc[idxer[idx+1,:,t],'rms_x'] = np.sqrt(np.nanmean(np.diff(offset[:,:,0],axis=0)**2, axis=0))
+                df.loc[idxer[idx+1,:,t],'rms_x'] = np.sqrt(np.nanmean(np.diff(offset[:,:,0],axis=0)**2))
                 df.loc[idxer[idx+1,:,t],'rms_y'] = np.sqrt(np.nanmean(np.diff(offset[:,:,1],axis=0)**2))
+                # NB: below is equivalent to np.sqrt(np.nanmean(xdiff+ydiff))
                 df.loc[idxer[idx+1,:,t],'rms'  ] = np.hypot(df.loc[idxer[idx+1,:,t],'rms_x'], df.loc[idxer[idx+1,:,t],'rms_y'])
 
-                df.loc[idxer[idx+1,:,t],'std_x'] = np.nanstd(offset[:,:,0],ddof=1,axis=0)
-                df.loc[idxer[idx+1,:,t],'std_y'] = np.nanstd(offset[:,:,1],ddof=1,axis=0)
+                df.loc[idxer[idx+1,:,t],'std_x'] = np.nanstd(offset[:,:,0],ddof=0,axis=0)
+                df.loc[idxer[idx+1,:,t],'std_y'] = np.nanstd(offset[:,:,1],ddof=0,axis=0)
                 df.loc[idxer[idx+1,:,t],'std'  ] = np.hypot(df.loc[idxer[idx+1,:,t],'std_x'], df.loc[idxer[idx+1,:,t],'std_y'])
 
                 if include_data_loss:
