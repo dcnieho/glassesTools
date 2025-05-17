@@ -69,6 +69,8 @@ def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker,
         case EyeTracker.VPS_19:
             from .VPS_19 import getRecordingInfo
             rec_info = getRecordingInfo(source_dir)
+        case _:
+            raise RuntimeError(f'Not implemented for "{device.value}", contact developer')
 
     if rec_info is not None and not isinstance(rec_info,list):
         rec_info = [rec_info]
@@ -111,6 +113,8 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
             rec_info = tobii_G3(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.VPS_19:
             rec_info = VPS_19(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
+        case _:
+            raise RuntimeError(f'Not implemented for "{device.value}", contact developer')
 
     return rec_info
 
