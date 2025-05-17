@@ -4,6 +4,7 @@ from . import json, utils
 
 class EyeTracker(utils.AutoName):
     AdHawk_MindLink = enum.auto()
+    Argus_ETVision  = enum.auto()
     Generic         = enum.auto()
     Meta_Aria_Gen_1 = enum.auto()
     Pupil_Core      = enum.auto()
@@ -18,6 +19,7 @@ class EyeTracker(utils.AutoName):
 eye_tracker_names = [x.value for x in EyeTracker if x!=EyeTracker.Unknown]
 
 EyeTracker.AdHawk_MindLink.color = utils.hex_to_rgba_0_1("#F0A3FF")
+EyeTracker.Argus_ETVision .color = utils.hex_to_rgba_0_1("#C20088")
 EyeTracker.Generic        .color = utils.hex_to_rgba_0_1("#393939")
 EyeTracker.Meta_Aria_Gen_1.color = utils.hex_to_rgba_0_1("#9DCC00")
 EyeTracker.Pupil_Core     .color = utils.hex_to_rgba_0_1("#0075DC")
@@ -30,7 +32,7 @@ EyeTracker.Tobii_Glasses_3.color = utils.hex_to_rgba_0_1("#94FFB5")
 EyeTracker.VPS_19         .color = utils.hex_to_rgba_0_1("#8F7C00")
 EyeTracker.Unknown        .color = utils.hex_to_rgba_0_1("#393939")
 # other colors left over:
-# #C20088, #003380, #FFA405, #FFA8BB, #426600, #FF0010, #5EF1F2, #00998F, #E0FF66, #740AFF, #990000, #FFFF80, #FFE100, #FF5005
+# #003380, #FFA405, #FFA8BB, #426600, #FF0010, #5EF1F2, #00998F, #E0FF66, #740AFF, #990000, #FFFF80, #FFE100, #FF5005
 # colors taken from P. Green-Armytage (2010). "A Colour Alphabet and the Limits of Colour Coding". Colour: Design & Creativity 5 (10): 1–23.
 
 

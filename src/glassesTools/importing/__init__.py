@@ -9,6 +9,7 @@ from ..eyetracker import EyeTracker
 from .. import eyetracker, naming
 
 from .adhawk_mindlink import preprocessData as adhawk_mindlink
+from .argus_ETVision import preprocessData as argus_ETVision
 from .generic import importData as generic
 from .meta_aria_gen1 import importData as meta_aria_gen1
 from .SeeTrue_STONE import preprocessData as SeeTrue_STONE
@@ -38,6 +39,9 @@ def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker,
     match device:
         case EyeTracker.AdHawk_MindLink:
             from .adhawk_mindlink import getRecordingInfo
+            rec_info = getRecordingInfo(source_dir)
+        case EyeTracker.Argus_ETVision:
+            from .argus_ETVision import getRecordingInfo
             rec_info = getRecordingInfo(source_dir)
         case EyeTracker.Generic:
             from .generic import getRecordingInfo
@@ -93,6 +97,8 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
     match device:
         case EyeTracker.AdHawk_MindLink:
             rec_info = adhawk_mindlink(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
+        case EyeTracker.Argus_ETVision:
+            rec_info = argus_ETVision(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
         case EyeTracker.Generic:
             rec_info = generic(output_dir, source_dir, rec_info, device_name, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
         case EyeTracker.Meta_Aria_Gen_1:
@@ -214,5 +220,5 @@ def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame|None, frame_ts: pd.
     rec_info.store_as_json(output_dir / rec_info_fname)
 
 
-__all__ = ['adhawk_mindlink','generic','pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3','VPS_19',
+__all__ = ['adhawk_mindlink','argus_ETVision','generic','pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3','VPS_19',
            'get_recording_info','do_import','check_source_dir','check_output_dir','check_folders','check_device']

@@ -23,6 +23,7 @@ glassesTools supports the following eye trackers:
 |Name|`glassesTools.eyetracker.EyeTracker` `Enum` value|
 | --- | --- |
 |AdHawk MindLink|`EyeTracker.AdHawk_MindLink`|
+|Argus Science ETVision|`EyeTracker.Argus_ETVision`|
 |Generic|`EyeTracker.Generic`*|
 |Meta Project Aria Generation 1|`EyeTracker.Meta_Aria_Gen_1`|
 |Pupil Core|`EyeTracker.Pupil_Core`|
