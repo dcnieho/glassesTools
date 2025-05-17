@@ -152,7 +152,7 @@ def check_output_dir(output_dir: str|pathlib.Path, rec_info: Recording) -> tuple
         rec_info.working_directory = output_dir
     return output_dir, rec_info
 
-def check_folders(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path, rec_info: Recording, device: EyeTracker, device_name: str=None) -> tuple[pathlib.Path, pathlib.Path, Recording]:
+def check_folders(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path, rec_info: Recording, device: EyeTracker, device_name: str=None) -> tuple[pathlib.Path, pathlib.Path, Recording, str]:
     if rec_info is not None and rec_info.eye_tracker:
         if rec_info.eye_tracker!=device:
             raise ValueError(f'Provided rec_info is for a device ({rec_info.eye_tracker.value}) that is not a {device.value}. Cannot use.')
