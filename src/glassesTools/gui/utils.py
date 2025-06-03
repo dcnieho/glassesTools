@@ -264,7 +264,7 @@ def tooltip_combo(label: str, current_item: int, items: list[str], item_tooltips
     items_count = len(items)
     preview_value = items[current_item] if current_item>=0 and current_item<items_count else ''
 
-    if (popup_max_height_in_items != -1 and not (g.next_window_data.flags & imgui.internal.NextWindowDataFlags_.has_size_constraint)):
+    if (popup_max_height_in_items != -1 and not (g.next_window_data.has_flags & imgui.internal.NextWindowDataFlags_.has_size_constraint)):
         max_popup_height = imgui.FLT_MAX if popup_max_height_in_items<=0 else (g.font_size + g.style.item_spacing.y) * popup_max_height_in_items - g.style.item_spacing.y + (g.style.window_padding.y * 2)
         imgui.set_next_window_size_constraints((0,0), (imgui.FLT_MAX, max_popup_height))
 

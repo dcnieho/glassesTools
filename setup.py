@@ -42,6 +42,6 @@ setuptools.setup(
     python_requires=">=3.11",
     install_requires=required,
     extras_require = {
-        'GUI':  ["imgui_bundle==1.6.2"]
+        'GUI':  ["imgui_bundle==1.6.3"]
     }
 )
