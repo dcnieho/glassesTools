@@ -13,6 +13,7 @@ import os
 import cv2
 import pandas as pd
 import numpy as np
+from fractions import Fraction
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
@@ -182,10 +183,18 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
         frames = sorted(frames)
 
     # 3. make into video
-    framerate = "{:.4f}".format(1000./ifi)
+    # 3.1 make concat filter input file
+    concat_file = outputDir/'concat_input.txt'
+    with open(concat_file,'wt') as f:
+        fnames = (f'frame_{f}.jpeg' for f in frameTimestamps.frame_idx.to_numpy())
+        f.writelines((f"file '{sceneVidDir / fn}'\n" for fn in fnames))
+
+    fpsFrac = Fraction(1000./ifi).limit_denominator(10000).as_integer_ratio()
+    fpsFrac = f'{fpsFrac[0]}/{fpsFrac[1]}'
     outFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
-    cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'image2', '-framerate', framerate, '-start_number', str(frames[0]), '-i', '"'+str(sceneVidDir / 'frame_%d.jpeg')+'"', '"'+str(outFile)+'"'])
+    cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', '"'+str(concat_file)+'"', '-vf', f'"settb=AVTB,setpts=N/({fpsFrac})/TB,fps={fpsFrac}"', '"'+str(outFile)+'"'])
     os.system(cmd_str)
+    concat_file.unlink(missing_ok=True)
     if outFile.is_file():
         recInfo.scene_video_file = outFile.name
     else:
@@ -216,17 +225,14 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
 
     # 4. write data to file
     # fix up frame idxs and timestamps
-    firstFrame = frameTimestamps['frame_idx'].min()
 
-    # write the gaze data to a csv file
-    gazeDf['frame_idx'] -= firstFrame
+    # prep the gaze timestamps
+    firstFrameTs = frameTimestamps['frame_idx'].idxmin()
+    gazeDf.index -= firstFrameTs
+    # overwrite the video frames
+    gazeDf['frame_idx'] = range(0,gazeDf.shape[0])
 
-    # also store frame timestamps
-    # this is what it should be if we get VFR video file writing above to work
-    #frameTimestamps['frame_idx'] -= firstFrame
-    #frameTimestamps=frameTimestamps.reset_index().set_index('frame_idx')
-    #frameTimestamps['timestamp'] -= frameTimestamps['timestamp'].min()
-    # instead now, get actual ts for each frame in written video as that is what we
+    # get actual ts for each frame in written video as that is what we
     # have to work with. Note that these do not match gaze data ts, but code nowhere
     # assumes they do
     frameTimestamps = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
