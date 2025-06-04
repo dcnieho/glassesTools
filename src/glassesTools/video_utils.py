@@ -186,8 +186,7 @@ def get_frame_timestamps_from_video(vid_file: pathlib.Path) -> pd.DataFrame:
     ### convert the frame_timestamps to dataframe
     frame_idx = np.arange(0, len(frame_ts))
     frame_ts_df = pd.DataFrame({'frame_idx': frame_idx, 'timestamp': frame_ts})
-    frame_ts_df.set_index('frame_idx', inplace=True)
-    return frame_ts_df
+    return frame_ts_df.set_index('frame_idx')
 
 def get_video_duration(vid_file: pathlib.Path) -> float:
     # get duration of video file in seconds
