@@ -157,5 +157,21 @@ def intersect_plane_ray(plane_normal, plane_point, ray_direction, ray_point, eps
     return w + si * ray_direction + plane_point
 
 
+
+def _vecdot(x1,x2, axis=-1):
+    # for numpy<2 compat
+    ndim = max(x1.ndim, x2.ndim)
+    x1_shape = (1,)*(ndim - x1.ndim) + tuple(x1.shape)
+    x2_shape = (1,)*(ndim - x2.ndim) + tuple(x2.shape)
+    if x1_shape[axis] != x2_shape[axis]:
+        raise ValueError("x1 and x2 must have the same size along the given axis")
+
+    x1_, x2_ = np.broadcast_arrays(x1, x2)
+    x1_ = np.moveaxis(x1_, axis, -1)
+    x2_ = np.moveaxis(x2_, axis, -1)
+
+    res = x1_[..., None, :] @ x2_[..., None]
+    return res[..., 0, 0].copy()
+
 def angle_between(v1, v2):
-    return (180.0 / np.pi) * np.arctan2(np.linalg.norm(np.cross(v1,v2),axis=min((1,v1.ndim-1,v2.ndim-1))), np.vecdot(v1,v2))
+    return (180.0 / np.pi) * np.arctan2(np.linalg.norm(np.cross(v1,v2),axis=min((1,v1.ndim-1,v2.ndim-1))), _vecdot(v1,v2))
