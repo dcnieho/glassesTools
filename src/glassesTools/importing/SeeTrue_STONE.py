@@ -289,20 +289,21 @@ def gazedata2df(textFile: str|pathlib.Path, sceneVideoDimensions: list[int]):
     df = pd.read_table(textFile,sep=';',index_col=False)
     df.columns=df.columns.str.strip()
 
-    # remove unneeded columns
-    rem = [x for x in df.columns if x not in ['Frame number','Timestamp','Gazepoint X','Gazepoint Y','Scene picture number']]
-    df = df.drop(columns=rem)
-
     # rename and reorder columns
     lookup = {'Timestamp': 'timestamp',
               'Scene picture number': 'frame_idx',
               'Gazepoint X': 'gaze_pos_vid_x',
-              'Gazepoint Y': 'gaze_pos_vid_y',}
+              'Gazepoint Y': 'gaze_pos_vid_y',
+              'Pupil area (left), sq mm': 'pup_diam_left',
+              'Pupil area (right), sq mm': 'pup_diam_right'}
     df=df.rename(columns=lookup)
     # reorder
     idx = [lookup[k] for k in lookup if lookup[k] in df.columns]
-    idx.extend([x for x in df.columns if x not in idx])   # append columns not in lookup
     df = df[idx]
+
+    # pupil area to diameter
+    df['pup_diam_left' ] = 2*np.sqrt(df['pup_diam_left' ].to_numpy()/np.pi)
+    df['pup_diam_right'] = 2*np.sqrt(df['pup_diam_right'].to_numpy()/np.pi)
 
     # set timestamps as index
     df = df.set_index('timestamp')
