@@ -9,15 +9,15 @@ The output directory will contain:
 
 import shutil
 import pathlib
-import os
 import cv2
 import pandas as pd
 import numpy as np
+import av
 from fractions import Fraction
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
-from .. import naming, video_utils
+from .. import naming
 
 
 def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False, cam_cal_file: str|pathlib.Path=None) -> Recording:
@@ -183,59 +183,71 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
         frames = sorted(frames)
 
     # 3. make into video
-    # 3.1 make concat filter input file
+    # 3.1 find unique scene camera frames and their timestamps
+    firstFrame      = frameTimestamps['frame_idx'].min()
+    firstFrameTs    = frameTimestamps['frame_idx'].idxmin()
+    frameTimestamps = frameTimestamps.reset_index().groupby('frame_idx').first().reset_index()
+    # 3.2 make concat filter input file
     concat_file = outputDir/'concat_input.txt'
-    with open(concat_file,'wt') as f:
-        fnames = (f'frame_{f}.jpeg' for f in frameTimestamps.frame_idx.to_numpy())
+    with open(concat_file, 'wt') as f:
+        f.writelines('ffconcat version 1.0\n')
+        fnames = (f'frame_{f}.jpeg' for f in frameTimestamps['frame_idx'].to_numpy())
         f.writelines((f"file '{sceneVidDir / fn}'\n" for fn in fnames))
 
-    fpsFrac = Fraction(1000./ifi).limit_denominator(10000).as_integer_ratio()
-    fpsFrac = f'{fpsFrac[0]}/{fpsFrac[1]}'
+    # 3.3 determine frame pts and durations
+    ifis            = np.diff(frameTimestamps['timestamp'].to_numpy())
+    ifis            = np.append(ifis,[np.median(ifis)])
+    durs            = ifis/1000
+    pts_time        = np.cumsum(np.append([0],durs))
+
+    # 3.4 read frames through concat filter, output to mp4 with the right pts and dur
     outFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
-    cmd_str = ' '.join(['ffmpeg', '-hide_banner', '-loglevel', 'error', '-y', '-f', 'concat', '-safe', '0', '-i', '"'+str(concat_file)+'"', '-vf', f'"settb=AVTB,setpts=N/({fpsFrac})/TB,fps={fpsFrac}"', '"'+str(outFile)+'"'])
-    os.system(cmd_str)
+    ts = 900000
+    with av.open(concat_file, 'r', format='concat', options={'safe':'0'}) as inp:
+        in_stream = inp.streams.video[0]
+        with av.open(outFile, 'w', format='mp4') as out:
+            out_stream = out.add_stream('libx264')
+            out_stream.width = in_stream.codec_context.width  # Set frame width to be the same as the width of the input stream
+            out_stream.height = in_stream.codec_context.height  # Set frame height to be the same as the height of the input stream
+            out_stream.pix_fmt = in_stream.codec_context.pix_fmt  # Copy pixel format from input stream to output stream
+            out_stream.time_base = Fraction(1, ts)
+
+            for frame_idx, frame in enumerate(inp.decode(in_stream)):
+                frame.pts       = np.round(pts_time[frame_idx]/out_stream.time_base)
+                frame.dts       = np.round(pts_time[frame_idx]/out_stream.time_base)
+                frame.duration  = np.round(  durs  [frame_idx]/out_stream.time_base)
+                frame.time_base = out_stream.time_base
+
+                packet = out_stream.encode(frame)
+                out.mux(packet)
+            
+            # Flush the encoder
+            packet = out_stream.encode(None)
+            out.mux(packet)
+
+    # 3.5 clean up
+    # check for success
     concat_file.unlink(missing_ok=True)
     if outFile.is_file():
         recInfo.scene_video_file = outFile.name
     else:
         raise RuntimeError('Error making a scene video out of the SeeTrue''s frames')
 
-    # attempt 2 that should allow correct VFR video files, but doesn't work with current MediaWriter
-    # due to what i think is a bug: https://github.com/matham/ffpyplayer/issues/129.
-    ## get which pixel format
-    #codec    = ffpyplayer.tools.get_format_codec(fmt='mp4')
-    #pix_fmt  = ffpyplayer.tools.get_best_pix_fmt('bgr24',ffpyplayer.tools.get_supported_pixfmts(codec))
-    #fpsFrac  = Fraction(1000./ifi).limit_denominator(10000).as_integer_ratio()
-    #fpsFrac  = tuple([x*10 for x in fpsFrac])
-    ## scene video
-    #out_opts = {'pix_fmt_in':'bgr24', 'pix_fmt_out':pix_fmt, 'width_in':w, 'height_in':h,'frame_rate':fpsFrac}
-    #vidOut   = MediaWriter(str(outputDir / 'worldCamera.mp4'), [out_opts], overwrite=True)
-    #t0       = frameTimestamps.index[0]
-    #for i,f in enumerate(frames):
-    #    frame = cv2.imread(str(sceneVidDir / 'frame_{:5d}.jpeg'.format(f)))
-    #    img   = Image(plane_buffers=[frame.flatten().tobytes()], pix_fmt='bgr24', size=(int(w), int(h)))
-    #    t = (frameTimestamps.index[i]-t0)/1000
-    #    print(t, t/(fpsFrac[1]/fpsFrac[0]))
-    #    vidOut.write_frame(img=img, pts=t)
-
     # delete the black frames we added, if any
     for f in blackFrames:
         if (sceneVidDir / 'frame_{:d}.jpeg'.format(f)).is_file():
             (sceneVidDir / 'frame_{:d}.jpeg'.format(f)).unlink(missing_ok=True)
 
-    # 4. write data to file
-    # fix up frame idxs and timestamps
-
+    # 4. fix up frame idxs and timestamps in gaze and video data
     # prep the gaze timestamps
-    firstFrameTs = frameTimestamps['frame_idx'].idxmin()
     gazeDf.index -= firstFrameTs
-    # overwrite the video frames
-    gazeDf['frame_idx'] = range(0,gazeDf.shape[0])
+    # overwrite the video frames, now we have one video frame per gaze sample
+    gazeDf['frame_idx'] -= firstFrame
 
-    # get actual ts for each frame in written video as that is what we
-    # have to work with. Note that these do not match gaze data ts, but code nowhere
-    # assumes they do
-    frameTimestamps = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
+    # Also fix video timestamps
+    frameTimestamps = frameTimestamps.drop(columns=['frame_idx'])
+    frameTimestamps.index.name = 'frame_idx'
+    frameTimestamps['timestamp'] -= firstFrameTs
 
     return gazeDf, frameTimestamps
 
