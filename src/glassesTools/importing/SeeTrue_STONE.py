@@ -306,16 +306,16 @@ def gazedata2df(textFile: str|pathlib.Path, sceneVideoDimensions: list[int]):
               'Scene picture number': 'frame_idx',
               'Gazepoint X': 'gaze_pos_vid_x',
               'Gazepoint Y': 'gaze_pos_vid_y',
-              'Pupil area (left), sq mm': 'pup_diam_left',
-              'Pupil area (right), sq mm': 'pup_diam_right'}
+              'Pupil area (left), sq mm' : 'pup_diam_l',
+              'Pupil area (right), sq mm': 'pup_diam_r'}
     df=df.rename(columns=lookup)
     # reorder
     idx = [lookup[k] for k in lookup if lookup[k] in df.columns]
     df = df[idx]
 
     # pupil area to diameter
-    df['pup_diam_left' ] = 2*np.sqrt(df['pup_diam_left' ].to_numpy()/np.pi)
-    df['pup_diam_right'] = 2*np.sqrt(df['pup_diam_right'].to_numpy()/np.pi)
+    df['pup_diam_l' ] = 2*np.sqrt(df['pup_diam_l'].to_numpy()/np.pi)
+    df['pup_diam_r']  = 2*np.sqrt(df['pup_diam_r'].to_numpy()/np.pi)
 
     # set timestamps as index
     df = df.set_index('timestamp')
