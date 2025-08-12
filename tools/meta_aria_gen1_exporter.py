@@ -7,6 +7,7 @@ import numpy as np
 import pandas as pd
 import cv2
 import pycolmap
+import itertools
 
 from projectaria_tools.core import calibration, data_provider, mps, sophus
 from projectaria_tools.core.sensor_data import TimeDomain
@@ -83,9 +84,13 @@ convert_vrs_to_mp4(vrs_file,os.path.join(output_folder,'worldCamera.mp4'))
 if mps_folder is None:
     mps_folder = os.path.join(*vrs_path_components[0:-1],f'mps_{vrs_file_stem}_vrs')
 mps_data_paths = MpsDataPathsProvider(mps_folder)
+eye_gaze_path_general = mps_data_paths.get_data_paths().eyegaze.general_eyegaze # always need this one, we may need to revert to it if gaze is missing in personalized gaze file
+gaze_cpf_general = []
 if not (eye_gaze_path := mps_data_paths.get_data_paths().eyegaze.personalized_eyegaze):
-    eye_gaze_path = mps_data_paths.get_data_paths().eyegaze.general_eyegaze
-gaze_cpf = mps.read_eyegaze(eye_gaze_path)
+    eye_gaze_path = eye_gaze_path_general
+else:
+    gaze_cpf_general = mps.read_eyegaze(eye_gaze_path_general)
+gaze_cpf         = mps.read_eyegaze(eye_gaze_path)
 
 # this flag should be set to true. convert_vrs_to_mp4() above turns the video upright. We need to make sure
 # we export both gaze and a camera calibration that take this rotation into account.
@@ -140,7 +145,10 @@ fs.release()
 
 # get gaze data to export
 samples: list[np.ndarray] = []
-for i,s in enumerate(gaze_cpf):
+for i,(s, s_g) in enumerate(itertools.zip_longest(gaze_cpf,gaze_cpf_general)):
+    # try to use general gaze if we have personalized gaze but its nan
+    if np.isnan(s.yaw) and s_g is not None:
+        s = s_g
     # get 3D binocular gaze point
     binocular_gaze_point_cpf = mps.get_eyegaze_point_at_depth(s.yaw, s.pitch, s.depth or 1.0) # If depth available use it, else fall back to 1 meter depth along the EyeGaze ray
     # get gaze position on camera image
