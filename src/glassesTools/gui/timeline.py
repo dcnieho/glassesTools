@@ -344,7 +344,7 @@ class Timeline:
             imgui.set_cursor_screen_pos(cursor_pos)
 
             if hover_info and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
-                imgui.set_tooltip(f'{hover_info[0]} {hover_info[1]}\ntimestamps: {hover_info[2][0]:.3f} - {hover_info[2][1]:.3f}\nframe indices: {hover_info[3][0]} - {hover_info[3][1]}')
+                imgui.set_tooltip(f'{hover_info[0]} {hover_info[1]}\nduration: {hover_info[2][1]-hover_info[2][0]:.3f} s\ntimestamps: {hover_info[2][0]:.3f} - {hover_info[2][1]:.3f}\nframe indices: {hover_info[3][0]} - {hover_info[3][1]}')
 
             if (self._allow_seek or event in self._allow_annotate) and imgui.begin_popup_context_item(f"##episode_context_menu_{lbl}"):
                 if self._allow_seek and imgui.selectable(ifa6.ICON_FA_ARROW_LEFT + ' go to start', False)[0]:
