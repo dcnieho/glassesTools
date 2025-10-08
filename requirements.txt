@@ -10,7 +10,7 @@ natsort
 matplotlib
 aiopath
 pathvalidate
-I2MC>=2.2.6
+I2MC>=2.2.7
 pebble
 pycolmap
 orjson
