@@ -2,6 +2,7 @@ import dataclasses
 import datetime
 import typing
 import threading
+import natsort
 from imgui_bundle import imgui, icons_fontawesome_6 as ifa6
 
 from . import utils as gui_utils
@@ -135,11 +136,11 @@ class RecordingTable:
             case "Name":
                 flags = imgui.TableColumnFlags_.default_sort | imgui.TableColumnFlags_.no_hide | imgui.TableColumnFlags_.no_resize
                 display_func = None # special case
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).name.lower()
+                sort_key_func = natsort.os_sort_keygen(key=lambda iid: self.get_rec_fun(self.recordings[iid]).name.lower())
             case "Participant":
                 flags = imgui.TableColumnFlags_.no_resize
                 display_func = lambda rec: imgui.text(r.participant or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
-                sort_key_func= lambda iid: (r.participant if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
+                sort_key_func= natsort.os_sort_keygen(key=lambda iid: (r.participant if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower())
             case "Project":
                 display_func = lambda rec: imgui.text(r.project or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
                 sort_key_func= lambda iid: (r.project if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
@@ -152,10 +153,10 @@ class RecordingTable:
                 sort_key_func= lambda iid: r.start_time.value if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 0
             case "Working Directory":
                 display_func = lambda rec: self.draw_working_directory(self.get_rec_fun(rec))
-                sort_key_func= lambda iid: self.get_rec_fun(self.recordings[iid]).working_directory.name.lower()
+                sort_key_func= natsort.os_sort_keygen(key=lambda iid: self.get_rec_fun(self.recordings[iid]).working_directory.name.lower())
             case "Source Directory":
                 display_func = lambda rec: self.draw_source_directory(self.get_rec_fun(rec))
-                sort_key_func= lambda iid: str(self.get_rec_fun(self.recordings[iid]).source_directory).lower()
+                sort_key_func= natsort.os_sort_keygen(key=lambda iid: str(self.get_rec_fun(self.recordings[iid]).source_directory).lower())
             case "Firmware Version":
                 display_func = lambda rec: imgui.text(r.firmware_version or "Unknown") if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else None
                 sort_key_func= lambda iid: (r.firmware_version if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
@@ -173,7 +174,7 @@ class RecordingTable:
                 sort_key_func= lambda iid: (r.scene_camera_serial if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else 'zzzzz').lower()
             case "Video File":
                 display_func = lambda rec: imgui.text((r.scene_video_file if isinstance(r:=self.get_rec_fun(rec), recording.Recording) else r.video_file) or "Unknown")
-                sort_key_func= lambda iid: (r.scene_video_file if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else r.video_file).lower()
+                sort_key_func= natsort.os_sort_keygen(key=lambda iid: (r.scene_video_file if isinstance(r:=self.get_rec_fun(self.recordings[iid]), recording.Recording) else r.video_file).lower())
             case _:
                 raise NotImplementedError()
 
