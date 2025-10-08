@@ -4,7 +4,7 @@ from imgui_bundle import hello_imgui, imgui, icons_fontawesome_6 as ifa6
 
 from . import utils
 
-icon_font = None
+icon_font_size_multiplier = 4.2
 
 class MsgBox(Enum):
     question= auto()
@@ -30,7 +30,7 @@ def msgbox(title: str, msg: str, type: MsgBox=None, buttons: dict[str, Callable]
         else:
             icon = None
         if icon:
-            imgui.push_font(icon_font)
+            imgui.push_font(None, imgui.get_style().font_size_base*icon_font_size_multiplier)
             icon_size = imgui.calc_text_size(icon)
             imgui.text_colored((*color,1.),icon)
             imgui.pop_font()

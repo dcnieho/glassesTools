@@ -567,7 +567,7 @@ class GUI:
             imgui.dummy((*img_sz,))
         else:
             imgui.set_cursor_pos((img_margin,0))
-            imgui.image(self._texID[w], (*img_sz,))
+            imgui.image(imgui.ImTextureRef(self._texID[w]), (*img_sz,))
 
         # prepare for drawing bottom status overlay
         fr_ts, fr_idx = self._current_frame[w][1:]
