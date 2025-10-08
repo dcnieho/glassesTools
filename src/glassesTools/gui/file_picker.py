@@ -60,7 +60,7 @@ class FilePicker:
         imgui.WindowFlags_.no_saved_settings
     )
 
-    def __init__(self, title="File picker", dir_picker=False, start_dir: str | pathlib.Path = None, callback: typing.Callable = None, allow_multiple = True, file_action_provider: fap.FileActionProvider = None, custom_popup_flags=0):
+    def __init__(self, title="File picker", dir_picker=False, start_dir: str | pathlib.Path | None = None, callback: typing.Callable = None, allow_multiple = True, file_action_provider: fap.FileActionProvider = None, custom_popup_flags=0):
         self.title = title
         self.elapsed = 0.0
         self.callback = callback
@@ -1015,7 +1015,7 @@ class FilePicker:
             self.require_sort = False
 
 class DirPicker(FilePicker):
-    def __init__(self, title="Directory picker", start_dir: str | pathlib.Path = None, callback: typing.Callable = None, allow_multiple = True, custom_popup_flags=0):
+    def __init__(self, title="Directory picker", start_dir: str | pathlib.Path | None = None, callback: typing.Callable = None, allow_multiple = True, custom_popup_flags=0):
         super().__init__(title=title, dir_picker=True, start_dir=start_dir, callback=callback, allow_multiple=allow_multiple, custom_popup_flags=custom_popup_flags)
 
 class DialogProvider:

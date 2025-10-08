@@ -22,7 +22,7 @@ class Recording:
     video_file                  : str
     source_directory            : pathlib.Path
     working_directory           : pathlib.Path  = ""
-    duration                    : int           = None
+    duration                    : float         = None
 
     def store_as_json(self, path: str | pathlib.Path):
         path = pathlib.Path(path)

@@ -29,9 +29,9 @@ class ColumnSpec(typing.NamedTuple):
 
 class RecordingTable:
     def __init__(self,
-                 recordings: dict[int|str, recording.Recording|camera_recording.Recording],
+                 recordings: typing.Mapping[int, recording.Recording|camera_recording.Recording]|typing.Mapping[str, recording.Recording|camera_recording.Recording],
             recordings_lock: threading.Lock,
-        selected_recordings: dict[int|str, bool]|None,
+        selected_recordings: typing.Mapping[int, bool]|typing.Mapping[str, bool]|None,
         extra_columns: list[ColumnSpec] = None,
         get_rec_fun: typing.Callable[[typing.Any], recording.Recording|camera_recording.Recording] = None,
         item_context_callback: typing.Callable[[int], bool] = None,

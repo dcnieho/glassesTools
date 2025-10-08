@@ -128,7 +128,7 @@ popup_flags: int = (
     imgui.WindowFlags_.always_auto_resize
 )
 
-def popup(label: str, popup_content: Callable, buttons: dict[str, Callable]=None, button_keymap: dict[int,imgui.Key]=None, closable=True, escape=True, outside=True):
+def popup(label: str, popup_content: Callable, buttons: dict[str, Callable]|None=None, button_keymap: dict[int,imgui.Key]=None, closable=True, escape=True, outside=True):
     if not imgui.is_popup_open(label):
         imgui.open_popup(label)
     closed = False
