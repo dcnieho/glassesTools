@@ -313,7 +313,7 @@ class GUI:
             self._gaze_data_plot_pix[ax] = np.array([(p.x,p.y) for p in (implot.plot_to_pixels(implot.Point(x,y)) for x,y in zip(self._gaze_data_offset['ts'], self._gaze_data_offset[ax]))])
 
         pos = implot.plot_to_pixels(pos)
-        return np.min(np.hypot(self._gaze_data_plot_pix[ax][:,0]-pos.x, self._gaze_data_plot_pix[ax][:,1]-pos.y))
+        return np.nanmin(np.hypot(self._gaze_data_plot_pix[ax][:,0]-pos.x, self._gaze_data_plot_pix[ax][:,1]-pos.y))
 
     def stop(self):
         self._should_exit = True
