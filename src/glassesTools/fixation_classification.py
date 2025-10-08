@@ -41,7 +41,9 @@ def from_plane_gaze(
     # from the time signal). So, we have working I2MC settings for a few sampling frequencies, and just choose
     # the nearest based on empirically determined sampling frequency.
     ts          = np.array([s.timestamp for v in gazes.values() for s in v])
-    recFreq     = np.round(np.mean(1000./np.diff(ts)))    # Hz
+    ts_diff     = np.diff(ts)
+    ts_diff     = ts_diff[ts_diff>0]
+    recFreq     = np.round(np.mean(1000./ts_diff))  # Hz
     knownFreqs  = [30., 50., 60., 90., 120., 200.]
     opt['freq'] = knownFreqs[np.abs(knownFreqs - recFreq).argmin()]
     if opt['freq']==200.:
