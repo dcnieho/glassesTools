@@ -42,7 +42,7 @@ class GUI:
         self._gaze_data_plot_pix: dict[str, np.ndarray] = {'x': None, 'y': None}
         self._last_mouse_pos    : dict[int,tuple[float,float]] = {0: None, 1: None}
         self._plot_size         : dict[int,imgui.ImVec2] = {0: None, 1: None}
-        self._plot_limits       : dict[int,implot.Rect] = {0: None, 1: None}
+        self._plot_limits       : dict[int,tuple[float,float,float,float]] = {0: None, 1: None}
         self._hovered           : int = None
         self._held              : int = None
         self._drag_origin       : implot.Point = None
@@ -259,6 +259,7 @@ class GUI:
         p = implot.get_plot_mouse_pos()
         plot_size = implot.get_plot_size()
         plot_limits = implot.get_plot_limits()
+        plot_limits = (plot_limits.min().x, plot_limits.min().y, plot_limits.max().x, plot_limits.max().y)
         invalidate1 = invalidate2 = False
         if self._last_mouse_pos[ax_idx] is None or self._last_mouse_pos[ax_idx].x!=p.x or \
            (invalidate1:=(self._plot_size[ax_idx] is None or self._plot_size[ax_idx]!=plot_size)) or \
