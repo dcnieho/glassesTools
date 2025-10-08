@@ -89,7 +89,7 @@ def getRecordingInfo(inputDir: str|pathlib.Path) -> Recording:
     with open(file, 'r') as j:
         iInfo = json.load(j)
     recInfo.name = iInfo['rec_info']['Name']
-    recInfo.duration   = int(iInfo['rec_length']*1000)          # in seconds, convert to ms
+    recInfo.duration   = float(iInfo['rec_length']*1000)        # in seconds, convert to ms
     time_string = iInfo['rec_created']
     if time_string[-4:].isdigit() and time_string[-5:-4]=='+':
         # add hour:minute separator for ISO 8601 format that datetime understands

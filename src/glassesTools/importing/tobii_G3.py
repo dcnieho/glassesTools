@@ -80,7 +80,7 @@ def getRecordingInfo(inputDir: str|pathlib.Path) -> Recording:
     with open(file, 'rb') as j:
         rInfo = json.load(j)
     recInfo.name = rInfo['name']
-    recInfo.duration = int(rInfo['duration']*1000)          # in seconds, convert to ms
+    recInfo.duration = float(rInfo['duration']*1000)        # in seconds, convert to ms
     time_string = rInfo['created']
     if time_string[-1:]=='Z':
         # change Z suffix to +00:00 for ISO 8601 format that datetime understands

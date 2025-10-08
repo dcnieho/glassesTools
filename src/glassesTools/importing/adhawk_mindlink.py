@@ -76,7 +76,7 @@ def getRecordingInfo(inputDir: str|pathlib.Path) -> Recording:
         return None
     with open(file, 'rb') as j:
         rInfo = json.load(j)
-    recInfo.duration = rInfo['manifest']['recording_length_ms']
+    recInfo.duration = float(rInfo['manifest']['recording_length_ms'])
     recInfo.participant = rInfo['user_profile']['name']
     # get recording start time by reading UTC time associated with first gaze sample
     gaze_entry = getMetaEntry(inputDir, 'gaze')

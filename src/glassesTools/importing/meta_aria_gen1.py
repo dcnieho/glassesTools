@@ -53,7 +53,7 @@ def getRecordingInfo(inputDir: str|pathlib.Path) -> Recording:
         metadata = json.load(f)
     recInfo.name = metadata['name']
     recInfo.scene_camera_serial = metadata['scene_camera_serial']
-    recInfo.duration = int(metadata['duration']/1000)   # in us, convert to ms
+    recInfo.duration = float(metadata['duration']/1000)     # in us, convert to ms
     recInfo.glasses_serial = metadata['glasses_serial']
     recInfo.start_time = timestamps.Timestamp(metadata['start_time'])
     recInfo.scene_video_file = 'worldCamera.mp4'
