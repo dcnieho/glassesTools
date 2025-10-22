@@ -405,7 +405,7 @@ def getCamInfo(camInfoFile: str|pathlib.Path):
         camInfo = msgpack.unpack(f)
 
     # get keys which denote a camera resolution
-    rex = re.compile('^\(\d+, \d+\)$')
+    rex = re.compile(r'^\(\d+, \d+\)$')
 
     keys = [k for k in camInfo if rex.match(k)]
     if len(keys)!=1:
