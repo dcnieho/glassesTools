@@ -1,8 +1,8 @@
 \documentclass[a2,landscape]{sciposter}
 \setmargins[1cm]
 
-\usepackage{csvsimple}	% for marker and target positions
 \usepackage{readarray}	% for key=value settings file
+\usepackage{datatool}	% for marker and target positions
 
 \usepackage{siunitx}
 \sisetup{detect-all,group-digits=integer}
@@ -109,6 +109,14 @@
 
 
 \begin{document}
+\newlength{\markerSizeAsLength}
+\setlength{\markerSizeAsLength}{\markerSideCm}
+\DTLloaddb{markerdata}{\markerPosFile}
+\DTLloaddb{targetdata}{\targetPosFile}
+\newcommand*{\markerSize}{}
+\newcommand*{\getSize}[1]{%
+	\DTLgetvalueforkey{\markerSize}{size}{markerdata}{ID}{#1}%
+}
 
 \centering
 \begin{tikzpicture}[
@@ -118,21 +126,26 @@
         \draw[step=\step, line width=3pt] (0cm,0cm) grid (\step*\gridCols,\step*\gridRows);
     \fi
 
-\csvreader{\markerPosFile}{ID=\ID, x=\x, y=\y, rotation_angle=\rotang}%
-{
-    \coordinate (m) at (
-    \x*\step,
-    \y*\step
-    );
 
-    \node[inner sep=0pt] (m2) at (m)			{\includegraphics[width=\markerSideCm,angle=\rotang,origin=c]{\markerFilename{\ID}}};
-};
-
-
-\csvreader{\targetPosFile}{ID=\ID, x=\x, y=\y, color=\tColor}%
-{
-    \gazeTarget{\x*\step}{\y*\step}{\tColor};
-};
+	\DTLforeach{markerdata}{%
+		\ID=ID, \x=x, \y=y, \rotang=rotation_angle%
+	}{%
+		\coordinate (m) at (\x*\step, \y*\step);
+		
+		\DTLifhaskey{markerdata}{size}{
+			\getSize{\ID}
+			\pgfmathsetlength{\markerSizeAsLength}{\markerSize cm}
+		}{}
+		
+		\node[inner sep=0pt] (m2) at (m) {\includegraphics[width=\markerSizeAsLength,angle=\rotang,origin=c]{\markerFilename{\ID}}};
+	}
+	
+	
+	\DTLforeach{targetdata}{%
+		\ID=ID, \x=x, \y=y, \tColor=color%
+	}{%
+		\gazeTarget{\x*\step}{\y*\step}{\tColor};
+	}
 
 
     % annotations
