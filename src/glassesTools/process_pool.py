@@ -319,15 +319,15 @@ class JobScheduler(typing.Generic[_UserDataT]):
 
     def add_job(self,
                 user_data: _UserDataT, payload: JobPayload, done_callback: typing.Callable[[ProcessFuture, _UserDataT, int, State], None],
-                progress_indicator: JobProgress=None,
-                exclusive_id: typing.Optional[int] = None, priority: int = None, depends_on: typing.Optional[set[int]] = None) -> int:
+                progress_indicator: JobProgress|None = None,
+                exclusive_id: typing.Optional[int] = None, priority: int|None = None, depends_on: typing.Optional[set[int]] = None) -> int:
         with self._job_id_provider:
             job_id = self._job_id_provider.get_count()
         self.jobs[job_id] = JobDescription(user_data, payload, progress_indicator, done_callback, exclusive_id, priority, depends_on)
         self._pending_jobs.append(job_id)
         return job_id
 
-    def get_progress_indicator(self, **kwargs):
+    def get_progress_indicator(self, **kwargs) -> JobProgress:
         return self._manager.JobProgress(**kwargs)
 
     def cancel_job(self, job_id: int):

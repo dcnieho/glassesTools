@@ -64,7 +64,7 @@ class Button:
     tooltip: str
     key: imgui.Key
     event: annotation.EventType = None
-    color: imgui.ImVec4 = None
+    color: imgui.ImVec4|None = None
 
     has_shift: bool = dataclasses.field(init=False, default=False)
     repeats: bool =  dataclasses.field(init=False, default=False)

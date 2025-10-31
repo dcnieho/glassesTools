@@ -36,7 +36,7 @@ def color_darken(color: imgui.ImColor, amount: float):
 
 
 class Timeline:
-    def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[annotation.EventType, list[int]] = None):
+    def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[annotation.EventType, list[int]]|None = None):
         self._video_ts = video_ts
         self._duration = self._video_ts.get_last()[1]/1000. # ms -> s
         if self._duration==0.0:
@@ -48,8 +48,8 @@ class Timeline:
         self._new_h_scroll  = None
 
         self._current_time = 0.
-        self._dragged_time: float = None
-        self._view_scale_fac: float = None
+        self._dragged_time: float|None = None
+        self._view_scale_fac: float|None = None
 
         # axis ticker
         self._major_ticker = ticker.MaxNLocator()
@@ -59,7 +59,7 @@ class Timeline:
         self._major_ticks_lbl: list[str]
 
         # information about GUI size
-        self.draw_width: int = None
+        self.draw_width: int|None = None
 
         # GUI interaction possibilities
         self._allow_seek = False
@@ -120,7 +120,7 @@ class Timeline:
             if tool_tip:
                 self._annotation_tooltips[e] = tool_tip
 
-    def _annotations_to_time(self) -> dict[annotation.EventType, list[float]]:
+    def _annotations_to_time(self) -> dict[annotation.EventType, list[float]]|None:
         if not self._annotations_frame:
             return None
         return {e:[self._video_ts.get_timestamp(i)/1000 for i in self._annotations_frame[e]] for e in self._annotations_frame}  # ms -> s
@@ -279,7 +279,7 @@ class Timeline:
             if not np.isclose(self._h_scroll, new_h_scroll):
                 self._new_h_scroll = new_h_scroll
 
-    def _timepoint_interaction_logic(self, lbl: str, x_pos: float, y_ext: float, event: annotation.EventType|None, hover_info: tuple[str,float,int]=None, draggable=False, has_context_menu=True, add_episode_action=False) -> tuple[float, bool, str|None]:
+    def _timepoint_interaction_logic(self, lbl: str, x_pos: float, y_ext: float, event: annotation.EventType|None, hover_info: tuple[str,float,int]|None=None, draggable=False, has_context_menu=True, add_episode_action=False) -> tuple[float, bool, str|None]:
         do_move = False
         action = None
         dragging = False
