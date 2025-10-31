@@ -47,6 +47,9 @@ EVENT_REGISTRY = []
 def register_event(entry: Event):
     EVENT_REGISTRY.append(entry)
 
+def unregister_all_annotation_types():
+    EVENT_REGISTRY.clear()
+
 def get_event_by_name(name: str) -> Event:
     for e in EVENT_REGISTRY:
         if e.name == name:
