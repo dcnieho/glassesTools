@@ -16,17 +16,24 @@ event_types = [x for x in EventType]
 json.register_type(json.TypeEntry(EventType,'__enum.Event__', utils.enum_val_2_str, lambda x: getattr(EventType, x.split('.')[1])))
 
 type_map = {
-    EventType.Validate    : Type.Interval,
-    EventType.Sync_Camera : Type.Point,
-    EventType.Sync_ET_Data: Type.Interval,
-    EventType.Trial       : Type.Interval,
+    EventType.Validate      : Type.Interval,
+    EventType.Sync_Camera   : Type.Point,
+    EventType.Sync_ET_Data  : Type.Interval,
+    EventType.Trial         : Type.Interval,
 }
 
 tooltip_map = {
-    EventType.Validate    : 'Validation episode',
-    EventType.Sync_Camera : 'Camera sync point',
-    EventType.Sync_ET_Data: 'Eye tracker synchronization episode',
-    EventType.Trial       : 'Trial episode',
+    EventType.Validate      : 'Validation episode',
+    EventType.Sync_Camera   : 'Camera sync point',
+    EventType.Sync_ET_Data  : 'Eye tracker synchronization episode',
+    EventType.Trial         : 'Trial episode',
+}
+
+default_hotkeys = {
+    EventType.Validate      : 'v',
+    EventType.Sync_Camera   : 'c',
+    EventType.Sync_ET_Data  : 'e',
+    EventType.Trial         : 't',
 }
 
 @dataclasses.dataclass
