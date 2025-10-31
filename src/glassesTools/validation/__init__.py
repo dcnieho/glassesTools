@@ -107,7 +107,6 @@ class Plane(_plane.Plane):
             self.cell_size_mm = 2.*math.tan(math.radians(.5))*self.config['distance']*10
         else:
             self.cell_size_mm = 10 # 1cm
-        markerSize = self.cell_size_mm*self.config['markerSide']
 
         # get board size
         plane_size = _plane.Coordinate(self.config['gridCols']*self.cell_size_mm, self.config['gridRows']*self.cell_size_mm)
@@ -122,7 +121,7 @@ class Plane(_plane.Plane):
         markers = config.get_markers(config_dir, self.config['markerPosFile'])
         if 'ref_image_store_path' not in kwarg:
             kwarg['ref_image_store_path'] = None
-        super(Plane, self).__init__(markers, markerSize, plane_size, self.config['arucoDictionary'], self.config['markerBorderBits'], self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], min_num_markers=self.config['minNumMarkers'], **kwarg)
+        super(Plane, self).__init__(markers, self.config['markerSide'], plane_size, self.config['arucoDictionary'], self.config['markerBorderBits'], self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], min_num_markers=self.config['minNumMarkers'], **kwarg)
 
         # set center
         self.set_origin(origin)

@@ -22,7 +22,7 @@ class Plane:
 
                  aruco_dict_id                                          = cv2.aruco.DICT_4X4_250,
                  marker_border_bits                                     = 1,
-                 marker_pos_scale_fac                                   = 1.,                       # scale factor for marker positions in the markers input argument
+                 marker_pos_size_scale_fac                              = 1.,                       # scale factor for marker positions in the markers input argument, and sizes in the markers file or the marker_size input
                  unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
                  package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources
                  ref_image_store_path   : str|pathlib.Path              = None,
@@ -30,7 +30,7 @@ class Plane:
                  min_num_markers        : int                           = 3                         # minimum number of markers for gaze to be mapped to this plane
                  ):
 
-        self.marker_size                                    = marker_size
+        self.marker_size                                    = marker_size*marker_pos_size_scale_fac
         # marker positions
         self.markers            : dict[int,marker.Marker]   = {}
         self._all_marker_ids    : list[int]                 = []
@@ -48,7 +48,7 @@ class Plane:
         self.min_num_markers                                = min_num_markers
 
         # prep markers
-        self._load_markers(markers, marker_pos_scale_fac, package_to_read_from)
+        self._load_markers(markers, marker_pos_size_scale_fac, package_to_read_from)
 
         # get reference image of plane
         if ref_image_store_path:
@@ -99,11 +99,9 @@ class Plane:
                 color = (0,0,0)
             drawing.openCVCircle(img, xy, size, color, -1, sub_pixel_fac)
 
-    def _load_markers(self, markers: str|pathlib.Path|pd.DataFrame, marker_pos_scale_fac: float, package_to_read_from: str|None):
+    def _load_markers(self, markers: str|pathlib.Path|pd.DataFrame, marker_pos_size_scale_fac: float, package_to_read_from: str|None):
         from . import aruco
         # read in aruco marker positions
-        markerHalfSizeMm  = self.marker_size/2.
-
         if isinstance(markers, pd.DataFrame):
             marker_pos = markers
         else:
@@ -119,8 +117,11 @@ class Plane:
                 raise ValueError(f'This plane is set up using the dictionary {aruco.dict_id_to_str[self.aruco_dict_id]} which only has {marker_dict_size} markers, which means that valid IDs are 0-{marker_dict_size-1}. However, this plane is configured to contain a marker number {m_id} that is not a valid marker for this dictionary.')
 
         # turn into marker objects
-        marker_pos.x *= marker_pos_scale_fac
-        marker_pos.y *= marker_pos_scale_fac
+        marker_pos.x *= marker_pos_size_scale_fac
+        marker_pos.y *= marker_pos_size_scale_fac
+
+        # determine default marker size
+        markerHalfSizeMmDefault  = self.marker_size/2.
 
         for idx, row in marker_pos.iterrows():
             c   = row[['x','y']].values
@@ -128,6 +129,8 @@ class Plane:
             rot = row[['rotation_angle']].values[0] if 'rotation_angle' in row else 0.
             rotr= -math.radians(rot)
             R   = np.array([[math.cos(rotr), math.sin(rotr)], [-math.sin(rotr), math.cos(rotr)]])
+            # get marker size
+            markerHalfSizeMm = row[['size']].values[0]/2.*marker_pos_size_scale_fac if 'size' in row else markerHalfSizeMmDefault
             # top left first, and clockwise: same order as detected ArUco marker corners
             tl = c + np.matmul(R, np.array([-markerHalfSizeMm, -markerHalfSizeMm]))
             tr = c + np.matmul(R, np.array([ markerHalfSizeMm, -markerHalfSizeMm]))
