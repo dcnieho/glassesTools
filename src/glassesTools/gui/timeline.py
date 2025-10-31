@@ -36,7 +36,7 @@ def color_darken(color: imgui.ImColor, amount: float):
 
 
 class Timeline:
-    def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[annotation.Event, list[int]] = None):
+    def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[annotation.EventType, list[int]] = None):
         self._video_ts = video_ts
         self._duration = self._video_ts.get_last()[1]/1000. # ms -> s
         if self._duration==0.0:
@@ -63,7 +63,7 @@ class Timeline:
 
         # GUI interaction possibilities
         self._allow_seek = False
-        self._allow_annotate: set[annotation.Event] = set()
+        self._allow_annotate: set[annotation.EventType] = set()
         self._allow_timeline_zoom = False
 
         # tracks
@@ -72,7 +72,7 @@ class Timeline:
         self._annotation_colors = self._make_annotation_colors()
         self._show_annotation_labels = True
         self._show_info_on_hover = True
-        self._annotation_tooltips: dict[annotation.Event, str] = {}
+        self._annotation_tooltips: dict[annotation.EventType, str] = {}
 
         # communication with owner
         self._requests: list[tuple[str,Any]] = []
@@ -88,7 +88,7 @@ class Timeline:
     def set_allow_seek(self, allow_seek: bool):
         self._allow_seek = allow_seek
 
-    def set_allow_annotate(self, allow_annotate: set[annotation.Event]):
+    def set_allow_annotate(self, allow_annotate: set[annotation.EventType]):
         self._allow_annotate = allow_annotate
 
     def set_allow_timeline_zoom(self, allow_timeline_zoom: bool):
@@ -100,9 +100,9 @@ class Timeline:
     def set_show_info_on_hover(self, show_info_on_hover: bool):
         self._show_info_on_hover = show_info_on_hover
 
-    def set_annotation_keys(self, annotate_shortcut_key_map: dict[annotation.Event, imgui.Key], annotate_tooltips: dict[annotation.Event, str] = None):
+    def set_annotation_keys(self, annotate_shortcut_key_map: dict[annotation.EventType, imgui.Key], annotate_tooltips: dict[annotation.EventType, str] = None):
         self._annotation_tooltips.clear()
-        for e in annotation.Event:
+        for e in annotation.EventType:
             tool_tip = ''
             if e in annotate_tooltips:
                 tool_tip = annotate_tooltips[e]
@@ -120,19 +120,19 @@ class Timeline:
             if tool_tip:
                 self._annotation_tooltips[e] = tool_tip
 
-    def _annotations_to_time(self) -> dict[annotation.Event, list[float]]:
+    def _annotations_to_time(self) -> dict[annotation.EventType, list[float]]:
         if not self._annotations_frame:
             return None
         return {e:[self._video_ts.get_timestamp(i)/1000 for i in self._annotations_frame[e]] for e in self._annotations_frame}  # ms -> s
 
-    def _make_annotation_colors(self) -> dict[annotation.Event, imgui.ImColor]:
+    def _make_annotation_colors(self) -> dict[annotation.EventType, imgui.ImColor]:
         if not self._annotations_frame:
             return {}
 
         colors = utils.get_colors(len(self._annotations_frame), 0.45, 0.65)
         return {k:imgui.ImColor(*c) for k,c in zip(self._annotations_frame, colors)}
 
-    def get_annotation_colors(self) -> dict[annotation.Event, imgui.ImColor]:
+    def get_annotation_colors(self) -> dict[annotation.EventType, imgui.ImColor]:
         return self._annotation_colors
 
     def set_position(self, time: float, frame_idx: int):
@@ -150,7 +150,7 @@ class Timeline:
     def _request_time(self, time: float):
         self._requests.append(('seek', time))
 
-    def _request_delete(self, event: annotation.Event, frame_idxs: list[int]):
+    def _request_delete(self, event: annotation.EventType, frame_idxs: list[int]):
         if not isinstance(frame_idxs,list):
             frame_idxs = [frame_idxs]
         self._requests.append(('delete_coding', (event,frame_idxs)))
@@ -279,7 +279,7 @@ class Timeline:
             if not np.isclose(self._h_scroll, new_h_scroll):
                 self._new_h_scroll = new_h_scroll
 
-    def _timepoint_interaction_logic(self, lbl: str, x_pos: float, y_ext: float, event: annotation.Event|None, hover_info: tuple[str,float,int]=None, draggable=False, has_context_menu=True, add_episode_action=False) -> tuple[float, bool, str|None]:
+    def _timepoint_interaction_logic(self, lbl: str, x_pos: float, y_ext: float, event: annotation.EventType|None, hover_info: tuple[str,float,int]=None, draggable=False, has_context_menu=True, add_episode_action=False) -> tuple[float, bool, str|None]:
         do_move = False
         action = None
         dragging = False
@@ -330,7 +330,7 @@ class Timeline:
 
         return x_pos, do_move, action
 
-    def _episode_interaction_logic(self, lbl: str, x_start: float, x_end: float, y_ext: float, event: annotation.Event|None, hover_info: tuple[str,int,list[float],list[int]]=None) -> tuple[float, bool, str|None]:
+    def _episode_interaction_logic(self, lbl: str, x_start: float, x_end: float, y_ext: float, event: annotation.EventType|None, hover_info: tuple[str,int,list[float],list[int]]=None) -> tuple[float, bool, str|None]:
         x_pos = x_start
         do_move = False
         action = None
@@ -417,7 +417,7 @@ class Timeline:
 
         draw_list.pop_clip_rect()
 
-    def _draw_annotation_line(self, name: str, event: annotation.Event, idx: int, time: float, frame_idx: int, seq_nr: int, height: float, border_color: int) -> str|None:
+    def _draw_annotation_line(self, name: str, event: annotation.EventType, idx: int, time: float, frame_idx: int, seq_nr: int, height: float, border_color: int) -> str|None:
         dpi_fac = hello_imgui.dpi_window_size_factor()
         cursor_pos = imgui.get_cursor_screen_pos()
         draw_list = imgui.get_window_draw_list()
@@ -432,7 +432,7 @@ class Timeline:
             self._request_time(self._pos_to_time(screen_position, True))
         return action
 
-    def _draw_track(self, event: annotation.Event, annotations_time: list[float], annotations_frame: list[int], height: float, color: imgui.ImColor, text_size: imgui.ImVec2):
+    def _draw_track(self, event: annotation.EventType, annotations_time: list[float], annotations_frame: list[int], height: float, color: imgui.ImColor, text_size: imgui.ImVec2):
         dpi_fac = hello_imgui.dpi_window_size_factor()
         grid_color = _color_u32_replace_alpha(imgui.Col_.separator, 0.85)
         cursor_pos = imgui.get_cursor_screen_pos()

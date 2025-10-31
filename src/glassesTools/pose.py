@@ -252,7 +252,7 @@ class Estimator:
         self.extra_proc_parameters[name]= func_parameters
         self.extra_proc_visualizers[name]= visualizer
 
-    def attach_gui(self, gui: video_player.GUI, episodes: dict[annotation.Event, list[int]] = None, window_id: int = None):
+    def attach_gui(self, gui: video_player.GUI, episodes: dict[annotation.EventType, list[int]] = None, window_id: int = None):
         self.gui            = gui
         self.has_gui        = self.gui is not None
         self.do_visualize   = self.has_gui

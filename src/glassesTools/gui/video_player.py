@@ -63,7 +63,7 @@ class Button:
     lbl: str
     tooltip: str
     key: imgui.Key
-    event: annotation.Event = None
+    event: annotation.EventType = None
     color: imgui.ImVec4 = None
 
     has_shift: bool = dataclasses.field(init=False, default=False)
@@ -109,15 +109,15 @@ class GUI:
         self._action_tooltips   = action_tooltip_map.copy()
         self._action_button_lbls= action_lbl_map.copy()
         self._shortcut_key_map  = shortcut_key_map.copy()
-        self._annotate_shortcut_key_map: dict[annotation.Event, imgui.Key] = {}
-        self._annotate_tooltips        : dict[annotation.Event, str]       = {}
-        self._annotations_frame        : dict[annotation.Event, list[int]] = None
+        self._annotate_shortcut_key_map: dict[annotation.EventType, imgui.Key] = {}
+        self._annotate_tooltips        : dict[annotation.EventType, str]       = {}
+        self._annotations_frame        : dict[annotation.EventType, list[int]] = None
 
         self._interruptible = True
         self._detachable = False
         self._allow_pause = False
         self._allow_seek = False
-        self._allow_annotate: set[annotation.Event] = set()
+        self._allow_annotate: set[annotation.EventType] = set()
         self._allow_timeline_zoom = False
         self._timeline_show_annotation_labels = True
         self._timeline_show_info_on_hover = True
@@ -142,7 +142,7 @@ class GUI:
         self._window_timeline: dict[int,timeline.Timeline] = {}
         self._window_timecode_pos: dict[int,str] = {}
 
-        self._buttons: dict[Action|tuple[Action,annotation.Event], Button] = {}
+        self._buttons: dict[Action|tuple[Action,annotation.EventType], Button] = {}
         self._add_remove_button(True, Action.Quit)
 
     def __del__(self):
@@ -224,7 +224,7 @@ class GUI:
         # reset accelerators, tooltip
         button.setup_accelerators_tooltip()
 
-    def _add_remove_button(self, add: bool, action: Action, event: annotation.Event=None):
+    def _add_remove_button(self, add: bool, action: Action, event: annotation.EventType=None):
         d_key = (action,event) if event else action
         self._buttons.pop(d_key, None)
         if add: # NB: nothing to do for remove, already removed
@@ -267,7 +267,7 @@ class GUI:
         self._duration = duration
         self._last_frame_idx = last_frame_idx
 
-    def set_show_timeline(self, show_timeline: bool, video_ts: timestamps.VideoTimestamps = None, annotations: dict[annotation.Event, list[int]] = None, window_id:int = None):
+    def set_show_timeline(self, show_timeline: bool, video_ts: timestamps.VideoTimestamps = None, annotations: dict[annotation.EventType, list[int]] = None, window_id:int = None):
         if window_id is None:
             window_id = self._get_main_window_id()
 
@@ -295,7 +295,7 @@ class GUI:
         colors = self._window_timeline[window_id].get_annotation_colors()
         return {e:(colors[e].value.x,colors[e].value.y,colors[e].value.z,colors[e].value.w) for e in colors}
 
-    def set_allow_annotate(self, allow_annotate: set[annotation.Event], annotate_shortcut_key_map: dict[annotation.Event, imgui.Key]=None, annotate_tooltips: dict[annotation.Event, str] = None):
+    def set_allow_annotate(self, allow_annotate: set[annotation.EventType], annotate_shortcut_key_map: dict[annotation.EventType, imgui.Key]=None, annotate_tooltips: dict[annotation.EventType, str] = None):
         self._allow_annotate = allow_annotate
         if annotate_shortcut_key_map is not None:
             self._annotate_shortcut_key_map = annotate_shortcut_key_map
@@ -318,7 +318,7 @@ class GUI:
     def _create_annotation_buttons(self):
         any_timeline = self._any_has_timeline()
         # for safety, remove all possible already registered events
-        for e in annotation.Event:
+        for e in annotation.EventType:
             self._buttons.pop((Action.Annotate_Make, e), None)
         self._add_remove_button(any_timeline and self._allow_annotate, Action.Annotate_Delete)
         # and make buttons if we have a visible timeline
