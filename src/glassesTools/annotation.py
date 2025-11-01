@@ -62,7 +62,7 @@ def get_all_event_names() -> list[str]:
 def get_events_by_type(event_type: EventType) -> list[Event]:
     return [e for e in EVENT_REGISTRY if e.event_type == event_type]
 
-def get_event_type(event_name: str) -> Type|None:
+def get_event_interval_type(event_name: str) -> Type|None:
     event = get_event_by_name(event_name)
     return type_map[event.event_type] if event else None
 
