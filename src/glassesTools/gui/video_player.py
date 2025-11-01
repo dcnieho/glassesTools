@@ -61,8 +61,8 @@ action_tooltip_map = {
 class Button:
     action: Action
     lbl: str
-    tooltip: str
-    key: imgui.Key
+    tooltip: str|None
+    key: imgui.Key|None
     event: str|None = None
     color: imgui.ImVec4|None = None
 
@@ -77,15 +77,15 @@ class Button:
         self.has_shift = self.action in [Action.Back_Time, Action.Back_Frame, Action.Forward_Frame, Action.Forward_Time]
         self.repeats = self.has_shift
 
-        accelerator = imgui.get_key_name(self.key)
-        if self.has_shift:
+        accelerator = imgui.get_key_name(self.key) if self.key is not None else ''
+        if accelerator and self.has_shift:
             mod_lbl = imgui.get_key_name(imgui.Key.mod_shift)
             if mod_lbl.lower().startswith('mod'):
                 mod_lbl = mod_lbl[3:]
             accelerator = f'{accelerator} or {mod_lbl}+{accelerator}'
-        if self.event is not None:
+        if self.event is not None and self.tooltip is not None:
             self.tooltip = f'Make {self.tooltip.lower()} annotation'
-        self.full_tooltip = f'{self.tooltip} ({accelerator})'
+        self.full_tooltip = (self.tooltip if self.tooltip else '') + (' 'if self.tooltip and accelerator else '') + (f'({accelerator})' if accelerator else '')
 
 
 # GUI provider for viewer and coder windows
@@ -206,7 +206,7 @@ class GUI:
         self._add_remove_button(self._allow_seek, Action.Forward_Time)
         self._add_remove_button(self._allow_seek, Action.Back_Frame)
         self._add_remove_button(self._allow_seek, Action.Forward_Frame)
-    def set_button_props_for_action(self, action: Action, lbl: str=None, key: imgui.Key=None, tooltip: str=None):
+    def set_button_props_for_action(self, action: Action, lbl: str=None, key: imgui.Key|None=None, tooltip: str=None):
         if not lbl and not key and not tooltip:
             # nothing to do
             return
@@ -232,8 +232,8 @@ class GUI:
                 if event is None:
                     raise ValueError(f'Cannot set an annotate action without a provided event')
                 lbl = event
-                tooltip = self._annotate_tooltips[event]
-                key = self._annotate_shortcut_key_map[event]
+                tooltip = self._annotate_tooltips.get(event, None)
+                key = self._annotate_shortcut_key_map.get(event, None)
             else:
                 lbl = self._action_button_lbls[action]
                 tooltip = self._action_tooltips[action]
@@ -322,8 +322,8 @@ class GUI:
         # and make buttons if we have a visible timeline
         if not any_timeline or not self._allow_annotate:
             return
-        for e in self._annotate_shortcut_key_map:
-            self._add_remove_button(e in self._allow_annotate, Action.Annotate_Make, e)
+        for e in self._allow_annotate:
+            self._add_remove_button(True, Action.Annotate_Make, e)
 
     def set_show_annotation_label(self, show_label: bool, window_id:int = None):
         self._timeline_show_annotation_labels = show_label
@@ -605,15 +605,13 @@ class GUI:
                 buttons.append(self._buttons[Action.Quit])
             if self._detachable:
                 buttons.append(self._buttons[Action.Close])
-        if self._allow_annotate and self._has_timeline(w) and self._annotate_shortcut_key_map:
+        if self._allow_annotate and self._has_timeline(w):
             if self._allow_pause or self._allow_seek or self._interruptible or self._detachable:
                 buttons.extend([None, None])
             buttons.append(self._buttons[Action.Annotate_Delete])
             annotation_colors = self._window_timeline[w].get_annotation_colors()
             annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], {k:v for k,v in self._annotations_frame.items() if k in self._allow_annotate})
-            for e in self._annotate_shortcut_key_map:
-                if e not in self._allow_annotate:
-                    continue
+            for e in self._allow_annotate:
                 if e in annotation_colors and e in annotate_keys:
                     but = dataclasses.replace(self._buttons[(Action.Annotate_Make, e)])
                     but.color = annotation_colors[e]
@@ -698,8 +696,8 @@ class GUI:
             if imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
                 overlay_text = ''
                 for b in buttons:
-                    if b is not None:
-                        overlay_text += f"'{imgui.get_key_name(b.key)}': {b.tooltip}\n"
+                    if b is not None and b.key is not None:
+                        overlay_text += f"'{imgui.get_key_name(b.key)}': {b.tooltip if b.tooltip else b.lbl}\n"
                 overlay_text = overlay_text[:-1]
                 if self._window_timeline[w] is not None and self._allow_timeline_zoom:
                     overlay_text += '\nMouse wheel: hover over timeline to zoom'
@@ -725,7 +723,8 @@ class GUI:
                 flags = imgui.InputFlags_.route_global
                 if b.repeats:
                     flags |= imgui.InputFlags_.repeat
-                imgui.set_next_item_shortcut(b.key|mod_key, flags=flags)
+                if b.key is not None:
+                    imgui.set_next_item_shortcut(b.key|mod_key, flags=flags)
                 lbl = b.lbl
                 if b.action==Action.Pause:
                     lbl = lbl[1] if self._is_playing else lbl[0]
@@ -773,7 +772,7 @@ class GUI:
                                     self._requests.append(('delete_coding',(k,[self._current_frame[w][2]])))
                                 else:
                                     self._requests.append(('delete_coding',(k,iv)))
-                if self._window_show_controls[w] and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
+                if self._window_show_controls[w] and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal) and b.full_tooltip:
                     imgui.set_tooltip(b.full_tooltip)
                 if disable:
                     imgui.end_disabled()

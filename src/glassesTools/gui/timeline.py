@@ -106,14 +106,17 @@ class Timeline:
             tool_tip = ''
             if e in annotate_tooltips:
                 tool_tip = annotate_tooltips[e]
-                if e in annotate_shortcut_key_map:
-                    if e in self._allow_annotate:
+                if e in self._allow_annotate:
+                    if e in annotate_shortcut_key_map:
                         tool_tip += f' ({imgui.get_key_name(annotate_shortcut_key_map[e])})'
                     else:
-                        tool_tip += f' (read only)'
-            elif e in annotate_shortcut_key_map:
+                        tool_tip += f' (no hotkey)'
+                else:
+                    tool_tip += f' (read only)'
+            else:
                 if e in self._allow_annotate:
-                    tool_tip = imgui.get_key_name(annotate_shortcut_key_map[e])
+                    if e in annotate_shortcut_key_map:
+                        tool_tip = imgui.get_key_name(annotate_shortcut_key_map[e])
                 else:
                     tool_tip = 'read only'
 
