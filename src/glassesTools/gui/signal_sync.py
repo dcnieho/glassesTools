@@ -98,7 +98,7 @@ class GUI:
     def get_state(self):
         return (self._user_closed_window, self.is_done)
 
-    def set_data(self, title: str, ival: int, gazes: dict[int,gaze_headref.Gaze], target_positions: dict[int,TargetPos],
+    def set_data(self, title: str, ival: int, gazes: dict[int,list[gaze_headref.Gaze]], target_positions: dict[int,TargetPos],
                  offset_t = 0.):
         if not self.is_running():
             raise RuntimeError('You can only call this function once the GUI is actually running. check GUI.is_running()')
