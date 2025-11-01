@@ -42,7 +42,7 @@ def compute(
         distance_mm_for_homography: float,
         output_directory: str|pathlib.Path,
         filename: str = naming.validation_offset_fname,
-        dq_types: list[DataQualityType]=None, allow_dq_fallback=False, include_data_loss=False
+        dq_types: list[DataQualityType]|None=None, allow_dq_fallback=False, include_data_loss=False
     ):
     output_directory = pathlib.Path(output_directory)
     if dq_types is None:

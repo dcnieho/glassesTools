@@ -120,8 +120,8 @@ def plot(
         output_directory: str|pathlib.Path,
         filename_stem: str = naming.fixation_assignment_prefix,
         iteration = 0,
-        background_image: tuple[np.ndarray, list[float]] = None,    # (image, extent in mm [l r t b])
-        plot_limits: list[list[float]] = None
+        background_image: tuple[np.ndarray, list[float]]|None = None,    # (image, extent in mm [l r t b])
+        plot_limits: list[list[float]]|None = None
     ):
     output_directory = pathlib.Path(output_directory)
     # if we do not have x and y positions for the gaze intervals, make them

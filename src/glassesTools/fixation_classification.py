@@ -14,7 +14,7 @@ def from_plane_gaze(
         gazes: str|pathlib.Path|dict[int, list[gaze_worldref.Gaze]],
         classification_intervals: list[list[int]],
         output_directory: str|pathlib.Path,
-        I2MC_settings_override: dict[str,typing.Any]=None,
+        I2MC_settings_override: dict[str,typing.Any]|None=None,
         filename_stem: str = naming.fixation_classification_prefix,
         do_plot = True,
         plot_limits: list[list[float]] = None
