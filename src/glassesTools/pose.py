@@ -189,12 +189,12 @@ class Estimator:
         self.individual_marker_intervals    : dict[_T, list[int]|list[list[int]]]                                   = {}
         self.individual_marker_visualizers  : dict[_T, typing.Callable[[_T,int,np.ndarray,np.ndarray], None]|None]  = {}
 
-        self.extra_proc_functions   : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], list[typing.Any]]] = {}
-        self.extra_proc_intervals   : dict[str, list[int]|list[list[int]]]                                  = {}
+        self.extra_proc_functions   : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], tuple]] = {}
+        self.extra_proc_intervals   : dict[str, list[int]|list[list[int]]|None]                             = {}
         self.extra_proc_parameters  : dict[str, dict[str,typing.Any]]                                       = {}
-        self.extra_proc_visualizers : dict[str, typing.Callable[[str,int,np.ndarray,typing.Any], None]|None]= {}
+        self.extra_proc_visualizers : dict[str, typing.Callable[[str,np.ndarray,int,typing.Any], None]|None]= {}
 
-        self._cache: tuple[Status, dict[str, Pose], dict[_T, marker.Pose], dict[str, list[int, typing.Any]], tuple[np.ndarray, int, float]] = None  # self._cache[4][1] is frame number
+        self._cache: tuple[Status, dict[str, Pose], dict[_T, marker.Pose], dict[str, tuple[int, typing.Any]], tuple[np.ndarray, int, float]] = None  # self._cache[4][1] is frame number
 
         self.gui                    : video_player.GUI          = None
         self.has_gui                                            = False
@@ -239,16 +239,16 @@ class Estimator:
 
     def register_extra_processing_fun(self,
                                       name: str,
-                                      func: typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], list[typing.Any]],
-                                      processing_intervals: list[int]|list[list[int]],
-                                      func_parameters: dict[str],
-                                      visualizer: typing.Callable[[str,int,np.ndarray,typing.Any], None]):
+                                      processing_intervals: list[int]|list[list[int]]|None,
+                                      func: typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], tuple],
+                                      func_parameters: dict[str, typing.Any],
+                                      visualizer: typing.Callable[[str,np.ndarray,int,typing.Any], None]):
         if not self._first_frame:
             raise RuntimeError(f'You cannot register extra processing functions once video processing has started')
         if name in self.extra_proc_functions:
             raise ValueError(f'Cannot register the extra processing function "{name}", it is already registered')
-        self.extra_proc_functions[name] = func
         self.extra_proc_intervals[name] = processing_intervals
+        self.extra_proc_functions[name] = func
         self.extra_proc_parameters[name]= func_parameters
         self.extra_proc_visualizers[name]= visualizer
 
@@ -294,7 +294,7 @@ class Estimator:
                 self.estimate_homography(object_points, img_points)
         return pose
 
-    def process_one_frame(self, wanted_frame_idx:int = None) -> tuple[Status, dict[str, Pose], dict[str, marker.Pose], dict[str, list[int, typing.Any]], tuple[np.ndarray, int, float]]:
+    def process_one_frame(self, wanted_frame_idx:int = None) -> tuple[Status, dict[str, Pose], dict[str, marker.Pose], dict[str, tuple[int, typing.Any]], tuple[np.ndarray, int, float]]:
         if self._first_frame and self.has_gui:
             self.gui.set_playing(True)
 
@@ -345,7 +345,7 @@ class Estimator:
 
         pose_out                : dict[str, Pose]                   = {}
         individual_marker_out   : dict[_T , marker.Pose]            = {}
-        extra_processing_out    : dict[str, list[int, typing.Any]]  = {}
+        extra_processing_out    : dict[str, tuple[int, typing.Any]] = {}
         if planes_for_this_frame:
             # detect fiducials
             plane_points: dict[str, tuple[np.ndarray,np.ndarray]] = {}
@@ -374,7 +374,7 @@ class Estimator:
         for e in extra_processing_for_this_frame:
             eproc = self.extra_proc_functions[e](e, frame_idx, frame, self.cam_params, **self.extra_proc_parameters[e])
             if eproc is not None:
-                extra_processing_out[e] = [frame_idx, *eproc]
+                extra_processing_out[e] = (frame_idx, eproc)
 
         # now that all processing is done, handle visualization, if any
         if self.do_visualize:
@@ -409,10 +409,10 @@ class Estimator:
         self._cache = Status.Ok, pose_out, individual_marker_out, extra_processing_out, (frame, frame_idx, frame_ts)
         return self._cache
 
-    def process_video(self) -> tuple[dict[str, list[Pose]], dict[_T, list[marker.Pose]], dict[str, list[list[int, typing.Any]]]]:
-        poses_out               : dict[str, list[Pose]]                 = {p:[] for p in self.plane_functions}
-        individual_markers_out  : dict[_T, list[marker.Pose]]           = {i:[] for i in self.individual_marker_functions}
-        extra_processing_out    : dict[str, list[list[int, typing.Any]]]= {e:[] for e in self.extra_proc_functions}
+    def process_video(self) -> tuple[dict[str, list[Pose]], dict[_T, list[marker.Pose]], dict[str, list[tuple[int, typing.Any]]]]:
+        poses_out               : dict[str, list[Pose]]                     = {p:[] for p in self.plane_functions}
+        individual_markers_out  : dict[_T, list[marker.Pose]]               = {i:[] for i in self.individual_marker_functions}
+        extra_processing_out    : dict[str, list[tuple[int, typing.Any]]]   = {e:[] for e in self.extra_proc_functions}
         while True:
             status, plane, individual_marker, extra_proc, _ = self.process_one_frame()
             if status==Status.Finished:

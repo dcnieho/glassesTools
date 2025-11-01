@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 import pathlib
-from typing import Any, TypedDict
+import typing
 
 from . import drawing, marker, ocv, plane, pose
 
@@ -51,13 +51,13 @@ family_to_str = {
     9: ('DICT_ARUCO_MIP_36H12', False),
 }
 
-class PlaneSetup(TypedDict):
+class PlaneSetup(typing.TypedDict):
     plane                   : plane.Plane
-    aruco_detector_params   : dict[str,Any]
-    aruco_refine_params     : dict[str,Any]
+    aruco_detector_params   : dict[str,typing.Any]
+    aruco_refine_params     : dict[str,typing.Any]
     min_num_markers         : int
-class MarkerSetup(TypedDict):
-    aruco_detector_params   : dict[str,Any]
+class MarkerSetup(typing.TypedDict):
+    aruco_detector_params   : dict[str,typing.Any]
     detect_only             : bool
     size                    : float
 
@@ -110,10 +110,10 @@ class Detector:
         self._individual_marker_ids : set[int]                  = set()
         self._all_markers           : set[int]                  = set()
 
-        self._user_detector_params  : dict[str]                 = {}
-        self._user_refine_params    : dict[str]                 = {}
+        self._user_detector_params  : dict[str, typing.Any]     = {}
+        self._user_refine_params    : dict[str, typing.Any]     = {}
 
-        self._det: cv2.aruco.ArucoDetector                      = None
+        self._det: cv2.aruco.ArucoDetector|None                 = None
 
         self._last_detect_output : tuple[dict[str,dict[str]],dict[str],dict[str],list[np.ndarray]] = {}
 
@@ -302,12 +302,12 @@ class Manager:
     # with all planes/individual markers associated to one of these detectors
     def __init__(self):
         # planes to be detected
-        self.planes                 : dict[str, PlaneSetup]                 = {}
-        self.plane_proc_intervals   : dict[str, list[int]|list[list[int]]]  = {}
-        self._plane_to_detector     : dict[str, int]                        = {}
+        self.planes                 : dict[str, PlaneSetup]                     = {}
+        self.plane_proc_intervals   : dict[str, list[int]|list[list[int]]|None] = {}
+        self._plane_to_detector     : dict[str, int]                            = {}
         # individual markers to be detected
-        self.individual_markers                 : dict[marker.MarkerID, MarkerSetup]    = {}
-        self.individual_markers_proc_intervals  : dict[str, list[int]|list[list[int]]]  = {}
+        self.individual_markers                 : dict[marker.MarkerID, MarkerSetup]        = {}
+        self.individual_markers_proc_intervals  : dict[str, list[int]|list[list[int]]|None] = {}
 
         # consolidated into set of detectors, and associated planes+individual markers for each
         self._detectors             : dict[int, Detector]                   = {}
@@ -321,13 +321,13 @@ class Manager:
         self._unexpected_marker_color       = (128,255,255)
         self._rejected_marker_color         = None # by default not drawn. If wanted, (0,0,255) is a good color
 
-    def add_plane(self, plane: str, planes_setup: PlaneSetup, processing_intervals: list[int]|list[list[int]] = None):
+    def add_plane(self, plane: str, planes_setup: PlaneSetup, processing_intervals: list[int]|list[list[int]]|None = None):
         if plane in self.planes:
             raise ValueError(f'Cannot register the plane "{plane}", it is already registered')
         self.planes[plane]                  = planes_setup
         self.plane_proc_intervals[plane]    = processing_intervals
 
-    def add_individual_marker(self, mark: marker.MarkerID, marker_setup: MarkerSetup, processing_intervals: list[int]|list[list[int]] = None):
+    def add_individual_marker(self, mark: marker.MarkerID, marker_setup: MarkerSetup, processing_intervals: list[int]|list[list[int]]|None = None):
         if mark in self.individual_markers:
             raise ValueError(f'Cannot register the individual marker {marker.marker_ID_to_str(mark)}, it is already registered')
         self.individual_markers[mark]                = marker_setup
