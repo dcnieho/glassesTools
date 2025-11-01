@@ -30,7 +30,7 @@ shortcut_key_map = {
     Action.Back_Frame       : imgui.Key.j,
     Action.Forward_Frame    : imgui.Key.k,
     Action.Pause            : imgui.Key.space,
-    Action.Close            : imgui.Key.enter,
+    Action.Close            : imgui.Key.escape,
     Action.Quit             : imgui.Key.enter,
     Action.Annotate_Delete  : imgui.Key.d
 }
