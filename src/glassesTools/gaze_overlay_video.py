@@ -68,7 +68,7 @@ class VideoMaker:
         if self.has_gui:
             self.gui.stop()
 
-    def attach_gui(self, gui: video_player.GUI, window_id: int = None):
+    def attach_gui(self, gui: video_player.GUI|None, window_id: int = None):
         self.gui                    = gui
         self.has_gui                = self.gui is not None
         self.do_visualize           = self.has_gui
@@ -83,7 +83,7 @@ class VideoMaker:
     def set_progress_updater(self, progress_updater: typing.Callable[[], None]):
         self.progress_updater = progress_updater
 
-    def set_vid_pos_look(self, color: tuple[int, int, int]=None, radius: int=None, thickness: int=None):
+    def set_vid_pos_look(self, color: tuple[int, int, int]|None=None, radius: int|None=None, thickness: int|None=None):
         if color is not None:
             # provided colors are in RGB, internally we store as BGR
             self.vid_pos_color = color[::-1]
@@ -92,7 +92,7 @@ class VideoMaker:
         if thickness is not None:
             self.vid_pos_thickness = thickness
 
-    def set_world_pos_look(self, color: tuple[int, int, int]=None, radius: int=None, thickness: int=None):
+    def set_world_pos_look(self, color: tuple[int, int, int]|None=None, radius: int|None=None, thickness: int|None=None):
         if color is not None:
             # provided colors are in RGB, internally we store as BGR
             self.world_pos_color = color[::-1]
@@ -101,7 +101,7 @@ class VideoMaker:
         if thickness is not None:
             self.world_pos_thickness = thickness
 
-    def _read_frame(self, wanted_frame_idx:int = None) -> tuple[Status, tuple[np.ndarray, int, float]]:
+    def _read_frame(self, wanted_frame_idx:int|None = None) -> tuple[Status, tuple[np.ndarray, int, float]]:
         if self._first_frame and self.has_gui:
             self.gui.set_playing(True)
             self._first_frame = False
