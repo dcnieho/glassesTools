@@ -59,7 +59,7 @@ def read_file(file_name              : str|pathlib.Path,
               as_list_dict           : bool,
               make_ori_ts_fridx      : bool,
               episodes               : Optional[list[list[int]]] = None,
-              ts_fridx_field_suffixes: list[str]                 = None,
+              ts_fridx_field_suffixes: list[str]|None            = None,
               subset_var                                         = 'frame_idx'):
 
     # interrogate destination object

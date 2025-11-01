@@ -158,7 +158,7 @@ class Pose:
         return transforms.intersect_plane_ray(self._plane_normal, self._plane_point, vector.flatten(), origin.flatten())
 
 
-def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,Pose]:
+def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]|None=None) -> dict[int,Pose]:
     return data_files.read_file(fileName,
                                 Pose, True, True, False, False,
                                 episodes=episodes)[0]

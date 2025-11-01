@@ -153,7 +153,7 @@ class Gaze:
         if self.gazePosPlane2D_vidPos_ray is not None:
             reference.draw(img, *self.gazePosPlane2D_vidPos_ray, sub_pixel_fac, (255,255,0), 3)
 
-def read_dict_from_file(file_name:str|pathlib.Path, episodes:list[list[int]]=None, ts_column_suffixes: list[str] = None) -> dict[int,list[Gaze]]:
+def read_dict_from_file(file_name:str|pathlib.Path, episodes:list[list[int]]|None=None, ts_column_suffixes: list[str]|None=None) -> dict[int,list[Gaze]]:
     return data_files.read_file(file_name,
                                 Gaze, False, False, True, True,
                                 episodes=episodes, ts_fridx_field_suffixes=ts_column_suffixes)[0]
