@@ -50,11 +50,11 @@ def register_event(entry: Event):
 def unregister_all_annotation_types():
     EVENT_REGISTRY.clear()
 
-def get_event_by_name(name: str) -> Event:
+def get_event_by_name(name: str) -> Event|None:
     for e in EVENT_REGISTRY:
         if e.name == name:
             return e
-    raise ValueError(f'No event with name {name} is registered')
+    return None
 
 def get_all_event_names() -> list[str]:
     return [e.name for e in EVENT_REGISTRY]
@@ -62,9 +62,9 @@ def get_all_event_names() -> list[str]:
 def get_events_by_type(event_type: EventType) -> list[Event]:
     return [e for e in EVENT_REGISTRY if e.event_type == event_type]
 
-def get_event_type(event_name: str) -> Type:
+def get_event_type(event_name: str) -> Type|None:
     event = get_event_by_name(event_name)
-    return type_map[event.event_type]
+    return type_map[event.event_type] if event else None
 
 
 def flatten_annotation_dict(annotations: dict[str, list[list[int]]]) -> dict[str, list[int]]:
