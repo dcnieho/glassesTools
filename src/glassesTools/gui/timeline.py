@@ -390,7 +390,7 @@ class Timeline:
         # now draw the actual tracks
         height_per_track = size.y/len(self._annotations_frame)
         imgui.push_style_var(imgui.StyleVar_.item_spacing, (0,0))
-        text_size = max([imgui.calc_text_size(e.value) for e in self._annotations_frame.keys()], key=lambda x: x.x)
+        text_size = max([imgui.calc_text_size(e) for e in self._annotations_frame.keys()], key=lambda x: x.x)
         for e in self._annotations_frame:
             self._draw_track(e, self._annotations[e], self._annotations_frame[e], height_per_track, self._annotation_colors[e], text_size)
         imgui.pop_style_var()

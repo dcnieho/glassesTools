@@ -231,7 +231,7 @@ class GUI:
             if action==Action.Annotate_Make:
                 if event is None:
                     raise ValueError(f'Cannot set an annotate action without a provided event')
-                lbl = event.value
+                lbl = event
                 tooltip = self._annotate_tooltips[event]
                 key = self._annotate_shortcut_key_map[event]
             else:
@@ -295,12 +295,10 @@ class GUI:
         colors = self._window_timeline[window_id].get_annotation_colors()
         return {e:(colors[e].value.x,colors[e].value.y,colors[e].value.z,colors[e].value.w) for e in colors}
 
-    def set_allow_annotate(self, allow_annotate: set[str], annotate_shortcut_key_map: dict[str, imgui.Key]=None, annotate_tooltips: dict[str, str] = None):
+    def set_allow_annotate(self, allow_annotate: set[str], annotate_shortcut_key_map: dict[str, str|imgui.Key]=None, annotate_tooltips: dict[str, str] = None):
         self._allow_annotate = allow_annotate
         if annotate_shortcut_key_map is not None:
-            self._annotate_shortcut_key_map = annotate_shortcut_key_map
-        if annotate_tooltips is None:
-            annotate_tooltips = {e:annotation.tooltip_map[e] for e in self._annotate_shortcut_key_map}
+            self._annotate_shortcut_key_map = {e:(k if isinstance(k,imgui.Key) else imgui.Key[k]) for e,k in annotate_shortcut_key_map.items()}
         self._annotate_tooltips = annotate_tooltips
         for w in self._windows:
             if self._window_timeline[w] is not None and self._window_timeline[w].get_num_annotations():

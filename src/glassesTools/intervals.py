@@ -7,7 +7,7 @@ def _prep_ival_dict(intervals, add_incomplete_intervals=False):
         if not intervals[k]:
             continue
         if not isinstance(intervals[k][0], list):
-            if not isinstance(k,str) or annotation.type_map[annotation.get_event_type(k).event_type]==annotation.Type.Interval:
+            if not isinstance(k,str) or annotation.type_map[annotation.get_event_by_name(k).event_type]==annotation.Type.Interval:
                 temp = []
                 for m in range(0,len(intervals[k])-1,2): # read in batches of two, and run until -1 to make sure we don't pick up incomplete intervals
                     temp.append(intervals[k][m:m+2])
