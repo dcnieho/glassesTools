@@ -158,7 +158,7 @@ def get_appearance_starts_ends(m: pd.DataFrame, max_gap_duration: int, min_durat
     elif m.index.name=='frame_idx':
         return m.index[starts].to_numpy(), m.index[ends-1].to_numpy()
 
-def get_sequence_interval(starts: dict[int,list[int]], ends: dict[int,list[int]], pattern: list[int], max_intermarker_gap_duration: int, side='start') -> np.ndarray:
+def get_sequence_interval(starts: dict[MarkerID,list[int]], ends: dict[MarkerID,list[int]], pattern: list[MarkerID], max_intermarker_gap_duration: int, side='start') -> np.ndarray:
     # find marker pattern (sequence of markers following in right order with gap no longer than max_intermarker_gap_duration)
     pairs: list[tuple[int,int]] = []
     for i in range(len(ends[pattern[0]])):
