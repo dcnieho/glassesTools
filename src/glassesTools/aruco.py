@@ -351,21 +351,30 @@ class Manager:
             rejected_marker_color = rejected_marker_color[::-1]
         self._rejected_marker_color = rejected_marker_color
 
-    def consolidate_setup(self):
+    def consolidate_setup(self, allow_duplicated_markers: bool = False):
         # get list of all ArUco dicts and markers we're dealing with
         all_markers: set[marker.MarkerID] = set()
+        err_msg = 'Markers are not unique across planes and individual markers'
         for p in self.planes:
             markers = self.planes[p]['plane'].get_marker_IDs()
             for ms in markers:
                 if ms!='plane':
                     # N.B.: other markers should be registered by caller as individual markers
                     continue
-                if all_markers.intersection(markers[ms]):
-                    raise RuntimeError('Markers are not unique')
+                if (overlap := all_markers.intersection(markers[ms])):
+                    t_err_msg = f'{err_msg} for plane "{p}", duplicated markers: {marker.format_duplicate_markers_msg({(m.m_id, dict_id_to_family[m.aruco_dict_id]) for m in overlap})}'
+                    if allow_duplicated_markers:
+                        print(f'Warning: {t_err_msg}')
+                    else:
+                        raise RuntimeError(t_err_msg)
                 all_markers.update(markers[ms])
         for m in self.individual_markers:
             if m in all_markers:
-                raise RuntimeError('Markers are not unique')
+                t_err_msg = f'{err_msg}: individual marker "{m}" is also used elsewhere'
+                if allow_duplicated_markers:
+                    print(f'Warning: {t_err_msg}')
+                else:
+                    raise RuntimeError(t_err_msg)
             all_markers.add(m)
 
         # see for which marker dicts we need detectors to service all these
