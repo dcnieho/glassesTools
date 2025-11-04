@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+from matplotlib import colors
 import cv2
 import pathlib
 import math
@@ -22,7 +23,7 @@ class Plane:
 
                  aruco_dict_id                                          = cv2.aruco.DICT_4X4_250,
                  marker_border_bits                                     = 1,
-                 marker_pos_size_scale_fac                              = 1.,                       # scale factor for marker positions in the markers input argument, and sizes in the markers file or the marker_size input
+                 pos_size_scale_fac                              = 1.,                              # scale factor for marker positions in the markers input argument, and sizes in the markers file or the marker_size input
                  unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
                  package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources
                  ref_image_store_path   : str|pathlib.Path              = None,
@@ -30,7 +31,7 @@ class Plane:
                  min_num_markers        : int                           = 3                         # minimum number of markers for gaze to be mapped to this plane
                  ):
 
-        self.marker_size                                    = marker_size*marker_pos_size_scale_fac
+        self.marker_size                                    = marker_size*pos_size_scale_fac
         # marker positions
         self.markers            : dict[int,marker.Marker]   = {}
         self._all_marker_ids    : list[int]                 = []
@@ -48,7 +49,7 @@ class Plane:
         self.min_num_markers                                = min_num_markers
 
         # prep markers
-        self._load_markers(markers, marker_pos_size_scale_fac, package_to_read_from)
+        self._load_markers(markers, pos_size_scale_fac, package_to_read_from)
 
         # get reference image of plane
         if ref_image_store_path:
@@ -99,7 +100,7 @@ class Plane:
                 color = (0,0,0)
             drawing.openCVCircle(img, xy, size, color, -1, sub_pixel_fac)
 
-    def _load_markers(self, markers: str|pathlib.Path|pd.DataFrame, marker_pos_size_scale_fac: float, package_to_read_from: str|None):
+    def _load_markers(self, markers: str|pathlib.Path|pd.DataFrame, pos_size_scale_fac: float, package_to_read_from: str|None):
         from . import aruco
         # read in aruco marker positions
         if isinstance(markers, pd.DataFrame):
@@ -117,8 +118,8 @@ class Plane:
                 raise ValueError(f'This plane is set up using the dictionary {aruco.dict_id_to_str[self.aruco_dict_id]} which only has {marker_dict_size} markers, which means that valid IDs are 0-{marker_dict_size-1}. However, this plane is configured to contain a marker number {m_id} that is not a valid marker for this dictionary.')
 
         # turn into marker objects
-        marker_pos.x *= marker_pos_size_scale_fac
-        marker_pos.y *= marker_pos_size_scale_fac
+        marker_pos.x *= pos_size_scale_fac
+        marker_pos.y *= pos_size_scale_fac
 
         # determine default marker size
         markerHalfSizeMmDefault  = self.marker_size/2.
@@ -130,7 +131,7 @@ class Plane:
             rotr= -math.radians(rot)
             R   = np.array([[math.cos(rotr), math.sin(rotr)], [-math.sin(rotr), math.cos(rotr)]])
             # get marker size
-            markerHalfSizeMm = row[['size']].values[0]/2.*marker_pos_size_scale_fac if 'size' in row else markerHalfSizeMmDefault
+            markerHalfSizeMm = row[['size']].values[0]/2.*pos_size_scale_fac if 'size' in row else markerHalfSizeMmDefault
             # top left first, and clockwise: same order as detected ArUco marker corners
             tl = c + np.matmul(R, np.array([-markerHalfSizeMm, -markerHalfSizeMm]))
             tr = c + np.matmul(R, np.array([ markerHalfSizeMm, -markerHalfSizeMm]))
@@ -228,6 +229,78 @@ class Plane:
             img = cv2.warpAffine(marker_image, transformation, (img.shape[1], img.shape[0]), img, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT)
 
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+        if path:
+            cv2.imwrite(path, img)
+
+        return img
+
+
+class TargetPlane(Plane):
+    def __init__(self,
+                markers                : str|pathlib.Path|pd.DataFrame,                            # if str or Path: file from which to read markers. Else direction N_markerx4 array. Should contain centers of markers
+                targets                : str|pathlib.Path|pd.DataFrame,                            # if str or Path: file from which to read targets. Else direction N_targetx2 array. Should contain centers of targets
+                marker_size            : float,                                                    # in "unit" units
+                plane_size             : Coordinate,                                               # in "unit" units
+
+                aruco_dict_id                                          = cv2.aruco.DICT_4X4_250,
+                marker_border_bits                                     = 1,
+                pos_size_scale_fac                                     = 1.,                       # scale factor for marker positions in the markers input argument, and sizes in the markers file or the marker_size input
+                unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
+                package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources
+                ref_image_store_path   : str|pathlib.Path              = None,
+                ref_image_size         : int                           = 1920,                     # largest dimension
+                min_num_markers        : int                           = 3                         # minimum number of markers for gaze to be mapped to this plane
+                ):
+
+        # get targets first, so that they can be drawn on the reference image
+        self.targets: dict[int,marker.Marker] = {}
+        self._load_targets(targets, pos_size_scale_fac, package_to_read_from)
+
+        # call base class
+        super(TargetPlane, self).__init__(markers, marker_size, plane_size, aruco_dict_id, marker_border_bits, pos_size_scale_fac, unit, package_to_read_from, ref_image_store_path, ref_image_size, min_num_markers)
+
+    def set_origin(self, origin: Coordinate):
+        # set origin of plane. Origin location is on current (not original) plane
+        # so set_origin([5., 0.]) three times in a row shifts the origin rightward by 15 units
+        for i in self.targets:
+            self.targets[i].shift(-np.array(origin))
+        super(TargetPlane, self).set_origin(origin)
+
+    def _load_targets(self, targets: str|pathlib.Path|pd.DataFrame, pos_size_scale_fac: float, package_to_read_from: str|None):
+        # read in target positions
+        if isinstance(targets, pd.DataFrame):
+            target_pos = targets
+        else:
+            target_pos = data_files.read_coord_file(targets, package_to_read_from)
+        if target_pos is None:
+            raise RuntimeError(f"No targets could be read from the file {targets}, check it exists and contains targets")
+
+        target_pos['center'] = list(target_pos[['x','y']].values * pos_size_scale_fac)
+        target_pos = target_pos.drop([x for x in target_pos.columns if x not in ('center','color')], axis=1)
+        self.targets = {idx:marker.Marker(idx,**kwargs) for idx,kwargs in zip(target_pos.index.values,target_pos.to_dict(orient='records'))}
+
+    def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
+        # first call superclass method to generate image without targets
+        img = super(TargetPlane, self)._store_reference_image(path, im_size)
+        height,width = img.shape[:2]
+
+        # add targets
+        subPixelFac = 8   # for sub-pixel positioning
+        for key in self.targets:
+            # check we're on the plane
+            if np.any(self.targets[key].center[0]<0) or np.any(self.targets[key].center[0]>self.plane_size.x) or \
+               np.any(self.targets[key].center[1]<0) or np.any(self.targets[key].center[1]>self.plane_size.y):
+                center  = ", ".join(map(lambda x: f"{x:.4f}",self.targets[key].center))
+                plane_corners = [", ".join(map(lambda x: f"{x:.4f}",c)) for c in (self.bbox[:2],self.bbox[2:])]
+                raise ValueError(f'Target {key} positioned at ({center}) is outside the defined\nplane which ranges from ({plane_corners[0]}) to ({plane_corners[1]}). Ensure all\nsizes and positions are in the same unit (e.g. mm) and check the target position csv file and plane size.')
+
+            # 1. determine position on image
+            circlePos = transforms.to_image_pos(*self.targets[key].center, self.bbox, [width,height])
+
+            # 2. draw
+            clr = tuple([int(i*255) for i in (colors.to_rgb(self.targets[key].color)[::-1] if self.targets[key].color else (0.,0.,1.))])  # need BGR color ordering
+            drawing.openCVCircle(img, circlePos, 15, clr, -1, subPixelFac)
+
         if path:
             cv2.imwrite(path, img)
 

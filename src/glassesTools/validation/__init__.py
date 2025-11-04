@@ -90,7 +90,7 @@ def get_DataQualityType_explanation(dq: DataQualityType):
                    f"'{ler_name}' and '{rer_name}' to be enabled."
 
 
-class Plane(_plane.Plane):
+class Plane(_plane.TargetPlane):
     def __init__(self, config_dir: str|pathlib.Path|None, validation_config: dict[str,typing.Any]=None, is_dynamic=False, **kwarg):
         # NB: if config_dir is None, the default config will be used
 
@@ -111,42 +111,32 @@ class Plane(_plane.Plane):
         # get board size
         plane_size = _plane.Coordinate(self.config['gridCols']*self.cell_size_mm, self.config['gridRows']*self.cell_size_mm)
 
-        # get targets first, so that they can be drawn on the reference image
+        # get targets first, so that any dynamic markers can be split off and then the rest passed to base class
         self.targets: dict[int,_marker.Marker]                  = {}
         self.dynamic_markers: dict[int, tuple[int,int]]         = {}        # {marker ID: (target ID, marker_N column in target file)} (keep latter around for good error reporting)
         self._dynamic_markers_cache: dict[int, _marker.MarkerID]= None      # different format, for efficient return from get_marker_IDs()
-        origin = self._get_targets(config_dir, self.config, is_dynamic)
+        targets, origin = self._get_targets(config_dir, self.config, is_dynamic)
 
         # call base class
         markers = config.get_markers(config_dir, self.config['markerPosFile'])
         if 'ref_image_store_path' not in kwarg:
             kwarg['ref_image_store_path'] = None
-        super(Plane, self).__init__(markers, self.config['markerSide'], plane_size, self.config['arucoDictionary'], self.config['markerBorderBits'], self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], min_num_markers=self.config['minNumMarkers'], **kwarg)
+        super(Plane, self).__init__(markers, targets, self.config['markerSide'], plane_size, self.config['arucoDictionary'], self.config['markerBorderBits'], self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], min_num_markers=self.config['minNumMarkers'], **kwarg)
 
         # set center
         self.set_origin(origin)
 
-    def set_origin(self, origin: _plane.Coordinate):
-        # set origin of plane. Origin location is on current (not original) plane
-        # so set_origin([5., 0.]) three times in a row shifts the origin rightward by 15 units
-        for i in self.targets:
-            self.targets[i].shift(-np.array(origin))
-        super(Plane, self).set_origin(origin)
-
-    def _get_targets(self, config_dir, validationSetup, is_dynamic) -> _plane.Coordinate:
+    def _get_targets(self, config_dir, validationSetup, is_dynamic) -> tuple[pd.DataFrame, _plane.Coordinate]:
         """ poster space: (0,0) is origin (might be center target), (-,-) bottom left """
 
         # read in target positions
         targets = config.get_targets(config_dir, validationSetup['targetPosFile'])
         if targets is not None:
-            targets['center'] = list(targets[['x','y']].values)
-            targets['center'] *= self.cell_size_mm
+            targets_center = targets[['x','y']] * self.cell_size_mm
             if is_dynamic:
                 # split of columns indicating markers that signal appearance of a target
                 markers = pd.concat([targets.pop(c) for c in targets.columns if c.startswith('marker_')], axis=1)
-            targets = targets.drop([x for x in targets.columns if x not in ('center','color')], axis=1)
-            self.targets = {idx:_marker.Marker(idx,**kwargs) for idx,kwargs in zip(targets.index.values,targets.to_dict(orient='records'))}
-            origin = _plane.Coordinate(*targets.loc[validationSetup['centerTarget']].center.copy())  # NB: need origin in scaled space
+            origin = _plane.Coordinate(*targets_center.loc[validationSetup['centerTarget']].values)  # NB: need origin in scaled space
             # load with dynamic markers, if any
             if is_dynamic:
                 marker_columns = {c:int(c.removeprefix('marker_')) for c in markers}
@@ -155,38 +145,10 @@ class Plane(_plane.Plane):
                         self.dynamic_markers[int(r[c])] = (int(r.name), marker_columns[c])
                 markers.apply(_store_markers, axis=1)
         else:
-            self.targets.clear()
             self.dynamic_markers.clear()
             origin = _plane.Coordinate(0.,0.)
         self._dynamic_markers_cache = None
-        return origin
-
-    def _store_reference_image(self, path: pathlib.Path, width: int) -> np.ndarray:
-        # first call superclass method to generate image without targets
-        img = super(Plane, self)._store_reference_image(path, width)
-        height = img.shape[0]
-
-        # add targets
-        subPixelFac = 8   # for sub-pixel positioning
-        for key in self.targets:
-            # check we're on the plane
-            if np.any(self.targets[key].center[0]<0) or np.any(self.targets[key].center[0]>self.plane_size.x) or \
-               np.any(self.targets[key].center[1]<0) or np.any(self.targets[key].center[1]>self.plane_size.y):
-                center  = ", ".join(map(lambda x: f"{x:.4f}",self.targets[key].center))
-                plane_corners = [", ".join(map(lambda x: f"{x:.4f}",c)) for c in (self.bbox[:2],self.bbox[2:])]
-                raise ValueError(f'Target {key} positioned at ({center}) is outside the defined\nplane which ranges from ({plane_corners[0]}) to ({plane_corners[1]}). Ensure all\nsizes and positions are in the same unit (e.g. mm) and check the target position csv file and plane size.')
-
-            # 1. determine position on image
-            circlePos = _transforms.to_image_pos(*self.targets[key].center, self.bbox, [width,height])
-
-            # 2. draw
-            clr = tuple([int(i*255) for i in (colors.to_rgb(self.targets[key].color)[::-1] if self.targets[key].color else (0.,0.,1.))])  # need BGR color ordering
-            _drawing.openCVCircle(img, circlePos, 15, clr, -1, subPixelFac)
-
-        if path:
-            cv2.imwrite(path, img)
-
-        return img
+        return targets, origin
 
     def get_marker_IDs(self) -> dict[str|int,list[_marker.MarkerID]]:
         if self._dynamic_markers_cache is None:
