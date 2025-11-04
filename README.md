@@ -34,6 +34,7 @@ glassesTools supports the following eye trackers:
 |Tobii Pro Glasses 2|`EyeTracker.Tobii_Glasses_2`|
 |Tobii Pro Glasses 3|`EyeTracker.Tobii_Glasses_3`|
 |Viewpointsystem VPS 19|`EyeTracker.VPS_19`|
+|Viewpointsystem VPS Lite|`EyeTracker.VPS_Lite`|
 
 \* The generic eye tracker allows users to import recordings made with unsupported eye trackers into tools built upon glassesTools, if the user has already converted the recording to the [glassesTools format](#common-data-format) themselves. The name of the eye tracker can be set in the [recording info](#recording-info) file through the `eye_tracker_name` property, so that recordings from different devices imported as generic eye tracker recordings can be distinguished.
 

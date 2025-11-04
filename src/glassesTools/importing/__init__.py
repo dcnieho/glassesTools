@@ -16,7 +16,6 @@ from .SeeTrue_STONE import preprocessData as SeeTrue_STONE
 from .SMI_ETG import preprocessData as SMI_ETG
 from .tobii_G2 import preprocessData as tobii_G2
 from .tobii_G3 import preprocessData as tobii_G3
-from .VPS_19 import preprocessData as VPS_19
 
 def pupil_core(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from .pupilLabs import preprocessData
@@ -29,6 +28,16 @@ def pupil_invisible(output_dir: str | pathlib.Path, source_dir: str | pathlib.Pa
 def pupil_neon(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from .pupilLabs import preprocessData
     return preprocessData(output_dir, EyeTracker.Pupil_Neon, source_dir, rec_info, copy_scene_video, source_dir_as_relative_path)
+
+
+def VPS_19(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False, cam_cal_file: str|pathlib.Path=None) -> Recording:
+    from .VPS import preprocessData
+    return preprocessData(output_dir, EyeTracker.VPS_19, source_dir, rec_info, copy_scene_video, source_dir_as_relative_path, cam_cal_file=cam_cal_file)
+
+def VPS_Lite(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False, cam_cal_file: str|pathlib.Path=None) -> Recording:
+    from .VPS import preprocessData
+    return preprocessData(output_dir, EyeTracker.VPS_Lite, source_dir, rec_info, copy_scene_video, source_dir_as_relative_path, cam_cal_file=cam_cal_file)
+
 
 
 def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker, device_name: str = None) -> list[Recording]:
@@ -71,8 +80,11 @@ def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker,
             from .tobii_G3 import getRecordingInfo
             rec_info = getRecordingInfo(source_dir)
         case EyeTracker.VPS_19:
-            from .VPS_19 import getRecordingInfo
-            rec_info = getRecordingInfo(source_dir)
+            from .VPS import getRecordingInfo
+            rec_info = getRecordingInfo(source_dir, device)
+        case EyeTracker.VPS_Lite:
+            from .VPS import getRecordingInfo
+            rec_info = getRecordingInfo(source_dir, device)
         case _:
             raise RuntimeError(f'Not implemented for "{device.value}", contact developer')
 
@@ -119,6 +131,8 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
             rec_info = tobii_G3(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.VPS_19:
             rec_info = VPS_19(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
+        case EyeTracker.VPS_Lite:
+            rec_info = VPS_Lite(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
         case _:
             raise RuntimeError(f'Not implemented for "{device.value}", contact developer')
 
@@ -220,5 +234,5 @@ def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame|None, frame_ts: pd.
     rec_info.store_as_json(output_dir / rec_info_fname)
 
 
-__all__ = ['adhawk_mindlink','argus_ETVision','generic','pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3','VPS_19',
+__all__ = ['adhawk_mindlink','argus_ETVision','generic','pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3','VPS_19','VPS_Lite',
            'get_recording_info','do_import','check_source_dir','check_output_dir','check_folders','check_device']
