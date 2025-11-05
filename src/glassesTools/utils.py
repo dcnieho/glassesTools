@@ -56,11 +56,19 @@ def enum_val_2_str(x) -> str:
     return f'{type(x).__name__}.{x.name}'
 
 E = typing.TypeVar('E')
-def enum_str_2_val(x: str, enum_cls: E, patches: dict[str,str]=None) -> E:
-    str_val = x.split('.')[-1]
+def str_int_2_enum_val(x: str, enum_cls: E, patches: typing.Mapping[str|int,str]|None=None) -> E:
+    if isinstance(x, int) and x in patches:
+        str_val = patches[x]
+    else:
+        str_val = x.split('.')[-1]
     if patches is not None and str_val in patches:
         str_val = patches[str_val]
-    return getattr(enum_cls, str_val)
+    # if its the name of an enum member, return by attribute
+    if hasattr(enum_cls, str_val):
+        return getattr(enum_cls, str_val)
+    else:
+        # else assume its the value, so try to construct with value
+        return enum_cls(str_val)
 
 
 def cartesian_product(*arrays):
