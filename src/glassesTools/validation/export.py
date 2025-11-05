@@ -1,7 +1,7 @@
 import pathlib
 import pandas as pd
 
-from . import DataQualityType
+from .. import data_types
 
 def collect_data_quality(rec_dirs: list[str | pathlib.Path], file_name: str|dict[str,str]='dataQuality.tsv', col_for_parent=None):
     # 1. collect all data quality metrics from the provided directories
@@ -32,24 +32,24 @@ def collect_data_quality(rec_dirs: list[str | pathlib.Path], file_name: str|dict
     df = df.set_index(idx_vals+['marker_interval','type','target'])
     # change type index into enum
     typeIdx = df.index.names.index('type')
-    df.index = df.index.set_levels(pd.CategoricalIndex([getattr(DataQualityType,x) for x in df.index.levels[typeIdx]]),level='type')
+    df.index = df.index.set_levels(pd.CategoricalIndex([getattr(data_types.DataType,x) for x in df.index.levels[typeIdx]]),level='type')
 
     # see what we have
     dq_types = sorted(list(df.index.levels[typeIdx]), key=lambda dq: dq.value)
     targets  = list(df.index.levels[df.index.names.index('target')])
 
     # good default selection of dq type to export
-    if DataQualityType.pose_vidpos_ray in dq_types:
-        default_dq_type = DataQualityType.pose_vidpos_ray
-    elif DataQualityType.pose_vidpos_homography in dq_types:
-        default_dq_type = DataQualityType.pose_vidpos_homography
+    if data_types.DataType.pose_vidpos_ray in dq_types:
+        default_dq_type = data_types.DataType.pose_vidpos_ray
+    elif data_types.DataType.pose_vidpos_homography in dq_types:
+        default_dq_type = data_types.DataType.pose_vidpos_homography
     else:
         # ultimate fallback, just set first available as the one to export
         default_dq_type = dq_types[0]
 
     return df, default_dq_type, targets
 
-def summarize_and_store_data_quality(df: pd.DataFrame, output_file_or_dir: str | pathlib.Path, dq_types: list[DataQualityType], targets: list[int], average_over_targets = False, include_data_loss = False):
+def summarize_and_store_data_quality(df: pd.DataFrame, output_file_or_dir: str | pathlib.Path, dq_types: list[data_types.DataType], targets: list[int], average_over_targets = False, include_data_loss = False):
     dq_types_have = sorted(list(df.index.levels[df.index.names.index('type')]), key=lambda dq: dq.value)
     targets_have  = list(df.index.levels[df.index.names.index('target')])
 
@@ -78,7 +78,7 @@ def summarize_and_store_data_quality(df: pd.DataFrame, output_file_or_dir: str |
         output_file_or_dir = output_file_or_dir / 'dataQuality.tsv'
     df.to_csv(output_file_or_dir, mode='w', header=True, sep='\t', na_rep='nan', float_format="%.6f")
 
-def export_data_quality(rec_dirs: list[str | pathlib.Path], output_file_or_dir: str | pathlib.Path, dq_types: list[DataQualityType] = None, targets: list[int] = None, average_over_targets = False, include_data_loss = False):
+def export_data_quality(rec_dirs: list[str | pathlib.Path], output_file_or_dir: str | pathlib.Path, dq_types: list[data_types.DataType] = None, targets: list[int] = None, average_over_targets = False, include_data_loss = False):
     df, default_dq_type, targets_have = collect_data_quality(rec_dirs)
     if not dq_types:
         dq_types = [default_dq_type]

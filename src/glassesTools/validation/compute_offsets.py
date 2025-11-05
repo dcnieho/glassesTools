@@ -4,30 +4,29 @@ import pandas as pd
 import math
 import warnings
 
-from . import DataQualityType
-from .. import gaze_worldref, naming, pose, transforms
+from .. import data_types, gaze_worldref, naming, pose, transforms
 
-def _get_fields_for_dq_type(dq_type: DataQualityType) -> list[str|None]|None:
+def _get_fields_for_dq_type(dq_type: data_types.DataType) -> list[str|None]|None:
     match dq_type:
-        case DataQualityType.viewpos_vidpos_homography:
+        case data_types.DataType.viewpos_vidpos_homography:
             # from camera perspective, using homography
             # viewpos_vidpos_homography: using assumed viewing distance
             fields = [None, None, 'gazePosPlane2D_vidPos_homography']
-        case DataQualityType.pose_vidpos_homography:
+        case data_types.DataType.pose_vidpos_homography:
             # from camera perspective, using homography
             # pose_vidpos_homography   : using pose info
             fields = [None, 'gazePosCam_vidPos_homography', 'gazePosPlane2D_vidPos_homography']
-        case DataQualityType.pose_vidpos_ray:
+        case data_types.DataType.pose_vidpos_ray:
             # from camera perspective, using 3D gaze point ray
             fields = [None, 'gazePosCam_vidPos_ray', 'gazePosPlane2D_vidPos_ray']
-        case DataQualityType.pose_world_eye:
+        case data_types.DataType.pose_world_eye:
             # using 3D world gaze position, with respect to eye tracker reference frame's origin
             fields = [None, 'gazePosCamWorld', 'gazePosPlane2DWorld']
-        case DataQualityType.pose_left_eye:
+        case data_types.DataType.pose_left_eye:
             fields = ['gazeOriCamLeft', 'gazePosCamLeft', 'gazePosPlane2DLeft']
-        case DataQualityType.pose_right_eye:
+        case data_types.DataType.pose_right_eye:
             fields = ['gazeOriCamRight', 'gazePosCamRight', 'gazePosPlane2DRight']
-        case DataQualityType.pose_left_right_avg:
+        case data_types.DataType.pose_left_right_avg:
             fields = None   # special case, need to separately check availability of left and right
         case _:
             raise NotImplementedError(f'Logic for data quality type {dq} not implemented. Contact developer.')
@@ -42,7 +41,7 @@ def compute(
         distance_mm_for_homography: float,
         output_directory: str|pathlib.Path,
         filename: str = naming.validation_offset_fname,
-        dq_types: list[DataQualityType]|None=None, allow_dq_fallback=False, include_data_loss=False
+        dq_types: list[data_types.DataType]|None=None, allow_dq_fallback=False, include_data_loss=False
     ):
     output_directory = pathlib.Path(output_directory)
     if dq_types is None:
@@ -72,8 +71,8 @@ def compute(
 
         # check what data quality types we should output. Go with good defaults
         # first see what we have available
-        dq_have: list[DataQualityType] = []
-        for dq in DataQualityType:
+        dq_have: list[data_types.DataType] = []
+        for dq in data_types.DataType:
             fields = _get_fields_for_dq_type(dq)
             if fields is None:
                 continue
@@ -81,50 +80,50 @@ def compute(
             if np.any(np.all(have_data,axis=0)):
                 dq_have.append(dq)
 
-        if (DataQualityType.pose_left_eye in dq_have) and (DataQualityType.pose_right_eye in dq_have):
-            dq_have.append(DataQualityType.pose_left_right_avg)
+        if (data_types.DataType.pose_left_eye in dq_have) and (data_types.DataType.pose_right_eye in dq_have):
+            dq_have.append(data_types.DataType.pose_left_right_avg)
         # then determine, based on what user requests, what we will output
         if dq_types:
-            if isinstance(dq_types,DataQualityType) or isinstance(dq_types, str):
+            if isinstance(dq_types,data_types.DataType) or isinstance(dq_types, str):
                 dq_types = [dq_types]
             else:
                 # ensure list
                 dq_types = list(dq_types)
             # do some checks on user input
             for i,dq in reversed(list(enumerate(dq_types))):
-                if not isinstance(dq, DataQualityType):
+                if not isinstance(dq, data_types.DataType):
                     if isinstance(dq, str):
-                        if hasattr(DataQualityType, dq):
-                            dq = dq_types[i] = getattr(DataQualityType, dq)
+                        if hasattr(data_types.DataType, dq):
+                            dq = dq_types[i] = getattr(data_types.DataType, dq)
                         else:
-                            raise ValueError(f"The string '{dq}' is not a known data quality type. Known types: {[e.name for e in DataQualityType]}")
+                            raise ValueError(f"The string '{dq}' is not a known data quality type. Known types: {[e.name for e in data_types.DataType]}")
                     else:
-                        raise ValueError(f"The variable 'dq' should be a string with one of the following values: {[e.name for e in DataQualityType]}")
+                        raise ValueError(f"The variable 'dq' should be a string with one of the following values: {[e.name for e in data_types.DataType]}")
                 if not dq in dq_have:
                     if allow_dq_fallback:
                         del dq_types[i]
                     else:
                         raise RuntimeError(f'Data quality type {dq} could not be used as its not available for this recording. Available data quality types: {[e.name for e in dq_have]}')
 
-            if DataQualityType.pose_left_right_avg in dq_types:
-                if (not DataQualityType.pose_left_eye in dq_have) or (not DataQualityType.pose_right_eye in dq_have):
+            if data_types.DataType.pose_left_right_avg in dq_types:
+                if (not data_types.DataType.pose_left_eye in dq_have) or (not data_types.DataType.pose_right_eye in dq_have):
                     if allow_dq_fallback:
-                        dq_types.remove(DataQualityType.pose_left_right_avg)
+                        dq_types.remove(data_types.DataType.pose_left_right_avg)
                     else:
-                        raise RuntimeError(f'Cannot use the data quality type {DataQualityType.pose_left_right_avg} because it requires having data quality types {DataQualityType.pose_left_eye} and {DataQualityType.pose_right_eye} available, but one or both are not available. Available data quality types: {[e.name for e in dq_have]}')
+                        raise RuntimeError(f'Cannot use the data quality type {data_types.DataType.pose_left_right_avg} because it requires having data quality types {data_types.DataType.pose_left_eye} and {data_types.DataType.pose_right_eye} available, but one or both are not available. Available data quality types: {[e.name for e in dq_have]}')
 
         if not dq_types:
-            if DataQualityType.pose_vidpos_ray in dq_have:
-                # highest priority is DataQualityType.pose_vidpos_ray
-                dq_types.append(DataQualityType.pose_vidpos_ray)
-            elif DataQualityType.pose_vidpos_homography in dq_have:
+            if data_types.DataType.pose_vidpos_ray in dq_have:
+                # highest priority is data_types.DataQualityType.pose_vidpos_ray
+                dq_types.append(data_types.DataType.pose_vidpos_ray)
+            elif data_types.DataType.pose_vidpos_homography in dq_have:
                 # else at least try to use pose (shouldn't occur, if we have pose we have a calibrated camera, which means we should have the above)
-                dq_types.append(DataQualityType.pose_vidpos_homography)
+                dq_types.append(data_types.DataType.pose_vidpos_homography)
             else:
                 # else we're down to falling back on an assumed viewing distance
-                if not DataQualityType.viewpos_vidpos_homography in dq_have:
-                    raise RuntimeError(f'Even data quality type {DataQualityType.viewpos_vidpos_homography} could not be used, bare minimum failed for some weird reason. Contact developer.')
-                dq_types.append(DataQualityType.viewpos_vidpos_homography)
+                if not data_types.DataType.viewpos_vidpos_homography in dq_have:
+                    raise RuntimeError(f'Even data quality type {data_types.DataType.viewpos_vidpos_homography} could not be used, bare minimum failed for some weird reason. Contact developer.')
+                dq_types.append(data_types.DataType.viewpos_vidpos_homography)
 
         # prepare output data frame
         df_idx  = []
@@ -164,7 +163,7 @@ def compute(
                     ori     = np.vstack([getattr(s,fields[0]) for v in samples_per_frame.values() for s in v])
                 gazePlane   = np.vstack([getattr(s,fields[2]) for v in samples_per_frame.values() for s in v])
                 if fields[1] is None:
-                    if not dq==DataQualityType.viewpos_vidpos_homography:
+                    if not dq==data_types.DataType.viewpos_vidpos_homography:
                         raise NotImplementedError(f'This field should be set, is a special case not implemented? Contact developer')
                     gaze    = np.hstack((gazePlane[:,0:2], np.full((gazePlane.shape[0],1),distance_mm_for_homography)))
                 else:
@@ -177,7 +176,7 @@ def compute(
                         continue
                     out_idx += 1
                     frame_idx = frame_idxs[i]
-                    if dq==DataQualityType.viewpos_vidpos_homography:
+                    if dq==data_types.DataType.viewpos_vidpos_homography:
                         # get vectors based on assumed viewing distance (from config), without using pose info
                         vGaze   = gaze[i,:]
                         vTarget = targets_for_homography[t]
@@ -199,10 +198,10 @@ def compute(
                     offset[out_idx,idq,:]= ang2D*np.array([math.cos(onPlaneAngle), math.sin(onPlaneAngle)])
 
             # special case for average of left and right eye
-            if DataQualityType.pose_left_right_avg in dq_types:
-                l_idx = dq_types.index(DataQualityType.pose_left_eye)
-                r_idx = dq_types.index(DataQualityType.pose_right_eye)
-                a_idx = dq_types.index(DataQualityType.pose_left_right_avg)
+            if data_types.DataType.pose_left_right_avg in dq_types:
+                l_idx = dq_types.index(data_types.DataType.pose_left_eye)
+                r_idx = dq_types.index(data_types.DataType.pose_right_eye)
+                a_idx = dq_types.index(data_types.DataType.pose_left_right_avg)
                 offset[:,a_idx,:] = offset[:,[l_idx, r_idx],:].mean(axis=1)
 
             # compute data quality for this target
