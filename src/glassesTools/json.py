@@ -31,6 +31,10 @@ def json_decoder(d):
     for t in TYPE_REGISTRY:
         if t.reg_name in d:
             return t.from_json(d[t.reg_name])
+        elif t.compatible_reg_names is not None:
+            for r_name in t.compatible_reg_names:
+                if r_name in d:
+                    return t.from_json(d[r_name])
     return d
 
 def load(file: pathlib.Path):
@@ -43,10 +47,11 @@ def loads(payload: str):
 
 @dataclasses.dataclass
 class TypeEntry:
-    type        : typing.Type
-    reg_name    : str
-    to_json     : typing.Callable
-    from_json   : typing.Callable
+    type                : typing.Type
+    reg_name            : str
+    to_json             : typing.Callable
+    from_json           : typing.Callable
+    compatible_reg_names: list[str]|None = None
 
 TYPE_REGISTRY = []
 def register_type(entry: TypeEntry):
