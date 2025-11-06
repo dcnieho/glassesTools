@@ -57,7 +57,9 @@ def enum_val_2_str(x) -> str:
 
 E = typing.TypeVar('E')
 def str_int_2_enum_val(x: str, enum_cls: E, patches: typing.Mapping[str|int,str]|None=None) -> E:
-    if isinstance(x, int) and x in patches:
+    if isinstance(x, enum_cls):
+        return x
+    elif isinstance(x, int) and x in patches:
         str_val = patches[x]
     else:
         str_val = x.split('.')[-1]
