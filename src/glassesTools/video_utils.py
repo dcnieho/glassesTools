@@ -22,7 +22,7 @@ def _get_isobmmf_timestamps(vid_file: pathlib.Path) -> np.ndarray|None:
     # parse mp4 file
     boxes       = iso.Mp4File(str(vid_file))
     summary     = boxes.get_summary()
-    if not summary['contains_moov']:
+    if 'track_list' not in summary:
         return None     # cannot parse files without moov box
     vid_tracks  = [t for t in summary['track_list'] if t['media_type']=='video']
     if len(vid_tracks)!=1:
