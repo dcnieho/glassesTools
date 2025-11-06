@@ -143,7 +143,7 @@ def read_file(file_name              : str|pathlib.Path,
         for k,v in zip(df[subset_var],obj_list):
             objs.setdefault(k, []).append(v)
     else:
-        objs = {idx:object(**kwargs) for idx,kwargs in zip(df[subset_var].values,df.to_dict(orient='records'))}
+        objs = {idx:object(**kwargs) for idx,kwargs in zip(df[subset_var],df.to_dict(orient='records'))}
     return objs, df[subset_var].max()
 
 def write_array_to_file(objects             : list[Any] | dict[int,list[Any]],

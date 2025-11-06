@@ -277,7 +277,7 @@ class TargetPlane(Plane):
 
         target_pos['center'] = list(target_pos[['x','y']].values * pos_size_scale_fac)
         target_pos = target_pos.drop([x for x in target_pos.columns if x not in ('center','color')], axis=1)
-        self.targets = {idx:marker.Marker(idx,**kwargs) for idx,kwargs in zip(target_pos.index.values,target_pos.to_dict(orient='records'))}
+        self.targets = {idx:marker.Marker(idx,**kwargs) for idx,kwargs in zip(target_pos.index,target_pos.to_dict(orient='records'))}
 
     def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
         # first call superclass method to generate image without targets
