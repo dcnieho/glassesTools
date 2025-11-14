@@ -76,4 +76,11 @@ def flatten_annotation_dict(annotations: dict[str, list[list[int]]]) -> dict[str
             annotations_flat[e.name] = [i for iv in annotations[e.name] for i in iv]
         else:
             annotations_flat[e.name] = annotations[e.name].copy()
+    # add anything still missing
+    for e_name in annotations:
+        if e_name not in annotations_flat:
+            if annotations[e_name] and isinstance(annotations[e_name][0],list):
+                annotations_flat[e_name] = [i for iv in annotations[e_name] for i in iv]
+            else:
+                annotations_flat[e_name] = annotations[e_name].copy()
     return annotations_flat
