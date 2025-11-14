@@ -4,7 +4,7 @@ import numpy as np
 import typing
 import enum
 
-from glassesTools import annotation, data_files, drawing, intervals, marker, ocv, timestamps, transforms, _has_GUI
+from glassesTools import data_files, drawing, intervals, marker, ocv, timestamps, transforms, _has_GUI
 if _has_GUI:
     from .gui import video_player
 else:
