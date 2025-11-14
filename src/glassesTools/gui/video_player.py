@@ -109,9 +109,9 @@ class GUI:
         self._action_tooltips   = action_tooltip_map.copy()
         self._action_button_lbls= action_lbl_map.copy()
         self._shortcut_key_map  = shortcut_key_map.copy()
-        self._annotate_shortcut_key_map: dict[str, imgui.Key] = {}
-        self._annotate_tooltips        : dict[str, str]       = {}
-        self._annotations_frame        : dict[str, list[int]] = None
+        self._annotate_shortcut_key_map: dict[str, imgui.Key]                             = {}
+        self._annotate_tooltips        : dict[str, str]                                   = {}
+        self._annotations_frame        : dict[str, tuple[annotation.EventType,list[int]]] = None
 
         self._interruptible = True
         self._detachable = False
@@ -267,7 +267,7 @@ class GUI:
         self._duration = duration
         self._last_frame_idx = last_frame_idx
 
-    def set_show_timeline(self, show_timeline: bool, video_ts: timestamps.VideoTimestamps, annotations: dict[str, list[int]]|None=None, window_id: int|None=None):
+    def set_show_timeline(self, show_timeline: bool, video_ts: timestamps.VideoTimestamps, annotations: dict[str, tuple[annotation.EventType,list[int]]]|None=None, window_id: int|None=None):
         if window_id is None:
             window_id = self._get_main_window_id()
 
@@ -315,7 +315,7 @@ class GUI:
     def _create_annotation_buttons(self):
         any_timeline = self._any_has_timeline()
         # for safety, remove all already registered events
-        self._buttons = {k:v for k,v in self._buttons.items() if not isinstance(e,tuple) or e[0]!=Action.Annotate_Make}
+        self._buttons = {k:v for k,v in self._buttons.items() if not isinstance(k,tuple) or k[0]!=Action.Annotate_Make}
         self._add_remove_button(any_timeline and self._allow_annotate, Action.Annotate_Delete)
         # and make buttons if we have a visible timeline
         if not any_timeline or not self._allow_annotate:
@@ -608,7 +608,7 @@ class GUI:
                 buttons.extend([None, None])
             buttons.append(self._buttons[Action.Annotate_Delete])
             annotation_colors = self._window_timeline[w].get_annotation_colors()
-            annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], {k:v for k,v in self._annotations_frame.items() if k in self._allow_annotate})
+            annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], {k:v[1] for k,v in self._annotations_frame.items() if k in self._allow_annotate})
             for e in self._allow_annotate:
                 if e in annotation_colors and e in annotate_keys:
                     but = dataclasses.replace(self._buttons[(Action.Annotate_Make, e)])

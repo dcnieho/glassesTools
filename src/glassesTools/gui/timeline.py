@@ -36,7 +36,7 @@ def color_darken(color: imgui.ImColor, amount: float):
 
 
 class Timeline:
-    def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[str, list[int]]|None = None):
+    def __init__(self, video_ts: timestamps.VideoTimestamps, annotations: dict[str, tuple[annotation.EventType,list[int]]]|None = None):
         self._video_ts = video_ts
         self._duration = self._video_ts.get_last()[1]/1000. # ms -> s
         if self._duration==0.0:
@@ -67,7 +67,8 @@ class Timeline:
         self._allow_timeline_zoom = False
 
         # tracks
-        self._annotations_frame = annotations
+        self._annotations_frame = {e:annotations[e][1] for e in annotations}
+        self._annotation_types  = {e:annotations[e][0] for e in annotations}
         self._annotations       = self._annotations_to_time()
         self._annotation_colors = self._make_annotation_colors()
         self._show_annotation_labels = True
@@ -397,7 +398,7 @@ class Timeline:
         imgui.push_style_var(imgui.StyleVar_.item_spacing, (0,0))
         text_size = max([imgui.calc_text_size(e) for e in self._annotations_frame.keys()], key=lambda x: x.x)
         for e in self._annotations_frame:
-            self._draw_track(e, self._annotations[e], self._annotations_frame[e], height_per_track, self._annotation_colors[e], text_size)
+            self._draw_track(e, self._annotation_types[e], self._annotations[e], self._annotations_frame[e], height_per_track, self._annotation_colors[e], text_size)
         imgui.pop_style_var()
 
         # draw player bar
@@ -437,7 +438,7 @@ class Timeline:
             self._request_time(self._pos_to_time(screen_position, True))
         return action
 
-    def _draw_track(self, event: str, annotations_time: list[float], annotations_frame: list[int], height: float, color: imgui.ImColor, text_size: imgui.ImVec2):
+    def _draw_track(self, event: str, event_type: annotation.EventType, annotations_time: list[float], annotations_frame: list[int], height: float, color: imgui.ImColor, text_size: imgui.ImVec2):
         dpi_fac = hello_imgui.dpi_window_size_factor()
         grid_color = _color_u32_replace_alpha(imgui.Col_.separator, 0.85)
         cursor_pos = imgui.get_cursor_screen_pos()
@@ -463,7 +464,7 @@ class Timeline:
         clip_title_max = text_size + imgui.ImVec2([2*text_offset.x, 2*text_offset.y])
 
         # draw annotations
-        if annotation.type_map[annotation.get_event_by_name(event).event_type]==annotation.Type.Interval:
+        if annotation.type_map[event_type]==annotation.Type.Interval:
             # intervals, draw as boxes
             action = None
             for m in range(0,len(annotations_time)-1,2):     # -1 to make sure we don't try incomplete intervals
