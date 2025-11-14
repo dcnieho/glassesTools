@@ -315,9 +315,8 @@ class GUI:
         return False
     def _create_annotation_buttons(self):
         any_timeline = self._any_has_timeline()
-        # for safety, remove all possible already registered events
-        for e in annotation.get_all_event_names():
-            self._buttons.pop((Action.Annotate_Make, e), None)
+        # for safety, remove all already registered events
+        self._buttons = {k:v for k,v in self._buttons.items() if not isinstance(e,tuple) or e[0]!=Action.Annotate_Make}
         self._add_remove_button(any_timeline and self._allow_annotate, Action.Annotate_Delete)
         # and make buttons if we have a visible timeline
         if not any_timeline or not self._allow_annotate:
