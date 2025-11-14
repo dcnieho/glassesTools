@@ -139,7 +139,7 @@ class GUI:
         self._window_show_action_tooltip: dict[int,bool] = {}
         self._window_show_play_percentage: dict[int,bool] = {}
         self._window_sfac: dict[int,float] = {}
-        self._window_timeline: dict[int,timeline.Timeline] = {}
+        self._window_timeline: dict[int,timeline.Timeline|None] = {}
         self._window_timecode_pos: dict[int,str] = {}
 
         self._buttons: dict[Action|tuple[Action,str], Button] = {}
@@ -206,7 +206,7 @@ class GUI:
         self._add_remove_button(self._allow_seek, Action.Forward_Time)
         self._add_remove_button(self._allow_seek, Action.Back_Frame)
         self._add_remove_button(self._allow_seek, Action.Forward_Frame)
-    def set_button_props_for_action(self, action: Action, lbl: str=None, key: imgui.Key|None=None, tooltip: str=None):
+    def set_button_props_for_action(self, action: Action, lbl: str|None=None, key: imgui.Key|None=None, tooltip: str|None=None):
         if not lbl and not key and not tooltip:
             # nothing to do
             return
@@ -245,21 +245,21 @@ class GUI:
         for w in self._windows:
             if self._window_timeline[w] is not None:
                 self._window_timeline[w].set_allow_timeline_zoom(allow_timeline_zoom)
-    def set_show_controls(self, show_controls: bool, window_id:int = None):
+    def set_show_controls(self, show_controls: bool, window_id: int|None=None):
         if window_id is None:
             window_id = self._get_main_window_id()
         self._window_show_controls[window_id] = show_controls
-    def set_show_action_tooltip(self, show_action_tooltip: bool, window_id:int = None):
+    def set_show_action_tooltip(self, show_action_tooltip: bool, window_id: int|None=None):
         if window_id is None:
             window_id = self._get_main_window_id()
         self._window_show_action_tooltip[window_id] = show_action_tooltip
-    def set_timecode_position(self, position, window_id:int = None):
+    def set_timecode_position(self, position, window_id: int|None=None):
         if window_id is None:
             window_id = self._get_main_window_id()
         if position not in ['l','r']:
             raise ValueError(f"For position, only 'l' and 'r' are understood, not '{position}'")
         self._window_timecode_pos[window_id] = position
-    def set_show_play_percentage(self, show_play_percentage: bool, window_id:int = None):
+    def set_show_play_percentage(self, show_play_percentage: bool, window_id: int|None=None):
         if window_id is None:
             window_id = self._get_main_window_id()
         self._window_show_play_percentage[window_id] = show_play_percentage
@@ -267,7 +267,7 @@ class GUI:
         self._duration = duration
         self._last_frame_idx = last_frame_idx
 
-    def set_show_timeline(self, show_timeline: bool, video_ts: timestamps.VideoTimestamps = None, annotations: dict[str, list[int]] = None, window_id:int = None):
+    def set_show_timeline(self, show_timeline: bool, video_ts: timestamps.VideoTimestamps, annotations: dict[str, list[int]]|None=None, window_id: int|None=None):
         if window_id is None:
             window_id = self._get_main_window_id()
 
@@ -279,15 +279,14 @@ class GUI:
             self._window_timeline[window_id].set_show_annotation_labels(self._timeline_show_annotation_labels)
             self._window_timeline[window_id].set_show_info_on_hover(self._timeline_show_info_on_hover)
             self._window_timeline[window_id].set_annotation_keys(self._annotate_shortcut_key_map, self._annotate_tooltips)
-            if video_ts is not None:
-                last_frame_idx, duration = video_ts.get_last()
-                self.set_duration(duration, last_frame_idx)
+            last_frame_idx, duration = video_ts.get_last()
+            self.set_duration(duration, last_frame_idx)
         else:
             self._window_timeline[window_id] = None
         if annotations is not None and self._any_has_timeline():
             self._annotations_frame = annotations
         self._create_annotation_buttons()
-    def get_annotation_colors(self, window_id:int = None):
+    def get_annotation_colors(self, window_id: int|None=None):
         if window_id is None:
             window_id = self._get_main_window_id()
         if self._window_timeline[window_id] is None:
@@ -295,11 +294,11 @@ class GUI:
         colors = self._window_timeline[window_id].get_annotation_colors()
         return {e:(colors[e].value.x,colors[e].value.y,colors[e].value.z,colors[e].value.w) for e in colors}
 
-    def set_allow_annotate(self, allow_annotate: set[str], annotate_shortcut_key_map: dict[str, str|imgui.Key]=None, annotate_tooltips: dict[str, str] = None):
+    def set_allow_annotate(self, allow_annotate: set[str], annotate_shortcut_key_map: dict[str, str|imgui.Key]|None=None, annotate_tooltips: dict[str, str]|None=None):
         self._allow_annotate = allow_annotate
         if annotate_shortcut_key_map is not None:
             self._annotate_shortcut_key_map = {e:(k if isinstance(k,imgui.Key) else imgui.Key[k]) for e,k in annotate_shortcut_key_map.items()}
-        self._annotate_tooltips = annotate_tooltips
+        self._annotate_tooltips = annotate_tooltips or {}
         for w in self._windows:
             if self._window_timeline[w] is not None and self._window_timeline[w].get_num_annotations():
                 self._window_timeline[w].set_allow_annotate(self._allow_annotate)
