@@ -100,11 +100,13 @@ class Timeline:
     def set_show_info_on_hover(self, show_info_on_hover: bool):
         self._show_info_on_hover = show_info_on_hover
 
-    def set_annotation_keys(self, annotate_shortcut_key_map: dict[str, imgui.Key], annotate_tooltips: dict[str, str] = None):
+    def set_annotation_keys(self, annotate_shortcut_key_map: dict[str, imgui.Key], annotate_tooltips: dict[str,str]|None=None):
         self._annotation_tooltips.clear()
-        for e in annotation.get_all_event_names():
+        if not self._annotations_frame:
+            return
+        for e in self._annotations_frame:
             tool_tip = ''
-            if e in annotate_tooltips:
+            if annotate_tooltips and e in annotate_tooltips:
                 tool_tip = annotate_tooltips[e]
                 if e in self._allow_annotate:
                     if e in annotate_shortcut_key_map:
