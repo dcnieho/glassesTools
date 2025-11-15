@@ -67,8 +67,8 @@ class Timeline:
         self._allow_timeline_zoom = False
 
         # tracks
-        self._annotations_frame = {e:annotations[e][1] for e in annotations}
-        self._annotation_types  = {e:annotations[e][0] for e in annotations}
+        self._annotations_frame = None if annotations is None else {e:annotations[e][1] for e in annotations}
+        self._annotation_types  = None if annotations is None else {e:annotations[e][0] for e in annotations}
         self._annotations       = self._annotations_to_time()
         self._annotation_colors = self._make_annotation_colors()
         self._show_annotation_labels = True
