@@ -8,7 +8,7 @@ def show_visualization(
         in_video: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path, camera_calibration_file: str|pathlib.Path,
         planes: dict[str, plane.Plane], poses: dict[str, dict[int, pose.Pose]],
         head_gazes: dict[int, list[gaze_headref.Gaze]], plane_gazes: dict[str, dict[int, list[gaze_worldref.Gaze]]],
-        annotations: dict[str, list[list[int]]],
+        annotations: dict[str, tuple[annotation.EventType, list[list[int]]]],
         gui: video_player.GUI, show_planes: bool, show_only_intervals: bool, sub_pixel_fac: int
     ):
     in_video                = pathlib.Path(in_video)
@@ -50,7 +50,7 @@ def show_visualization(
         # NB: have to spool through like this, setting specific frame to read
         # with cap.get(cv2.CAP_PROP_POS_FRAMES) doesn't seem to work reliably
         # for VFR video files
-        if show_only_intervals and not intervals.is_in_interval(frame_idx, annotations) or frame is None:
+        if show_only_intervals and not any(intervals.is_in_interval(frame_idx, annotations[e]) for e in annotations) or frame is None:
             # we don't have a valid frame or no need to show this frame
             # do update timeline of the viewers
             gui.update_image(None, frame_ts/1000., frame_idx, window_id=gui.main_window_id)

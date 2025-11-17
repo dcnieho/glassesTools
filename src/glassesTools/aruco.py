@@ -3,7 +3,7 @@ import cv2
 import pathlib
 import typing
 
-from . import drawing, marker, ocv, plane, pose
+from . import annotation, drawing, marker, ocv, plane, pose
 
 default_dict = cv2.aruco.DICT_4X4_250
 
@@ -302,12 +302,12 @@ class Manager:
     # with all planes/individual markers associated to one of these detectors
     def __init__(self):
         # planes to be detected
-        self.planes                 : dict[str, PlaneSetup]                     = {}
-        self.plane_proc_intervals   : dict[str, list[int]|list[list[int]]|None] = {}
-        self._plane_to_detector     : dict[str, int]                            = {}
+        self.planes                 : dict[str, PlaneSetup] = {}
+        self.plane_proc_intervals   : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None] = {}
+        self._plane_to_detector     : dict[str, int]        = {}
         # individual markers to be detected
-        self.individual_markers                 : dict[marker.MarkerID, MarkerSetup]        = {}
-        self.individual_markers_proc_intervals  : dict[str, list[int]|list[list[int]]|None] = {}
+        self.individual_markers                 : dict[marker.MarkerID, MarkerSetup] = {}
+        self.individual_markers_proc_intervals  : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None] = {}
 
         # consolidated into set of detectors, and associated planes+individual markers for each
         self._detectors             : dict[int, Detector]                   = {}
@@ -321,13 +321,13 @@ class Manager:
         self._unexpected_marker_color       = (128,255,255)
         self._rejected_marker_color         = None # by default not drawn. If wanted, (0,0,255) is a good color
 
-    def add_plane(self, plane: str, planes_setup: PlaneSetup, processing_intervals: list[int]|list[list[int]]|None = None):
+    def add_plane(self, plane: str, planes_setup: PlaneSetup, processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None = None):
         if plane in self.planes:
             raise ValueError(f'Cannot register the plane "{plane}", it is already registered')
         self.planes[plane]                  = planes_setup
         self.plane_proc_intervals[plane]    = processing_intervals
 
-    def add_individual_marker(self, mark: marker.MarkerID, marker_setup: MarkerSetup, processing_intervals: list[int]|list[list[int]]|None = None):
+    def add_individual_marker(self, mark: marker.MarkerID, marker_setup: MarkerSetup, processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None = None):
         if mark in self.individual_markers:
             raise ValueError(f'Cannot register the individual marker {marker.marker_ID_to_str(mark)}, it is already registered')
         self.individual_markers[mark]                = marker_setup

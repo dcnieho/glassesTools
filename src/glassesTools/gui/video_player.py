@@ -608,7 +608,7 @@ class GUI:
                 buttons.extend([None, None])
             buttons.append(self._buttons[Action.Annotate_Delete])
             annotation_colors = self._window_timeline[w].get_annotation_colors()
-            annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], {k:v[1] for k,v in self._annotations_frame.items() if k in self._allow_annotate})
+            annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], {k:v for k,v in self._annotations_frame.items() if k in self._allow_annotate})
             for e in self._allow_annotate:
                 if e in annotation_colors and e in annotate_keys:
                     but = dataclasses.replace(self._buttons[(Action.Annotate_Make, e)])

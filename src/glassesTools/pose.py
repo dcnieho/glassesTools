@@ -4,7 +4,7 @@ import numpy as np
 import typing
 import enum
 
-from glassesTools import data_files, drawing, intervals, marker, ocv, timestamps, transforms, _has_GUI
+from . import annotation, data_files, drawing, intervals, marker, ocv, timestamps, transforms, _has_GUI
 if _has_GUI:
     from .gui import video_player
 else:
@@ -182,15 +182,15 @@ class Estimator:
         self.cam_params = camera_calibration_file if isinstance(camera_calibration_file,ocv.CameraParams) else ocv.CameraParams.read_from_file(camera_calibration_file)
 
         self.plane_functions    : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray]]] = {}
-        self.plane_intervals    : dict[str, list[int]|list[list[int]]]                                  = {}
+        self.plane_intervals    : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]]     = {}
         self.plane_visualizers  : dict[str, typing.Callable[[str,int,np.ndarray,np.ndarray], None]|None]= {}
 
         self.individual_marker_functions    : dict[_T, typing.Callable[[_T,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray|None]]] = {}
-        self.individual_marker_intervals    : dict[_T, list[int]|list[list[int]]]                                   = {}
+        self.individual_marker_intervals    : dict[_T, tuple[annotation.EventType, list[int]|list[list[int]]]]      = {}
         self.individual_marker_visualizers  : dict[_T, typing.Callable[[_T,int,np.ndarray,np.ndarray], None]|None]  = {}
 
         self.extra_proc_functions   : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], tuple]] = {}
-        self.extra_proc_intervals   : dict[str, list[int]|list[list[int]]|None]                             = {}
+        self.extra_proc_intervals   : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None]= {}
         self.extra_proc_parameters  : dict[str, dict[str,typing.Any]]                                       = {}
         self.extra_proc_visualizers : dict[str, typing.Callable[[str,np.ndarray,int,typing.Any], None]|None]= {}
 
@@ -215,7 +215,7 @@ class Estimator:
 
     def add_plane(self, plane: str,
                   plane_function: typing.Callable[[str,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray]|None],
-                  processing_intervals: list[int]|list[list[int]]=None,
+                  processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]=None,
                   plane_visualizer: typing.Callable[[str,int,np.ndarray,np.ndarray], None]=None):
         if not self._first_frame:
             raise RuntimeError(f'You cannot register planes once video processing has started')
@@ -227,7 +227,7 @@ class Estimator:
 
     def add_individual_marker(self, key: _T,
                               individual_marker_function: typing.Callable[[_T,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray|None|None]],
-                              processing_intervals: list[int]|list[list[int]]=None,
+                              processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]=None,
                               individual_marker_visualizer: typing.Callable[[str,int,np.ndarray,np.ndarray], None]=None):
         if not self._first_frame:
             raise RuntimeError(f'You cannot register individual markers once video processing has started')
@@ -239,7 +239,7 @@ class Estimator:
 
     def register_extra_processing_fun(self,
                                       name: str,
-                                      processing_intervals: list[int]|list[list[int]]|None,
+                                      processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None,
                                       func: typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], tuple],
                                       func_parameters: dict[str, typing.Any],
                                       visualizer: typing.Callable[[str,np.ndarray,int,typing.Any], None]):

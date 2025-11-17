@@ -50,33 +50,23 @@ def register_event(entry: Event):
 def unregister_all_annotation_types():
     EVENT_REGISTRY.clear()
 
-def get_event_by_name(name: str) -> Event|None:
-    for e in EVENT_REGISTRY:
-        if e.name == name:
-            return e
-    return None
-
-def get_all_event_names() -> list[str]:
-    return [e.name for e in EVENT_REGISTRY]
-
 def get_events_by_type(event_type: EventType) -> list[Event]:
     return [e for e in EVENT_REGISTRY if e.event_type == event_type]
 
 
-def flatten_annotation_dict(annotations: dict[str, list[list[int]]]) -> dict[str, list[int]]:
-    annotations_flat: dict[str, list[int]] = {}
+def flatten_annotation_dict(annotations: dict[str, tuple[EventType, list[list[int]]]]) -> dict[str, tuple[EventType, list[int]]]:
+    annotations_flat: dict[str, tuple[EventType, list[int]]] = {}
+    def _copy_flat_annotation(annotations: tuple[EventType, list[list[int]]]):
+        if annotations[1] and isinstance(annotations[1][0],list):
+            return (annotations[0], [i for iv in annotations[1] for i in iv])
+        else:
+            return (annotations[0], annotations[1].copy())
     for e in EVENT_REGISTRY:  # iterate over this for consistent ordering
         if e.name not in annotations:
             continue
-        if annotations[e.name] and isinstance(annotations[e.name][0],list):
-            annotations_flat[e.name] = [i for iv in annotations[e.name] for i in iv]
-        else:
-            annotations_flat[e.name] = annotations[e.name].copy()
+        annotations_flat[e.name] = _copy_flat_annotation(annotations[e.name])
     # add anything still missing
     for e_name in annotations:
         if e_name not in annotations_flat:
-            if annotations[e_name] and isinstance(annotations[e_name][0],list):
-                annotations_flat[e_name] = [i for iv in annotations[e_name] for i in iv]
-            else:
-                annotations_flat[e_name] = annotations[e_name].copy()
+            annotations_flat[e_name] = _copy_flat_annotation(annotations[e_name])
     return annotations_flat
