@@ -320,7 +320,7 @@ class GUI:
         # and make buttons if we have a visible timeline
         if not any_timeline or not self._allow_annotate:
             return
-        for e in self._allow_annotate:
+        for e in sorted(self._allow_annotate):
             self._add_remove_button(True, Action.Annotate_Make, e)
 
     def set_show_annotation_label(self, show_label: bool, window_id:int = None):
@@ -609,7 +609,7 @@ class GUI:
             buttons.append(self._buttons[Action.Annotate_Delete])
             annotation_colors = self._window_timeline[w].get_annotation_colors()
             annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], {k:v for k,v in self._annotations_frame.items() if k in self._allow_annotate})
-            for e in self._allow_annotate:
+            for e in sorted(self._allow_annotate):
                 if e in annotation_colors and e in annotate_keys:
                     but = dataclasses.replace(self._buttons[(Action.Annotate_Make, e)])
                     but.color = annotation_colors[e]
