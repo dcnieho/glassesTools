@@ -128,10 +128,13 @@ class Pose:
         return transforms.apply_homography(point_cam, self.homography_mat).flatten()
 
     def get_origin_on_image(self, camera_params: ocv.CameraParams) -> np.ndarray:
+        return self.get_plane_point_on_image(np.zeros((1,2)), camera_params)
+
+    def get_plane_point_on_image(self, point: np.ndarray, camera_params: ocv.CameraParams) -> np.ndarray:
         if self.pose_successful() and camera_params.has_intrinsics():
-            a = self.plane_to_cam_pose(np.zeros((1,3)), camera_params)
+            a = self.plane_to_cam_pose(np.append(np.array(point),0.), camera_params)
         elif self.homography_successful():
-            a = self.plane_to_cam_homography(np.zeros((1,2)), camera_params)
+            a = self.plane_to_cam_homography(point, camera_params)
         else:
             a = np.full((2,), np.nan)
         return a
