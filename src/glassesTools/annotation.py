@@ -70,3 +70,23 @@ def flatten_annotation_dict(annotations: dict[str, tuple[EventType, list[list[in
         if e_name not in annotations_flat:
             annotations_flat[e_name] = _copy_flat_annotation(annotations[e_name])
     return annotations_flat
+
+def unflatten_annotation_dict(annotations: dict[str, tuple[EventType, list[int]]], add_incomplete_intervals:bool = False) -> dict[str, tuple[EventType, list[list[int]]]]:
+    annotations_unflat: dict[str, tuple[EventType, list[list[int]]]] = {}
+    def _copy_unflat_annotation(annotations: tuple[EventType, list[int]]):
+        if type_map[annotations[0]]==Type.Interval:
+            l = (annotations[0], [annotations[1][m:m+2] for m in range(0,len(annotations[1])-1,2)])
+            if add_incomplete_intervals and len(annotations[1])%2==1:
+                l[1].append([annotations[1][-1]])
+            return l
+        else:
+            return (annotations[0], [[tp] for tp in annotations[1]])
+    for e in EVENT_REGISTRY:  # iterate over this for consistent ordering
+        if e.name not in annotations:
+            continue
+        annotations_unflat[e.name] = _copy_unflat_annotation(annotations[e.name])
+    # add anything still missing
+    for e_name in annotations:
+        if e_name not in annotations_unflat:
+            annotations_unflat[e_name] = _copy_unflat_annotation(annotations[e_name])
+    return annotations_unflat
