@@ -184,7 +184,11 @@ def to_tsv(
     selected_intervals = selected_intervals \
                             .drop(columns=[c for c in ('xpos','ypos') if c in selected_intervals.columns]) \
                             .rename(columns={'startT': 'start_timestamp', 'endT': 'end_timestamp'})
-    selected_intervals.insert(0, 'marker_interval', iteration+1)
+    if 'marker_interval' in selected_intervals.columns:
+        # check matches
+        assert all(selected_intervals['marker_interval']==iteration+1)
+    else:
+        selected_intervals.insert(0, 'marker_interval', iteration+1)
 
     selected_intervals.to_csv(
         output_directory / f'{filename_stem}.tsv',
