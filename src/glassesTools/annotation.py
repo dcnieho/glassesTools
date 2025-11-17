@@ -12,6 +12,7 @@ class EventType(utils.AutoName):
     Sync_Camera = auto()    # point to be used for synchronizing different cameras
     Sync_ET_Data= auto()    # episode to be used for synchronization of eye tracker data to scene camera (e.g. using VOR)
     Trial       = auto()    # episode for which to map gaze to plane(s): output for files to be provided to user
+    Target      = auto()    # episode indicating when a specific target is being looked at
 event_types = [x for x in EventType]
 json.register_type(json.TypeEntry(EventType,'__enum.Event__', utils.enum_val_2_str, lambda x: getattr(EventType, x.split('.')[1])))
 
@@ -20,6 +21,7 @@ type_map = {
     EventType.Sync_Camera   : Type.Point,
     EventType.Sync_ET_Data  : Type.Interval,
     EventType.Trial         : Type.Interval,
+    EventType.Target        : Type.Interval,
 }
 
 tooltip_map = {
@@ -27,6 +29,7 @@ tooltip_map = {
     EventType.Sync_Camera   : 'Camera sync point',
     EventType.Sync_ET_Data  : 'Eye tracker synchronization episode',
     EventType.Trial         : 'Trial episode',
+    EventType.Target        : 'Target episode',
 }
 
 default_hotkeys = {
