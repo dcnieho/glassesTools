@@ -117,7 +117,7 @@ def get_available_data_types(plane_gazes: dict[int, list[gaze_worldref.Gaze]]) -
         if dq == DataType.pose_left_right_avg:
             continue   # special case handled below (needs both left and right eye data)
         fields = get_world_gaze_fields_for_data_type(dq)
-        have_data = np.vstack(tuple([not np.any(np.isnan(getattr(s,f))) for v in plane_gazes.values() for s in v] for f in fields if f is not None))
+        have_data = np.vstack(tuple([(a:=getattr(s,f)) is not None and not np.any(np.isnan(a)) for v in plane_gazes.values() for s in v] for f in fields if f is not None))
         if np.any(np.all(have_data,axis=0)):
             dq_have.append(dq)
 
