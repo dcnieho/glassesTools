@@ -213,7 +213,7 @@ def calculate_gaze_angles_to_point(plane_gazes: dict[int, list[gaze_worldref.Gaz
                 ang2D               = transforms.angle_between(vTarget,vGaze)
                 # decompose in horizontal/vertical (in plane space)
                 onPlaneAngle        = math.atan2(gazePlane[i,1]-points[t][1], gazePlane[i,0]-points[t][0])
-                out[t][d_type][i,:] = np.array([ang2D, ang2D*math.cos(onPlaneAngle), ang2D*math.sin(onPlaneAngle)])
+                out[t][d_type][i,:] = ang2D*np.array([1., math.cos(onPlaneAngle), math.sin(onPlaneAngle)])
 
         # special case for average of left and right eye
         if DataType.pose_left_right_avg in d_types:
