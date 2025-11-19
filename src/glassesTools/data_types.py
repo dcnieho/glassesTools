@@ -237,7 +237,7 @@ def collect_gaze_data(plane_gazes: dict[int, list[gaze_worldref.Gaze]], d_type: 
     if fields[1] is None:
         if not d_type==DataType.viewpos_vidpos_homography:
             raise NotImplementedError(f'This field should be set, is a special case not implemented? Contact developer')
-        gaze    = np.hstack((gazePlane[:,0:2], np.full((gazePlane.shape[0],1),viewing_distance*10.)))
+        gaze    = np.hstack((gazePlane[:,0:2], np.full((gazePlane.shape[0],1),viewing_distance)))
     else:
         gaze    = np.vstack([getattr(s,fields[1]) for v in plane_gazes.values() for s in v])
 
