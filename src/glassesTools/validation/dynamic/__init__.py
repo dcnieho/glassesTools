@@ -154,7 +154,7 @@ def setup_to_plane_config(output_dir: str|pathlib.Path, config_dir: str|pathlib.
 
 
 # for analysis
-def get_marker_observations(validation_plane: 'validation.Plane', working_dir: pathlib.Path) -> tuple[dict[int, pd.DataFrame], dict[int,list[marker.MarkerID]]]:
+def get_marker_observations(validation_plane: 'validation.Plane', working_dir: pathlib.Path, name: str='') -> tuple[dict[int, pd.DataFrame], dict[int,list[marker.MarkerID]]]:
     # organize markers
     markers_per_target: dict[int,list[marker.MarkerID]] = defaultdict(list)
     for m in validation_plane.dynamic_markers:
@@ -170,7 +170,8 @@ def get_marker_observations(validation_plane: 'validation.Plane', working_dir: p
         if all(missing):
             file_missing = [marker.get_file_name(m.m_id, m.aruco_dict_id, None) for m in markers_per_target[t]]
             missing_str  = '\n- '.join(file_missing)
-            raise FileNotFoundError(f'None of the marker files for target {t} were found:\n- {missing_str}')
+            extra = f'on plane {name} ' if name else ''
+            raise FileNotFoundError(f'None of the marker files for target {t} {extra}were found:\n- {missing_str}')
         # remove missing from list of markers to load
         if any(missing):
             for i,m in enumerate(missing):
