@@ -5,7 +5,7 @@ polars[pandas]
 msgpack
 opencv-python-headless==4.12.0.88
 ffpyplayer
-ffmpeg-binaries # ffpyplayer only bundles the ffmpeg binaries we need on Windows, this package also handles MacOS and Linux
+ffmpeg-binaries>=1.1.0 # ffpyplayer only bundles the ffmpeg binaries we need on Windows, this package also handles MacOS and Linux
 natsort
 matplotlib
 aiopath
