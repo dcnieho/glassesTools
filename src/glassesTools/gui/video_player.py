@@ -4,6 +4,7 @@ import functools
 from enum import Enum, auto
 import dataclasses
 from typing import Any
+import natsort
 
 from imgui_bundle import imgui, immapp, hello_imgui, glfw_utils, icons_fontawesome_6 as ifa6
 import glfw
@@ -619,7 +620,7 @@ class GUI:
             buttons.append(self._buttons[Action.Annotate_Delete])
             annotation_colors = self._window_timeline[w].get_annotation_colors()
             annotate_keys, annotate_ivals = intervals.which_interval(self._current_frame[w][2], {k:v for k,v in self._annotations_frame.items() if k in self._allow_annotate})
-            for e in sorted(self._allow_annotate):
+            for e in natsort.natsorted(self._allow_annotate):
                 if e in annotation_colors and e in annotate_keys:
                     but = dataclasses.replace(self._buttons[(Action.Annotate_Make, e)])
                     but.color = annotation_colors[e]
