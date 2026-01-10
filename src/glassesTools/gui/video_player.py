@@ -224,6 +224,16 @@ class GUI:
         # reset accelerators, tooltip
         button.setup_accelerators_tooltip()
 
+    def get_shortcut_keys(self, include_annotate: bool=True, include_unused: bool=False) -> set[str]:
+        keys = set()
+        for b in self._buttons.values():
+            if b.key is not None and (include_annotate or b.action!=Action.Annotate_Make):
+                keys.add(imgui.get_key_name(b.key))
+        if include_unused:
+            for key in self._shortcut_key_map.values():
+                keys.add(imgui.get_key_name(key))
+        return keys
+
     def _add_remove_button(self, add: bool, action: Action, event: str|None=None):
         d_key = (action,event) if event else action
         self._buttons.pop(d_key, None)
