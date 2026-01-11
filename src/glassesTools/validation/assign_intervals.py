@@ -78,7 +78,8 @@ def dynamic_markers(
         skip_first_duration: float,
         max_gap_duration: int,
         min_duration: int,
-        name: str = ''
+        name: str = '',
+        allow_missing: bool = False
     ) -> tuple[pd.DataFrame, None]:
     # also need frame timestamps because the intervals returned by this function should be expressed in recording time, not as frame indices.
     timestamps  = pd.read_csv(timestamps_file, delimiter='\t', index_col='frame_idx')
@@ -88,13 +89,13 @@ def dynamic_markers(
     marker_observations_per_target = {t:mo.loc[episode[0]:episode[1],:] for t,mo in marker_observations_per_target.items()}
     # check we have data for at least one of the markers for a given target
     for t in marker_observations_per_target:
-        if marker_observations_per_target[t].empty:
+        if marker_observations_per_target[t].empty and not allow_missing:
             missing_str  = '\n- '.join([marker.marker_ID_to_str(m) for m in markers_per_target[t]])
             extra = f'from frame {episode[0]} to frame {episode[1]}' if name=='' else f'"{name}" from frame {episode[0]} to frame {episode[1]}'
             raise RuntimeError(f'None of the markers for target {t} were observed during the episode {extra}:\n- {missing_str}')
 
     # marker presence signal only contains marker detections (True). We need to fill the gaps in between detections with False (not detected) so we have a continuous signal without gaps
-    marker_observations_per_target = {t: marker.expand_detection(marker_observations_per_target[t], fill_value=False) for t in marker_observations_per_target}
+    marker_observations_per_target = {t: marker.expand_detection(marker_observations_per_target[t], fill_value=False) for t in marker_observations_per_target if not marker_observations_per_target[t].empty}
 
     # for each target, see when it is presented using the marker presence signal
     selected_intervals = pd.DataFrame(columns=['startT','endT'])
