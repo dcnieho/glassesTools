@@ -78,7 +78,6 @@ class RecordingTable:
             imgui.TableFlags_.scroll_y |
             imgui.TableFlags_.hideable |
             imgui.TableFlags_.sortable |
-            imgui.TableFlags_.resizable |
             imgui.TableFlags_.sort_multi |
             imgui.TableFlags_.reorderable |
             imgui.TableFlags_.row_bg |
