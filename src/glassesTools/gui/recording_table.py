@@ -84,6 +84,8 @@ class RecordingTable:
             imgui.TableFlags_.row_bg |
             imgui.TableFlags_.sizing_fixed_fit |
             imgui.TableFlags_.no_host_extend_y |
+            imgui.TableFlags_.highlight_hovered_column |
+            imgui.TableFlags_.borders_inner_v |
             imgui.TableFlags_.no_borders_in_body_until_resize
         )
 
