@@ -308,6 +308,16 @@ class GUI:
     def set_allow_annotate(self, allow_annotate: set[str], annotate_shortcut_key_map: dict[str, str|imgui.Key]|None=None, annotate_tooltips: dict[str, str]|None=None):
         self._allow_annotate = allow_annotate
         if annotate_shortcut_key_map is not None:
+            # check if keys are not already used
+            used_keys = {k.lower() for k in self.get_shortcut_keys(include_annotate=False)}
+            used_keys.add(imgui.get_key_name(self._shortcut_key_map[Action.Annotate_Delete]).lower())   # this key isn't used yet, but will be by the end of this function for deleting annotations
+            for e,k in annotate_shortcut_key_map.items():
+                key_name = k if isinstance(k,str) else imgui.get_key_name(k)
+                if key_name.lower() in used_keys:
+                    raise ValueError(f'The shortcut key "{key_name}" provided for annotation event "{e}" is already used by another action')
+                used_keys.add(key_name.lower()) # ensure we also block this key for next annotations
+            # if key is "0"..."9", convert to "_0"..."_9"
+            annotate_shortcut_key_map = {e:(f'_{k}' if (isinstance(k,str) and k in '0123456789') else k) for e,k in annotate_shortcut_key_map.items()}
             self._annotate_shortcut_key_map = {e:(k if isinstance(k,imgui.Key) else imgui.Key[k]) for e,k in annotate_shortcut_key_map.items()}
         self._annotate_tooltips = annotate_tooltips or {}
         for w in self._windows:
