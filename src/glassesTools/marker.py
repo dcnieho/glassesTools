@@ -34,10 +34,9 @@ class Marker:
         return ret
 
     def shift(self, offset: np.ndarray):
-        self.center += offset
+        self.center = self.center + offset
         if self.corners:
-            for c in self.corners:
-                c += offset
+            self.corners = [c+offset for c in self.corners]
 
 def corners_intersection(corners):
     line1 = ( corners[0], corners[2] )
