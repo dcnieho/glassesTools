@@ -1,6 +1,7 @@
 # NB: using pose information requires a calibrated scene camera
 import enum
 import math
+import typing
 import numpy as np
 
 from . import json, pose, transforms, utils as _utils, gaze_worldref
@@ -125,7 +126,7 @@ def get_available_data_types(plane_gazes: dict[int, list[gaze_worldref.Gaze]]) -
         dq_have.append(DataType.pose_left_right_avg)
     return dq_have
 
-def select_data_types_to_use(dq_types: list[DataType]|DataType|str|None, dq_have: list[DataType], allow_dq_fallback: bool = True) -> list[DataType]:
+def select_data_types_to_use(dq_types: typing.Iterable[DataType]|DataType|str|None, dq_have: list[DataType], allow_dq_fallback: bool = True) -> list[DataType]:
     if dq_types is not None:
         if isinstance(dq_types,DataType) or isinstance(dq_types, str):
             dq_types = [dq_types]
