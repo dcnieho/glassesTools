@@ -237,8 +237,8 @@ class Plane:
 
 class TargetPlane(Plane):
     def __init__(self,
-                markers                : str|pathlib.Path|pd.DataFrame,                            # if str or Path: file from which to read markers. Else direction N_markerx4 array. Should contain centers of markers
-                targets                : str|pathlib.Path|pd.DataFrame,                            # if str or Path: file from which to read targets. Else direction N_targetx2 array. Should contain centers of targets
+                markers                : str|pathlib.Path|pd.DataFrame,                            # if str or Path: file from which to read markers. Else direction N_marker x 4 array. Should contain centers of markers
+                targets                : str|pathlib.Path|pd.DataFrame,                            # if str or Path: file from which to read targets. Else direction N_target x 2 array. Should contain centers of targets
                 marker_size            : float,                                                    # in "unit" units
                 plane_size             : Coordinate,                                               # in "unit" units
 
