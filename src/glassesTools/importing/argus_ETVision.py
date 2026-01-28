@@ -11,7 +11,6 @@ The output directory will contain:
 
 import shutil
 import pathlib
-import json
 import pandas as pd
 import datetime
 
@@ -122,7 +121,7 @@ def formatGazeData(inputDir: str|pathlib.Path, recInfo: Recording):
     """
 
     # convert the json file to pandas dataframe
-    df = gaze2df(inputDir / f'{recInfo.name}.csv')
+    df = gaze2df(pathlib.Path(inputDir) / f'{recInfo.name}.csv')
 
     # read video file, create array of frame timestamps
     frameTimestamps = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
