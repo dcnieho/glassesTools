@@ -34,9 +34,10 @@ class Marker:
         return ret
 
     def shift(self, offset: np.ndarray):
-        self.center = self.center + offset
+        self.center += offset
         if self.corners:
-            self.corners = [c+offset for c in self.corners]
+            for c in self.corners:
+                c += offset
 
 def corners_intersection(corners):
     line1 = ( corners[0], corners[2] )
@@ -153,9 +154,9 @@ def get_appearance_starts_ends(m: pd.DataFrame, max_gap_duration: int, min_durat
     ends   = np.delete(ends,shorti)
     # turn first and last frames into frame_idx values
     if 'frame_idx' in m.columns:
-        return m.loc[starts,'frame_idx'].to_numpy(), m.loc[ends-1,'frame_idx'].to_numpy() # NB: -1 so that ends point to last frame during which marker was last seen (and to not index out of the array)
+        return m.loc[starts,'frame_idx'].to_numpy(copy=True), m.loc[ends-1,'frame_idx'].to_numpy(copy=True) # NB: -1 so that ends point to last frame during which marker was last seen (and to not index out of the array)
     elif m.index.name=='frame_idx':
-        return m.index[starts].to_numpy(), m.index[ends-1].to_numpy()
+        return m.index[starts].to_numpy(copy=True), m.index[ends-1].to_numpy(copy=True)
 
 def get_sequence_interval(starts: dict[MarkerID,list[int]], ends: dict[MarkerID,list[int]], pattern: list[MarkerID], max_intermarker_gap_duration: int, side='start') -> np.ndarray:
     # find marker pattern (sequence of markers following in right order with gap no longer than max_intermarker_gap_duration)

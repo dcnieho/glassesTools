@@ -107,7 +107,7 @@ def dynamic_markers(
         # in case there are multiple (e.g. spotty detection), choose longest
         durs = np.array(end)-np.array(start)+1
         maxi = np.argmax(durs)
-        ts = timestamps.loc[[start[maxi], end[maxi]],ts_col].to_numpy()
+        ts = timestamps.loc[[start[maxi], end[maxi]],ts_col].to_numpy(copy=True)
         ts[0] += skip_first_duration
         if ts[0]>=ts[1]:
             continue

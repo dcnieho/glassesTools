@@ -125,7 +125,7 @@ class Plane:
         markerHalfSizeMmDefault  = self.marker_size/2.
 
         for idx, row in marker_pos.iterrows():
-            c   = row[['x','y']].values
+            c   = row[['x','y']].to_numpy(copy=True)
             # rotate markers (negative because plane coordinate system)
             rot = row[['rotation_angle']].values[0] if 'rotation_angle' in row else 0.
             rotr= -math.radians(rot)
