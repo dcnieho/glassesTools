@@ -143,7 +143,7 @@ The common data format of glassesTools contains the following files per recordin
 |`recording_info.json`|[Information about the recording](#recording-info).|
 |`gazeData.tsv`|[Head-referenced gaze data](#head-referenced-gaze-data) in the glassesTools common format.|
 |`frameTimestamps.tsv`|[Timestamps for each frame in the scene camera video.](#glassestoolsvideo_utils)|
-|`calibration.xml`|Camera calibration parameters for the scene camera.|
+|`calibration.xml`|[Camera calibration parameters for the scene camera.](#camera-calibration)|
 
 ### Recording info
 The `glassesTools.recording.Recording` object contains information about a recording.
@@ -168,6 +168,17 @@ It has the following properties:
 
 All these fields except `working_directory` are stored in the file `recording_info.json` in the recording's working directory.
 When loading a [`glassesTools.recording.Recording`](#recording-info) from this json file, the `working_directory` is set based on the path of the file.
+
+### Camera calibration
+The Camera calibration is stored in an OpenCV XML file and contains the following fields:
+|Field|description|
+| --- | --- |
+|`resolution`|Resolution of the camera|
+|`cameraMatrix`|Instrinsic camera matrix (3x3 matrix)|
+|`distCoeff`|Intrinsics: distortion coefficients (can have various lengths depending on the opencv model used)|
+|`position`|Extrinsics: translation (3-element vector), optional.|
+|`rotation`|Extrinsics: rotation (3x3 matrix), optional.|
+|`colmap_camera`|Definition of a ColMap camera (supports more camera models than OpenCV), optional. Contains the following subfields: `camera_id`, `model`, `width`, `height`, `params`, `has_prior_focal_length`.|
 
 ### Gaze data
 #### Head-referenced gaze data
