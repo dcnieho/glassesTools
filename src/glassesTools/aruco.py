@@ -228,33 +228,10 @@ class Detector:
         return img_points, ids, rejected_img_points
 
     def _refine_detection(self, image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, camera_mtx, distort_coeffs):
-        img_points, ids, rejected_img_points, recovered_ids = \
-            det.refineDetectedMarkers(
-                image = image, board = board,
-                detectedCorners = detected_corners, detectedIds = detected_ids, rejectedCorners = rejected_corners,
-                cameraMatrix = camera_mtx, distCoeffs = distort_coeffs
-                )
-        if img_points and img_points[0].shape[0]==4:
-            # there are versions out there where there is a bug in output shape of each set of corners, fix up
-            img_points = [np.reshape(c,(1,4,2)) for c in img_points]
-        if rejected_img_points and rejected_img_points[0].shape[0]==4:
-            # same as for corners
-            rejected_img_points = [np.reshape(c,(1,4,2)) for c in rejected_img_points]
-
-        return img_points, ids, rejected_img_points, recovered_ids
+        return refine_detection(image, detected_corners, detected_ids, rejected_corners, det, board, camera_mtx, distort_coeffs)
 
     def _filter_detections(self, img_points: list[np.ndarray], ids: np.ndarray, expected_ids: list[np.ndarray], keep_expected=True):
-        if ids is None or not img_points:
-            return img_points, ids
-        if not keep_expected:
-            expected_ids = set(ids.flatten())-set(expected_ids)
-        if not expected_ids:
-            # optimization. If output will definitely be empty, return directly
-            return tuple(), None
-        to_remove = np.where([x not in expected_ids for x in ids.flatten()])[0]
-        ids = np.delete(ids, to_remove, axis=0)
-        img_points = tuple(v for i,v in enumerate(img_points) if i not in to_remove)
-        return img_points, ids
+        return filter_detections(img_points, ids, expected_ids, keep_expected)
 
     def get_matching_image_board_points(self, plane_name: str, detect_tuple=None):
         if detect_tuple is None:
@@ -472,3 +449,32 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     board_corner_points = np.rollaxis(board_corner_points,-1)   # 4x2xN -> Nx4x2
     board_corner_points = np.pad(board_corner_points,((0,0),(0,0),(0,1)),'constant', constant_values=(0.,0.)) # Nx4x2 -> Nx4x3 (at Z=0 to all points)
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
+
+def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, camera_mtx, distort_coeffs):
+    img_points, ids, rejected_img_points, recovered_ids = \
+        det.refineDetectedMarkers(
+            image = image, board = board,
+            detectedCorners = detected_corners, detectedIds = detected_ids, rejectedCorners = rejected_corners,
+            cameraMatrix = camera_mtx, distCoeffs = distort_coeffs
+            )
+    if img_points and img_points[0].shape[0]==4:
+        # there are versions out there where there is a bug in output shape of each set of corners, fix up
+        img_points = [np.reshape(c,(1,4,2)) for c in img_points]
+    if rejected_img_points and rejected_img_points[0].shape[0]==4:
+        # same as for corners
+        rejected_img_points = [np.reshape(c,(1,4,2)) for c in rejected_img_points]
+
+    return img_points, ids, rejected_img_points, recovered_ids
+
+def filter_detections(img_points: list[np.ndarray], ids: np.ndarray, expected_ids: list[np.ndarray], keep_expected=True):
+    if ids is None or not img_points:
+        return img_points, ids
+    if not keep_expected:
+        expected_ids = set(ids.flatten())-set(expected_ids)
+    if not expected_ids:
+        # optimization. If output will definitely be empty, return directly
+        return tuple(), None
+    to_remove = np.where([x not in expected_ids for x in ids.flatten()])[0]
+    ids = np.delete(ids, to_remove, axis=0)
+    img_points = tuple(v for i,v in enumerate(img_points) if i not in to_remove)
+    return img_points, ids
