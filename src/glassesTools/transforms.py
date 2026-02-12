@@ -83,16 +83,16 @@ def distort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[
     if np.all(np.isnan(points_cam)):
         return np.full_like(points_cam, np.nan)
 
-    if cam_params.has_colmap_camera():
-        # unproject, ignoring distortion as this is an undistorted point
-        points_w = cam_params.colmap_camera_no_distortion.cam_from_img(points_cam.reshape((-1,2)))
-        # reproject, applying distortion
-        return cam_params.colmap_camera.img_from_cam(points_w)
-    elif cam_params.has_opencv_camera():
+    if cam_params.has_opencv_camera():
         # unproject, ignoring distortion as this is an undistorted point
         points_w = cv2.undistortPoints(points_cam.astype('float'), cam_params.camera_mtx, np.zeros((1, 5)))
         # reproject, applying distortion
         return cv2.projectPoints(cv2.convertPointsToHomogeneous(points_w), np.zeros((1, 1, 3)), np.zeros((1, 1, 3)), cam_params.camera_mtx, cam_params.distort_coeffs)[0].reshape((-1,2))
+    elif cam_params.has_colmap_camera():
+        # unproject, ignoring distortion as this is an undistorted point
+        points_w = cam_params.colmap_camera_no_distortion.cam_from_img(points_cam.reshape((-1,2)))
+        # reproject, applying distortion
+        return cam_params.colmap_camera.img_from_cam(points_w)
     else:
         return np.full_like(points_cam, np.nan)
 
@@ -100,13 +100,13 @@ def undistort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtyp
     if np.all(np.isnan(points_cam)):
         return np.full_like(points_cam, np.nan)
 
-    if cam_params.has_colmap_camera():
+    if cam_params.has_opencv_camera():
+        return cv2.undistortPoints(points_cam.astype('float'), cam_params.camera_mtx, cam_params.distort_coeffs, P=cam_params.camera_mtx).reshape((-1,2)) # P=cameraMatrix to reproject to camera
+    elif cam_params.has_colmap_camera():
         # unproject, removing distortion
         points_w = cam_params.colmap_camera.cam_from_img(points_cam.reshape((-1,2)))
         # reproject, without applying distortion
         return cam_params.colmap_camera_no_distortion.img_from_cam(points_w)
-    elif cam_params.has_opencv_camera():
-        return cv2.undistortPoints(points_cam.astype('float'), cam_params.camera_mtx, cam_params.distort_coeffs, P=cam_params.camera_mtx).reshape((-1,2)) # P=cameraMatrix to reproject to camera
     else:
         return np.full_like(points_cam, np.nan)
 
@@ -114,11 +114,11 @@ def unproject_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtyp
     if np.all(np.isnan(points_cam)):
         return np.full((points_cam.shape[0],3), np.nan)
 
-    if cam_params.has_colmap_camera():
-        return cv2.convertPointsToHomogeneous(cam_params.colmap_camera.cam_from_img(points_cam.reshape((-1,2)))).reshape((-1,3))
-    elif cam_params.has_opencv_camera():
+    if cam_params.has_opencv_camera():
         points_w = cv2.undistortPoints(points_cam.reshape((-1,2)).astype('float'), cam_params.camera_mtx, cam_params.distort_coeffs).reshape((-1,2))
         return cv2.convertPointsToHomogeneous(points_w).reshape((-1,3))
+    elif cam_params.has_colmap_camera():
+        return cv2.convertPointsToHomogeneous(cam_params.colmap_camera.cam_from_img(points_cam.reshape((-1,2)))).reshape((-1,3))
     else:
         return np.full((points_cam.shape[0],3), np.nan)
 
@@ -126,7 +126,13 @@ def project_points(points_world: np.ndarray[tuple[M, typing.Literal[3]], np.dtyp
     if np.all(np.isnan(points_world)):
         return np.full((points_world.shape[0],2), np.nan)
 
-    if cam_params.has_colmap_camera():
+    if cam_params.has_opencv_camera():
+        return cv2.projectPoints(points_world.astype('float'),
+                                 np.zeros((1, 1, 3)) if rot_vec is None else rot_vec,
+                                 np.zeros((1, 1, 3)) if trans_vec is None else trans_vec,
+                                 cam_params.camera_mtx,
+                                 np.zeros((1, 5)) if ignore_distortion else cam_params.distort_coeffs)[0].reshape((-1,2))
+    elif cam_params.has_colmap_camera():
         if rot_vec is not None and trans_vec is not None:
             RMat = cv2.Rodrigues(rot_vec)[0]
             RtMat = np.hstack((RMat, trans_vec.reshape(3,1)))
@@ -135,12 +141,6 @@ def project_points(points_world: np.ndarray[tuple[M, typing.Literal[3]], np.dtyp
             return cam_params.colmap_camera_no_distortion.img_from_cam(points_world.reshape((-1,3)))
         else:
             return cam_params.colmap_camera.img_from_cam(points_world.reshape((-1,3))).reshape((-1,2))
-    elif cam_params.has_opencv_camera():
-        return cv2.projectPoints(points_world.astype('float'),
-                                 np.zeros((1, 1, 3)) if rot_vec is None else rot_vec,
-                                 np.zeros((1, 1, 3)) if trans_vec is None else trans_vec,
-                                 cam_params.camera_mtx,
-                                 np.zeros((1, 5)) if ignore_distortion else cam_params.distort_coeffs)[0].reshape((-1,2))
     else:
         return np.full((points_world.shape[0],2), np.nan)
 
