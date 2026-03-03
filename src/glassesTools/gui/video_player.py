@@ -696,8 +696,13 @@ class GUI:
                 max_row_width = total_button_size.x
                 total_height = total_button_size.y
 
-            margin = (space - max_row_width)/2
-            button_cursor_pos = (int(left_edge + margin), img_sz[1]+img_margins[1]-total_height)
+            # if we have a single row and enough space to center the buttons on the image, do it
+            button_cursor_pos_x = int(img_margins[0] + (img_sz[0]-total_button_size.x)/2)
+            if len(rows)==1 and button_cursor_pos_x > left_edge+imgui.get_style().item_spacing.x and button_cursor_pos_x + total_button_size.x < right_edge-imgui.get_style().item_spacing.x:
+                button_cursor_pos = (button_cursor_pos_x, img_sz[1]+img_margins[1]-total_height)
+            else:
+                margin = (space - max_row_width)/2
+                button_cursor_pos = (int(left_edge + margin), img_sz[1]+img_margins[1]-total_height)
             controls_child_size = imgui.ImVec2(max_row_width, total_height)
 
 
