@@ -661,19 +661,22 @@ class GUI:
         total_button_size = functools.reduce(lambda a,b: imgui.ImVec2(a.x+b.x, max(a.y,b.y)), button_sizes) if button_sizes else imgui.ImVec2()
         total_button_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*imgui.get_style().item_spacing.x, total_button_size.y)
 
-        # draw them, or info item for tooltip
-        if self._window_show_controls[w] and buttons:
+        # determine if tooltip will be shown
+        show_tooltip = buttons and (self._window_show_action_tooltip[w] or not self._window_show_controls[w])
+
+        # determine where buttons will be drawn
+        if buttons:
             # center buttons in between timecode and tooltip
             # determine amount of space
             if self._window_timecode_pos[w]=='l':
                 # space between right edge of status overlay and left edge of tooltip
                 left_edge = overlay_x_pos + overlay_size.x
-                right_edge = tooltip_x_pos
+                right_edge = tooltip_x_pos if show_tooltip else img_margins[0]+img_sz[0]  # if no tooltip, we can use all the way to the right edge of the image
             else:
                 # space between right edge of tooltip and left edge of status overlay
-                left_edge = tooltip_x_pos + tooltip_child_size.x
+                left_edge = tooltip_x_pos + tooltip_child_size.x if show_tooltip else img_margins[0]  # if no tooltip, we can use all the way to the left edge of the image
                 right_edge = overlay_x_pos
-            space = right_edge - left_edge - imgui.get_style().item_spacing.x*2
+            space = right_edge - left_edge - imgui.get_style().item_spacing.x*(2 if show_tooltip else 1)
             # make multiple rows of buttons if needed
             if total_button_size.x > space:
                 # partition buttons in rows
@@ -703,7 +706,7 @@ class GUI:
             else:
                 margin = (space - max_row_width)/2
                 button_cursor_pos = (int(left_edge + margin), img_sz[1]+img_margins[1]-total_height)
-            controls_child_size = imgui.ImVec2(max_row_width, total_height)
+            buttons_child_size = imgui.ImVec2(max_row_width, total_height)
 
 
         # draw bottom status overlay
@@ -730,13 +733,13 @@ class GUI:
                 imgui.set_tooltip(overlay_text)
 
         if buttons:
-            imgui.set_cursor_pos(button_cursor_pos)
-            imgui.begin_child("##controls_overlay", size=controls_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
-            if not self._window_show_controls[w]:
-                _draw_action_tooltip()
+            if self._window_show_controls[w]:
+                imgui.set_cursor_pos(button_cursor_pos)
+                imgui.begin_child("##controls_overlay", size=buttons_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
 
+            # always "draw" buttons, even if we don't show them, so that shortcuts still work
             for b_row, r_sz in rows:
-                imgui.set_cursor_pos_x(int((controls_child_size.x-r_sz.x)/2))
+                imgui.set_cursor_pos_x(int((buttons_child_size.x-r_sz.x)/2))
                 for i_b, (b,sz) in enumerate(b_row):
                     if b is None:
                         imgui.dummy(sz)
@@ -805,8 +808,9 @@ class GUI:
                         imgui.end_disabled()
                     if i_b < len(b_row)-1:
                         imgui.same_line()
-            imgui.end_child()
-            if self._window_show_controls[w] and self._window_show_action_tooltip[w]:
+            if self._window_show_controls[w]:
+                imgui.end_child()
+            if self._window_show_action_tooltip[w] or not self._window_show_controls[w]:
                 imgui.set_cursor_pos(tooltip_cursor_pos)
                 imgui.begin_child("##tooltip_overlay", size=tooltip_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
                 _draw_action_tooltip()
