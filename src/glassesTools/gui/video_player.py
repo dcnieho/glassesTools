@@ -447,6 +447,9 @@ class GUI:
             self._window_visible[GUI.main_window_id] = False
             glfw.set_window_close_callback(glfw_utils.glfw_window_hello_imgui(), close_callback)
 
+        def setup_style():
+            imgui.get_style().window_padding = imgui.ImVec2(0,0)
+
         params = hello_imgui.RunnerParams()
         params.app_window_params.restore_previous_geometry = False
         params.ini_folder_type = hello_imgui.IniFolderType.temp_folder  # so we don't have endless ini files in the app folder, since we don't use them anyway (see previous line, restore_previous_geometry = False)
@@ -456,6 +459,7 @@ class GUI:
         params.callbacks.default_icon_font = hello_imgui.DefaultIconFont.font_awesome6
         params.callbacks.show_gui  = self._gui_func
         params.callbacks.post_init = post_init
+        params.callbacks.setup_imgui_style = setup_style
 
         # multiple window support
         params.imgui_window_params.config_windows_move_from_title_bar_only = True
