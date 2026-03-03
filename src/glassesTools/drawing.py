@@ -26,6 +26,11 @@ def openCVRectangle(img, p1, p2, color, thickness, sub_pixel_fac):
         p2 = tuple([int(x) for x in p2])
         cv2.rectangle(img, p1, p2, color, thickness, lineType=cv2.LINE_AA, shift=int(math.log2(sub_pixel_fac)))
 
+def openCVPolylines(img, pts, isClosed, color, thickness, sub_pixel_fac):
+    pts = np.round(pts*sub_pixel_fac).astype(np.int32)
+    if np.all([not math.isnan(x) and abs(x)<np.iinfo(np.intc).max for x in pts.flatten()]):
+        cv2.polylines(img, [pts], isClosed, color, thickness, lineType=cv2.LINE_AA, shift=int(math.log2(sub_pixel_fac)))
+
 def openCVFrameAxis(img, cam_params: ocv.CameraParams, rvec,  tvec,  arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.], offsetX=0, offsetY=0):
     # same as the openCV function, but with anti-aliasing for a nicer image if subPixelFac>1
     points = np.vstack((np.zeros((1,3)), arm_length*np.eye(3)))+np.vstack(4*[np.asarray(position)])
