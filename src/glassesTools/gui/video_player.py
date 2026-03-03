@@ -536,58 +536,55 @@ class GUI:
 
         # determine window size if needed
         dpi_fac = hello_imgui.dpi_window_size_factor()
-        img_sz = np.array([self._frame_size[w][1]*dpi_fac, self._frame_size[w][0]*dpi_fac])
+        img_sz_pix = np.array([self._frame_size[w][1]*dpi_fac, self._frame_size[w][0]*dpi_fac])
         tl_height = 0   # calc size of timeline
+        tl_min_height = 0
         if (tl:=self._window_timeline[w]) is not None:
             timeline_fixed_elements_height = tl.get_fixed_elements_height()
             tracks_height = self._window_timeline[w].track_height*tl.get_num_annotations()*dpi_fac
             tl_height = int(timeline_fixed_elements_height+tracks_height)
+            tl_min_height = int(timeline_fixed_elements_height + self._window_timeline[w].track_height*dpi_fac)  # at least one track high
         if self._window_determine_size[w]:
             win     = glfw_utils.glfw_window_hello_imgui()
             w_bounds= gui_utils.get_current_monitor(*glfw.get_window_pos(win))[1]
             w_bounds= gui_utils.adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
             w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_height]  # adjust for timeline
-            img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz]))
-            self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz)])
-            img_fit.size = [int(x*self._window_sfac[w]) for x in img_sz]
+            img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz_pix]))
+            self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz_pix)])
+            img_fit.size = [int(x*self._window_sfac[w]) for x in img_sz_pix]
             if not need_begin_end:
                 glfw.set_window_pos (win, *img_fit.position)
                 glfw.set_window_size(win, img_fit.size[0], img_fit.size[1]+tl_height)
-        elif not need_begin_end:
-            win_sz = imgui.get_content_region_avail()
-            win_sz.y -= tl_height
-            self._window_sfac[w] = min([win_sz.x/img_sz[0], win_sz.y/img_sz[1]])
-
 
         if need_begin_end:
             if self._window_determine_size[w]:
                 imgui.set_next_window_pos(img_fit.position)
                 imgui.set_next_window_size([x+y for x,y in zip(img_fit.size,(0, tl_height))])
-            imgui.push_style_var(imgui.StyleVar_.window_padding, (0., 0.))
             opened, self._window_visible[w] = imgui.begin(self._windows[w], self._window_visible[w], self._window_flags)
             if not opened:
                 imgui.end()
                 return
-            if not self._window_determine_size[w]:
-                win_sz = imgui.get_content_region_avail()
-                win_sz.y -= tl_height
-                self._window_sfac[w] = min([win_sz.x/img_sz[0], win_sz.y/img_sz[1]])
         self._window_determine_size[w] = False
 
         # draw image
-        img_sz = (img_sz * self._window_sfac[w]).astype('int')
-        img_space = imgui.get_content_region_avail().x
-        img_margin = max((img_space-img_sz[0])/2,0)
+        win_space = imgui.get_content_region_avail()
+        imgui.push_style_var(imgui.StyleVar_.item_spacing, imgui.ImVec2(0,0))   # ensure no spacing between image and timeline
+        imgui.set_next_window_size_constraints(imgui.ImVec2(-1, win_space.y-tl_height), imgui.ImVec2(-1, win_space.y-tl_min_height))
+        imgui.begin_child(f"img_child_{w}", imgui.ImVec2(0, win_space.y-tl_height), imgui.ChildFlags_.resize_y)
+        img_space = imgui.get_content_region_avail()
+        self._window_sfac[w] = min([img_space.x/img_sz_pix[0], img_space.y/img_sz_pix[1]])
+        img_sz = (img_sz_pix * self._window_sfac[w]).astype('int')
+        img_margins = [max((sp-sz)/2,0) for sp,sz in zip(img_space, img_sz)]
         if self._current_frame[w][0] is None:
             overlay_text = 'No image'
             text_size = imgui.calc_text_size(overlay_text)
             offset = [(img_sz[0]-text_size.x)/2, (img_sz[1]-text_size.y)/2]
-            imgui.set_cursor_pos((img_margin+offset[0],offset[1]))
+            imgui.set_cursor_pos(tuple([i+o for i,o in zip(img_margins, offset)]))
             imgui.text_colored((1., 0., 0., 1.), overlay_text)
-            imgui.set_cursor_pos((img_margin,0))
+            imgui.set_cursor_pos(img_margins)
             imgui.dummy((*img_sz,))
         else:
-            imgui.set_cursor_pos((img_margin,0))
+            imgui.set_cursor_pos(img_margins)
             imgui.image(imgui.ImTextureRef(self._texID[w]), (*img_sz,))
 
         # prepare for drawing bottom status overlay
@@ -603,9 +600,9 @@ class GUI:
         overlay_size = txt_sz+imgui.ImVec2(padding.x*2, padding.y*2)
         match self._window_timecode_pos[w]:
             case 'l':
-                overlay_x_pos = img_margin
+                overlay_x_pos = img_margins[0]
             case 'r':
-                overlay_x_pos = img_margin+img_sz[0]-overlay_size.x
+                overlay_x_pos = img_margins[0]+img_sz[0]-overlay_size.x
                 if not self._window_show_controls[w]:
                     overlay_x_pos -= controls_child_size.x
 
@@ -655,17 +652,17 @@ class GUI:
 
         # draw them, or info item for tooltip
         if self._window_show_controls[w] and buttons:
-            buttons_x_pos = (img_space-total_size.x)/2
+            buttons_x_pos = (img_space.x-total_size.x)/2
             # check for overlap with status overlay
             if self._window_timecode_pos[w]=='l':
                 if buttons_x_pos < overlay_x_pos+overlay_size.x:
                     # try moving to just right of the status overlay
                     buttons_x_pos = overlay_x_pos+overlay_size.x+imgui.get_style().frame_padding.x
                 # check we don't go off the screen
-                if buttons_x_pos+total_size.x>img_space:
+                if buttons_x_pos+total_size.x>img_space.x:
                     # recenter both overlay and buttons on the image, best we can do
                     overlay_button_width = overlay_size.x+imgui.get_style().frame_padding.x+total_size.x
-                    overlay_x_pos = (img_space-overlay_button_width)/2
+                    overlay_x_pos = (img_space.x-overlay_button_width)/2
                     buttons_x_pos = overlay_x_pos+overlay_size.x+imgui.get_style().frame_padding.x
             else:
                 if buttons_x_pos+total_size.x > overlay_x_pos:
@@ -675,9 +672,9 @@ class GUI:
                 if buttons_x_pos < 0:
                     # recenter both overlay and buttons on the image, best we can do
                     overlay_button_width = overlay_size.x+imgui.get_style().frame_padding.x+total_size.x
-                    buttons_x_pos = (img_space-overlay_button_width)/2
+                    buttons_x_pos = (img_space.x-overlay_button_width)/2
                     overlay_x_pos = buttons_x_pos+total_size.x+imgui.get_style().frame_padding.x
-            button_cursor_pos = (buttons_x_pos,img_sz[1]-total_size.y)
+            button_cursor_pos = (buttons_x_pos,img_sz[1]+img_margins[1]-total_size.y)
             controls_child_size = total_size
 
         tooltip_txt_sz = imgui.calc_text_size('(?)')
@@ -685,15 +682,15 @@ class GUI:
         if self._window_timecode_pos[w]=='r':
             tt_pos_x = overlay_x_pos-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
         else:
-            tt_pos_x = img_margin+img_sz[0]-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
+            tt_pos_x = img_margins[0]+img_sz[0]-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
             # check we don't overlap buttons
             if self._window_show_controls[w] and buttons and tt_pos_x<button_cursor_pos[0]+total_size.x:
                 tt_pos_x = button_cursor_pos[0]+total_size.x+imgui.get_style().item_spacing.x
                 # check we don't go off the screen
-                if tt_pos_x+tooltip_child_size.x>img_space:
+                if tt_pos_x+tooltip_child_size.x>img_space.x:
                     # best we can do
-                    tt_pos_x = img_space-tooltip_child_size.x
-        tooltip_cursor_pos = (tt_pos_x, img_sz[1]-tooltip_txt_sz.y-2*imgui.get_style().frame_padding.y)
+                    tt_pos_x = img_space.x-tooltip_child_size.x
+        tooltip_cursor_pos = (tt_pos_x, img_sz[1]+img_margins[1]-tooltip_txt_sz.y-2*imgui.get_style().frame_padding.y)
         if not self._window_show_controls[w] or not buttons:
             txt_sz = tooltip_txt_sz
             button_cursor_pos = tooltip_cursor_pos
@@ -701,15 +698,13 @@ class GUI:
 
 
         # draw bottom status overlay
-        imgui.set_cursor_pos((overlay_x_pos,img_sz[1]-overlay_size.y))
-        imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
+        imgui.set_cursor_pos((overlay_x_pos,img_sz[1]+img_margins[1]-overlay_size.y))
         imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
         imgui.begin_child("##status_overlay", size=overlay_size)
         imgui.set_cursor_pos(imgui.get_style().frame_padding)
         imgui.text(overlay_text)
         imgui.end_child()
         imgui.pop_style_color()
-        imgui.pop_style_var()
 
 
         # draw buttons
@@ -727,7 +722,6 @@ class GUI:
                 imgui.set_tooltip(overlay_text)
 
         if buttons:
-            imgui.push_style_var(imgui.StyleVar_.window_padding, (0,0))
             imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
             imgui.set_cursor_pos(button_cursor_pos)
             imgui.begin_child("##controls_overlay", size=controls_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
@@ -807,16 +801,15 @@ class GUI:
                 _draw_action_tooltip()
                 imgui.end_child()
             imgui.pop_style_color()
-            imgui.pop_style_var()
+        imgui.end_child()
 
         # draw timeline, if any
         if self._window_timeline[w] is not None:
-            cur_pos = imgui.get_cursor_pos()
-            imgui.set_cursor_pos((cur_pos.x, cur_pos.y-imgui.get_style().item_spacing.y))
+            imgui.begin_child(f"timeline_child_{w}", imgui.ImVec2(win_space.x, win_space.y-img_space.y))
             self._window_timeline[w].draw()
             self._requests.extend(self._window_timeline[w].get_requests())
+            imgui.end_child()
 
         if need_begin_end:
-            imgui.pop_style_var()
             imgui.end()
-
+        imgui.pop_style_var()

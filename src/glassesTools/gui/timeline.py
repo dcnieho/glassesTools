@@ -185,6 +185,9 @@ class Timeline:
         # how big is a tick label?
         width = imgui.calc_text_size('0:00:00.000').x
         num_ticks = math.floor(self.draw_width/width/2)
+        if num_ticks==0:
+            self._major_ticks_lbl = None
+            return
 
         # generate ticks
         self._major_ticker.set_params(nbins=num_ticks)
@@ -365,12 +368,13 @@ class Timeline:
 
         return x_pos, do_move, action
 
-    def _draw_tracks(self):
+    def _draw_tracks(self, parent_cursor_pos, parent_size, height):
         dpi_fac = hello_imgui.dpi_window_size_factor()
         cursor_pos = imgui.get_cursor_screen_pos()
         size       = imgui.get_content_region_avail()
-        draw_list = imgui.get_window_draw_list()
-        draw_list.push_clip_rect(cursor_pos, cursor_pos+size)
+        size.y     = height
+        draw_list  = imgui.get_window_draw_list()
+        draw_list.push_clip_rect(parent_cursor_pos, parent_cursor_pos+parent_size)
 
         # draw background, alternate color every division
         section_color = _color_u32_replace_alpha(imgui.Col_.separator, 0.12)
@@ -392,7 +396,10 @@ class Timeline:
                 grid_color = grid_color_major
             else:
                 grid_color = grid_color_minor
-            draw_list.add_line((rounded_gridline_pos_x, cursor_pos.y), (rounded_gridline_pos_x, cursor_pos.y+size.y), grid_color, thickness=dpi_fac)
+            draw_list.add_line(
+                (rounded_gridline_pos_x, cursor_pos.y),
+                (rounded_gridline_pos_x, cursor_pos.y+size.y),
+                grid_color, thickness=dpi_fac)
 
         # now draw the actual tracks
         height_per_track = size.y/len(self._annotations_frame)
@@ -445,7 +452,7 @@ class Timeline:
         cursor_pos = imgui.get_cursor_screen_pos()
         draw_list = imgui.get_window_draw_list()
         size = imgui.ImVec2(imgui.get_content_region_avail().x, height)
-        draw_list.push_clip_rect(cursor_pos, cursor_pos+size)
+        draw_list.push_clip_rect(cursor_pos, cursor_pos+size, True)
 
         # draw separator below track
         y_pos = cursor_pos.y+size.y + 0.5*dpi_fac
@@ -529,17 +536,16 @@ class Timeline:
                 event
             )
             if event in self._annotation_tooltips and self._annotation_tooltips[event]:
-                cpos = imgui.get_cursor_pos()
-                imgui.set_cursor_pos((cpos.x+self._h_scroll, cpos.y))
+                imgui.set_cursor_screen_pos((cursor_pos.x+self._h_scroll, cursor_pos.y))
                 imgui.invisible_button(f'##track_annotation_label_{event}',clip_title_max)
                 if imgui.is_item_hovered():
                     imgui.begin_tooltip()
                     imgui.text(self._annotation_tooltips[event])
                     imgui.end_tooltip()
-                imgui.set_cursor_pos(cpos)
+                imgui.set_cursor_screen_pos(cursor_pos)
 
         draw_list.pop_clip_rect()
-        imgui.dummy(size)   # occupy the space of the track so cursor position moves correctly
+        imgui.dummy((0,size.y))   # occupy the space of the track so cursor position moves correctly
 
     def draw(self):
         self.content_origin = imgui.get_cursor_screen_pos()
@@ -552,20 +558,29 @@ class Timeline:
             self.draw_width = draw_width
             self._calc_scale_fac()
             self._determine_ticks()
+        if self._major_ticks_lbl is None:
+            return
         # deal with scroll requests: submit content size and scroll for next window to avoid glitch (one frame delay in scroll)
         imgui.set_next_window_content_size((self.draw_width,0))
         if self._new_h_scroll is not None:
             imgui.set_next_window_scroll((self._new_h_scroll, -1))
             self._new_h_scroll = None
-        imgui.begin_child('##all', size=available, window_flags=flags)
-        self._h_scroll = imgui.get_scroll_x()
-        imgui.begin_child('##timeline',size=(self.draw_width,0),window_flags=imgui.WindowFlags_.no_background)
         imgui.push_style_var(imgui.StyleVar_.item_spacing, (0., 0.))
+        imgui.begin_child('##all', size=available, window_flags=flags | imgui.WindowFlags_.no_scroll_with_mouse)
+        self._h_scroll = imgui.get_scroll_x()
+        imgui.begin_child('##timeline',size=(self.draw_width,0), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scrollbar | imgui.WindowFlags_.no_scroll_with_mouse)
+        imgui.begin_child('##ruler',size=(self.draw_width,imgui.get_font_size()+2*imgui.get_style().frame_padding.y), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scrollbar | imgui.WindowFlags_.no_scroll_with_mouse)
         self._draw_time_ruler()
-        imgui.pop_style_var()
+        imgui.end_child()
 
         # draw tracks on the timeline (if any)
         if self._annotations_frame:
-            self._draw_tracks()
+            cursor_pos = imgui.get_cursor_screen_pos()
+            size       = imgui.get_content_region_avail()
+            imgui.begin_child('##tracks',size=(self.draw_width,0), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scroll_with_mouse)
+            height = self.track_height*hello_imgui.dpi_window_size_factor()*len(self._annotations_frame)
+            self._draw_tracks(cursor_pos, size, height)
+            imgui.end_child()
         imgui.end_child()
         imgui.end_child()
+        imgui.pop_style_var()
