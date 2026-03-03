@@ -2,8 +2,9 @@ import numpy as np
 import cv2
 import pathlib
 import typing
+import itertools
 
-from . import annotation, drawing, marker, ocv, plane, pose
+from . import annotation, drawing, marker, ocv, plane, pose, transforms
 
 default_dict = cv2.aruco.DICT_4X4_250
 
@@ -200,6 +201,14 @@ class Detector:
         out_planes: dict[str] = {}
         for p in self.planes:
             if ids is not None and len(ids)>self.planes[p]['min_num_markers']:
+                ok, corners_consistent, ids_consistent, rejected_indices = filter_board_duplicates(
+                    self._boards[p], *self._filter_detections(img_points, ids, self._plane_marker_ids[p]), camera_params)
+                if ok:
+                    if rejected_indices:
+                        rejected_img_points += tuple([img_points[i] for i in rejected_indices])
+                    img_points = corners_consistent
+                    ids = ids_consistent
+
                 img_points, ids, rejected_img_points, recovered_ids = \
                     self._refine_detection(image, img_points, ids, rejected_img_points,
                                            self._det, self._boards[p], camera_params)
@@ -478,3 +487,207 @@ def filter_detections(img_points: list[np.ndarray], ids: np.ndarray, expected_id
     ids = np.delete(ids, to_remove, axis=0)
     img_points = tuple(v for i,v in enumerate(img_points) if i not in to_remove)
     return img_points, ids
+
+
+def has_duplicates(ids: np.ndarray) -> bool:
+    """Return True if any ID repeats."""
+    if ids is None or len(ids) == 0:
+        return False
+    flat = ids.flatten().astype(int)
+    return len(flat) != len(np.unique(flat))
+
+def group_indices_by_id(
+    ids: np.ndarray
+) -> dict[int, list[int]]:
+    """
+    Return {marker_id: [indices in the detections arrays]}.
+    """
+    id_to_indices: dict[int, list[int]] = {}
+    if ids is None or len(ids) == 0:
+        return id_to_indices
+    for i, mid in enumerate(ids.flatten()):
+        id_to_indices.setdefault(int(mid), []).append(i)
+    return id_to_indices
+
+def _build_board_objpoints_map(board: cv2.aruco.Board) -> dict[int, np.ndarray]:
+    """
+    Map marker_id -> (4,3) object points from the board.
+    """
+    return {int(mid): np.asarray(obj4x3, dtype=np.float32)
+            for obj4x3, mid in zip(board.getObjPoints(), board.getIds().flatten())}
+
+def _corners_4x2(c: np.ndarray) -> np.ndarray:
+    """
+    Normalize a detected corner array to shape (4,2) for error computation,
+    while preserving the original array elsewhere.
+    Accepts (4,1,2), (1,4,2), or (4,2).
+    """
+    c = np.asarray(c)
+    if c.shape == (4, 2):
+        return c.astype(np.float32)
+    if c.shape == (4, 1, 2):
+        return c.reshape(4, 2).astype(np.float32)
+    if c.shape == (1, 4, 2):
+        return c.reshape(4, 2).astype(np.float32)
+    # Fallback: flatten last two dims to 2 cols if possible
+    c2 = c.reshape(-1, 2)
+    if c2.shape[0] == 4:
+        return c2.astype(np.float32)
+    raise ValueError(f"Unexpected corner shape: {c.shape}")
+
+def _mean_corner_error_projected(
+    observed_4x2: np.ndarray, projected_4x2: np.ndarray, test_rotations: bool = True
+) -> float:
+    """
+    Mean L2 error between observed and projected corners. Optionally try 4 rotations of the observed
+    corners to guard against corner order mismatches in inputs.
+    """
+    if not test_rotations:
+        return np.linalg.norm(observed_4x2 - projected_4x2, axis=1).mean()
+
+    best = float("inf")
+    for rot in range(4):
+        obs_rot = np.roll(observed_4x2, -rot, axis=0)
+        err = np.linalg.norm(obs_rot - projected_4x2, axis=1).mean()
+        if err < best:
+            best = err
+    return best
+
+def _estimate_board_pose(
+    board: cv2.aruco.Board,
+    corners_list: list[np.ndarray],
+    ids: np.ndarray,
+    camera_params: ocv.CameraParams
+) -> tuple[bool, np.ndarray | None, np.ndarray | None]:
+    """INTERNAL: Estimate pose using all detections. Returns (ok, rvec, tvec)."""
+    objP, imgP = board.matchImagePoints(corners_list, ids)
+    if len(objP) == 0:
+        return False, None, None
+    retval, rvec, tvec, _ = pose.estimate_pose(objP, imgP, camera_params)
+    if retval <= 0:
+        return False, None, None
+    return True, rvec, tvec
+
+def filter_board_duplicates(
+    board: cv2.aruco.Board,
+    corners: list[np.ndarray],
+    ids: np.ndarray,
+    camera_params: ocv.CameraParams,
+    *,
+    min_markers: int = 2,
+    max_combinations: int | None = 5000,
+    test_corner_rotations: bool = True
+) -> tuple[bool, list[np.ndarray], np.ndarray, list[int]]:
+    """
+    Exhaustive search over duplicate-ID choices. Single-ID detections are always included.
+    For each duplicated ID, choose exactly one candidate detection. For each full combination,
+    estimate board pose and compute mean reprojection error across all selected markers.
+    Keep the combination with the smallest error.
+
+    Returns:
+        ok (bool),
+        corners_consistent (list[np.ndarray]): preserved shapes per item (e.g., (4,1,2)),
+        ids_consistent (np.ndarray): shape (N,1), dtype matches input ids.dtype,
+        kept_indices (list[int]): indices into the original detections.
+
+    Notes:
+      - If the Cartesian product of duplicate choices exceeds `max_combinations`, returns False.
+      - The scoring is mean per-corner L2 reprojection error (pixels) across all selected markers.
+    """
+    # --- Early outs ---
+    if ids is None or len(ids) == 0:
+        return False, [], np.empty((0, 1), dtype=np.int32), []
+
+    # If all IDs are unique, keep all (no pose computation)
+    if not has_duplicates(ids):
+        kept_indices = list(range(len(ids)))
+        corners_consistent = [corners[i] for i in kept_indices]
+        ids_consistent = ids.reshape(-1, 1).copy()
+        return True, corners_consistent, ids_consistent, []
+
+    if len(corners) != len(ids):
+        raise ValueError(f"corners (len={len(corners)}) and ids (len={len(ids)}) mismatch.")
+
+    # Group detections by ID
+    id2idx = group_indices_by_id(ids)
+    singles: list[int] = []
+    dup_groups: list[list[int]] = []
+    for mid, idxs in id2idx.items():
+        if len(idxs) == 1:
+            singles.append(idxs[0])
+        else:
+            dup_groups.append(idxs)
+
+    # Compute total combinations (product of lengths of duplicate groups)
+    num_combinations = 1
+    for g in dup_groups:
+        num_combinations *= len(g)
+
+    if max_combinations is not None and num_combinations > max_combinations:
+        # Too many; caller assumed "few duplicates", so bail rather than blow up.
+        return False, [], np.empty((0, 1), dtype=ids.dtype), []
+
+    # Precompute object points per ID
+    board_map = _build_board_objpoints_map(board)
+    # Prepare an array form of ids for fast slicing
+    ids_arr = ids.reshape(-1, 1)
+
+    best_err = float("inf")
+    best_indices: list[int] = []
+
+    # Iterate all choices, one index from each duplicate group
+    for choice in itertools.product(*dup_groups):
+        # Selected detections = singles + one per duplicated ID group
+        selected = singles + list(choice)
+
+        if len(selected) < min_markers:
+            # Insufficient constraints to estimate pose robustly
+            continue
+
+        # Estimate pose for this combination
+        sel_corners = [corners[i] for i in selected]
+        sel_ids = ids_arr[selected]  # shape (K,1)
+
+        retval, rvec, tvec = _estimate_board_pose(board, sel_corners, sel_ids, camera_params)
+        if retval <= 0:
+            # Pose failed; skip this combination
+            continue
+
+        # Compute mean reprojection error for the selected markers
+        # Project each selected marker's 3D corners with the pose and compare to observed
+        total_err = 0.0
+        total_corners = 0
+
+        for i in selected:
+            mid = int(ids_arr[i, 0])
+            if mid not in board_map:
+                # Board doesn't define this ID; skip (shouldn't happen if detections are on the same board)
+                continue
+            obj4x3 = board_map[mid]  # (4,3)
+            proj4x2 = transforms.project_points(obj4x3, camera_params, rot_vec=rvec, trans_vec=tvec)
+
+            obs4x2 = _corners_4x2(corners[i])
+            err = _mean_corner_error_projected(obs4x2, proj4x2, test_rotations=test_corner_rotations)
+            total_err += err * 4  # 4 corners
+            total_corners += 4
+
+        if total_corners == 0:
+            # No valid error; skip
+            continue
+
+        mean_err = total_err / total_corners
+
+        # Keep the lowest-error combination (tie-breaker: keep the one with more markers)
+        if (mean_err < best_err) or (np.isclose(mean_err, best_err) and len(selected) > len(best_indices)):
+            best_err = mean_err
+            best_indices = selected
+
+    if not best_indices:
+        return False, [], np.empty((0, 1), dtype=ids.dtype), []
+
+    # Prepare outputs (preserve corner shapes and return OpenCV-style ids)
+    best_indices = sorted(best_indices)
+    corners_consistent = [corners[i] for i in best_indices]
+    ids_consistent = ids_arr[best_indices].reshape(-1, 1).astype(ids.dtype, copy=False)
+
+    return True, corners_consistent, ids_consistent, list(set(range(len(ids)))-set(best_indices))
