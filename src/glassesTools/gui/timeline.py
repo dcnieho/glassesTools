@@ -59,6 +59,7 @@ class Timeline:
         self._major_ticks_lbl: list[str]
 
         # information about GUI size
+        self.track_height = 25
         self.draw_width: int|None = None
 
         # GUI interaction possibilities

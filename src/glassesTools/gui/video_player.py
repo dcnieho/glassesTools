@@ -540,7 +540,7 @@ class GUI:
         tl_height = 0   # calc size of timeline
         if (tl:=self._window_timeline[w]) is not None:
             timeline_fixed_elements_height = tl.get_fixed_elements_height()
-            tracks_height = 25*tl.get_num_annotations()*dpi_fac  # 25 pixels per track
+            tracks_height = self._window_timeline[w].track_height*tl.get_num_annotations()*dpi_fac
             tl_height = int(timeline_fixed_elements_height+tracks_height)
         if self._window_determine_size[w]:
             win     = glfw_utils.glfw_window_hello_imgui()
