@@ -545,7 +545,7 @@ class GUI:
             track_height = int(self._window_timeline[w].track_height*dpi_fac)
             tl_total_height = int(timeline_fixed_elements_height + track_height*num_tracks)
             tl_initial_height = int(timeline_fixed_elements_height + track_height*min(num_tracks,10))  # start showing no more than 10 tracks, otherwise timeline might take too much space on screen at the beginning
-            tl_min_height = int(timeline_fixed_elements_height + track_height)  # at least one track high
+            tl_min_height = int(timeline_fixed_elements_height + track_height*min(num_tracks,1))  # at least one track high, unless there are no tracks
         if self._window_determine_size[w]:
             win     = glfw_utils.glfw_window_hello_imgui()
             w_bounds= gui_utils.get_current_monitor(*glfw.get_window_pos(win))[1]
