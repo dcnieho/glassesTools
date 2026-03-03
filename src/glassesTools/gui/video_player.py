@@ -704,7 +704,11 @@ class GUI:
             if len(rows)==1 and button_cursor_pos_x > left_edge+imgui.get_style().item_spacing.x and button_cursor_pos_x + total_button_size.x < right_edge-imgui.get_style().item_spacing.x:
                 button_cursor_pos = (button_cursor_pos_x, img_sz[1]+img_margins[1]-total_height)
             else:
-                margin = (space - max_row_width)/2
+                margin = space - max_row_width
+                if show_tooltip:
+                    margin /= 2
+                elif self._window_timecode_pos[w]=='r':
+                    margin = 0  # flush to left of image
                 button_cursor_pos = (int(left_edge + margin), img_sz[1]+img_margins[1]-total_height)
             buttons_child_size = imgui.ImVec2(max_row_width, total_height)
 
