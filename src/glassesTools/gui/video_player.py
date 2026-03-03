@@ -570,6 +570,7 @@ class GUI:
 
         # draw image
         win_space = imgui.get_content_region_avail()
+        item_spacing_backup = imgui.ImVec2(imgui.get_style().item_spacing)  # make copy
         imgui.push_style_var(imgui.StyleVar_.item_spacing, imgui.ImVec2(0,0))   # ensure no spacing between image and timeline
         imgui.set_next_window_size_constraints(imgui.ImVec2(-1, win_space.y-tl_total_height), imgui.ImVec2(-1, win_space.y-tl_min_height))
         imgui.begin_child(f"img_child_{w}", imgui.ImVec2(0, win_space.y-tl_initial_height), imgui.ChildFlags_.resize_y if tl is not None else 0)
@@ -659,7 +660,7 @@ class GUI:
         text_sizes = [_get_text_size(b) for b in buttons]
         button_sizes = [imgui.ImVec2([ts.x+2*padding.x, ts.y+2*padding.y]) for ts in text_sizes]
         total_button_size = functools.reduce(lambda a,b: imgui.ImVec2(a.x+b.x, max(a.y,b.y)), button_sizes) if button_sizes else imgui.ImVec2()
-        total_button_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*imgui.get_style().item_spacing.x, total_button_size.y)
+        total_button_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*item_spacing_backup.x, total_button_size.y)
 
         # determine if tooltip will be shown
         show_tooltip = buttons and (self._window_show_action_tooltip[w] or not self._window_show_controls[w])
@@ -684,16 +685,16 @@ class GUI:
                 current_row = []
                 current_row_size = imgui.ImVec2()
                 for b,sz in zip(buttons, button_sizes):
-                    if current_row and current_row_size.x + sz.x + imgui.get_style().item_spacing.x > space:
+                    if current_row and current_row_size.x + sz.x + item_spacing_backup.x > space:
                         rows.append((current_row, current_row_size))
                         current_row = []
                         current_row_size = imgui.ImVec2()
                     current_row.append((b,sz))
-                    current_row_size = imgui.ImVec2(current_row_size.x + sz.x + (imgui.get_style().item_spacing.x if current_row_size.x>0 else 0), max(current_row_size.y, sz.y))
+                    current_row_size = imgui.ImVec2(current_row_size.x + sz.x + (item_spacing_backup.x if current_row_size.x>0 else 0), max(current_row_size.y, sz.y))
                 if current_row:
                     rows.append((current_row, current_row_size))
                 max_row_width = max([r[1].x for r in rows])
-                total_height = sum([r[1].y for r in rows]) + imgui.get_style().item_spacing.y*(len(rows)-1)
+                total_height = sum([r[1].y for r in rows]) + item_spacing_backup.y*(len(rows)-1)
             else:
                 rows = [([(b,sz) for b,sz in zip(buttons, button_sizes)], total_button_size)]
                 max_row_width = total_button_size.x
@@ -740,6 +741,7 @@ class GUI:
             if self._window_show_controls[w]:
                 imgui.set_cursor_pos(button_cursor_pos)
                 imgui.begin_child("##controls_overlay", size=buttons_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
+                imgui.push_style_var(imgui.StyleVar_.item_spacing, item_spacing_backup)
 
             # always "draw" buttons, even if we don't show them, so that shortcuts still work
             for b_row, r_sz in rows:
@@ -813,6 +815,7 @@ class GUI:
                     if i_b < len(b_row)-1:
                         imgui.same_line()
             if self._window_show_controls[w]:
+                imgui.pop_style_var()
                 imgui.end_child()
             if self._window_show_action_tooltip[w] or not self._window_show_controls[w]:
                 imgui.set_cursor_pos(tooltip_cursor_pos)
