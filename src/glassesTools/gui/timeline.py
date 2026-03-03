@@ -347,9 +347,11 @@ class Timeline:
 
         if self._allow_seek or (event in self._allow_annotate) or hover_info:
             dpi_fac = hello_imgui.dpi_window_size_factor()
+            size = imgui.ImVec2(x_end-x_start-4*dpi_fac, y_ext)
+            if size.x<0:
+                return x_pos, do_move, action
             cursor_pos = imgui.get_cursor_screen_pos()
             imgui.set_cursor_screen_pos((x_start+2*dpi_fac, cursor_pos.y))
-            size = imgui.ImVec2(x_end-x_start-4*dpi_fac, y_ext)
             imgui.invisible_button(f'##episode_interactable_{lbl}', size)
             imgui.set_cursor_screen_pos(cursor_pos)
 
