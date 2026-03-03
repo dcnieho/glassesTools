@@ -202,8 +202,8 @@ class Detector:
             if ids is not None and len(ids)>self.planes[p]['min_num_markers']:
                 img_points, ids, rejected_img_points, recovered_ids = \
                     self._refine_detection(image, img_points, ids, rejected_img_points,
-                                           self._det, self._boards[p],
-                                           camera_params.camera_mtx, camera_params.distort_coeffs)
+                                           self._det, self._boards[p], camera_params)
+
                 out_planes[p] = dict(zip(['img_points', 'ids', 'recovered_ids'],(img_points, ids, recovered_ids)))
             else:
                 out_planes[p] = None if ids is None else dict(zip(['img_points', 'ids', 'recovered_ids'],(img_points, ids, None)))
@@ -227,8 +227,8 @@ class Detector:
             ids = None
         return img_points, ids, rejected_img_points
 
-    def _refine_detection(self, image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, camera_mtx, distort_coeffs):
-        return refine_detection(image, detected_corners, detected_ids, rejected_corners, det, board, camera_mtx, distort_coeffs)
+    def _refine_detection(self, image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, camera_params: ocv.CameraParams):
+        return refine_detection(image, detected_corners, detected_ids, rejected_corners, det, board, camera_params.camera_mtx, camera_params.distort_coeffs)
 
     def _filter_detections(self, img_points: list[np.ndarray], ids: np.ndarray, expected_ids: list[np.ndarray], keep_expected=True):
         return filter_detections(img_points, ids, expected_ids, keep_expected)
