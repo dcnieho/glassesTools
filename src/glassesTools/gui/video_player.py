@@ -589,7 +589,7 @@ class GUI:
             imgui.set_cursor_pos(img_margins)
             imgui.image(imgui.ImTextureRef(self._texID[w]), (*img_sz,))
 
-        # prepare for drawing bottom status overlay
+        # prepare for drawing bottom status overlay (timecode etc)
         fr_ts, fr_idx = self._current_frame[w][1:]
         if fr_ts is not None:
             overlay_text = f'{utils.format_duration(fr_ts,True)} ({fr_ts:.3f}) [{fr_idx}]'
@@ -605,8 +605,17 @@ class GUI:
                 overlay_x_pos = img_margins[0]
             case 'r':
                 overlay_x_pos = img_margins[0]+img_sz[0]-overlay_size.x
-                if not self._window_show_controls[w]:
-                    overlay_x_pos -= controls_child_size.x
+        overlay_cursor_pos = (overlay_x_pos, img_sz[1]+img_margins[1]-overlay_size.y)
+
+        # prepare for tooltip
+        txt_sz = imgui.calc_text_size('(?)')
+        tooltip_child_size = txt_sz+imgui.ImVec2(padding.x*2, padding.y*2)
+        if self._window_timecode_pos[w]=='r':
+            # timecode is on the right, so tooltip goes on the left
+            tooltip_x_pos = img_margins[0]
+        else:
+            tooltip_x_pos = img_margins[0]+img_sz[0]-tooltip_child_size.x
+        tooltip_cursor_pos = (tooltip_x_pos, img_sz[1]+img_margins[1]-tooltip_child_size.y)
 
         # prepare for drawing action buttons (may be invisible, still submit
         # them for shortcut routing)
@@ -650,63 +659,55 @@ class GUI:
         text_sizes = [_get_text_size(b) for b in buttons]
         button_sizes = [imgui.ImVec2([ts.x+2*padding.x, ts.y+2*padding.y]) for ts in text_sizes]
         total_button_size = functools.reduce(lambda a,b: imgui.ImVec2(a.x+b.x, max(a.y,b.y)), button_sizes) if button_sizes else imgui.ImVec2()
-        total_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*imgui.get_style().item_spacing.x, total_button_size.y)
+        total_button_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*imgui.get_style().item_spacing.x, total_button_size.y)
 
         # draw them, or info item for tooltip
         if self._window_show_controls[w] and buttons:
-            buttons_x_pos = (img_space.x-total_size.x)/2
-            # check for overlap with status overlay
+            # center buttons in between timecode and tooltip
+            # determine amount of space
             if self._window_timecode_pos[w]=='l':
-                if buttons_x_pos < overlay_x_pos+overlay_size.x:
-                    # try moving to just right of the status overlay
-                    buttons_x_pos = overlay_x_pos+overlay_size.x+imgui.get_style().frame_padding.x
-                # check we don't go off the screen
-                if buttons_x_pos+total_size.x>img_space.x:
-                    # recenter both overlay and buttons on the image, best we can do
-                    overlay_button_width = overlay_size.x+imgui.get_style().frame_padding.x+total_size.x
-                    overlay_x_pos = (img_space.x-overlay_button_width)/2
-                    buttons_x_pos = overlay_x_pos+overlay_size.x+imgui.get_style().frame_padding.x
+                # space between right edge of status overlay and left edge of tooltip
+                left_edge = overlay_x_pos + overlay_size.x
+                right_edge = tooltip_x_pos
             else:
-                if buttons_x_pos+total_size.x > overlay_x_pos:
-                    # try moving to just left of the status overlay
-                    buttons_x_pos = overlay_x_pos-total_size.x-imgui.get_style().frame_padding.x
-                # check we don't go off the screen
-                if buttons_x_pos < 0:
-                    # recenter both overlay and buttons on the image, best we can do
-                    overlay_button_width = overlay_size.x+imgui.get_style().frame_padding.x+total_size.x
-                    buttons_x_pos = (img_space.x-overlay_button_width)/2
-                    overlay_x_pos = buttons_x_pos+total_size.x+imgui.get_style().frame_padding.x
-            button_cursor_pos = (buttons_x_pos,img_sz[1]+img_margins[1]-total_size.y)
-            controls_child_size = total_size
+                # space between right edge of tooltip and left edge of status overlay
+                left_edge = tooltip_x_pos + tooltip_child_size.x
+                right_edge = overlay_x_pos
+            space = right_edge - left_edge - imgui.get_style().item_spacing.x*2
+            # make multiple rows of buttons if needed
+            if total_button_size.x > space:
+                # partition buttons in rows
+                rows = []
+                current_row = []
+                current_row_size = imgui.ImVec2()
+                for b,sz in zip(buttons, button_sizes):
+                    if current_row and current_row_size.x + sz.x + imgui.get_style().item_spacing.x > space:
+                        rows.append((current_row, current_row_size))
+                        current_row = []
+                        current_row_size = imgui.ImVec2()
+                    current_row.append((b,sz))
+                    current_row_size = imgui.ImVec2(current_row_size.x + sz.x + (imgui.get_style().item_spacing.x if current_row_size.x>0 else 0), max(current_row_size.y, sz.y))
+                if current_row:
+                    rows.append((current_row, current_row_size))
+                max_row_width = max([r[1].x for r in rows])
+                total_height = sum([r[1].y for r in rows]) + imgui.get_style().item_spacing.y*(len(rows)-1)
+            else:
+                rows = [([(b,sz) for b,sz in zip(buttons, button_sizes)], total_button_size)]
+                max_row_width = total_button_size.x
+                total_height = total_button_size.y
 
-        tooltip_txt_sz = imgui.calc_text_size('(?)')
-        tooltip_child_size = tooltip_txt_sz+imgui.ImVec2([imgui.get_style().frame_padding.x*2, imgui.get_style().frame_padding.y*2])
-        if self._window_timecode_pos[w]=='r':
-            tt_pos_x = overlay_x_pos-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
-        else:
-            tt_pos_x = img_margins[0]+img_sz[0]-tooltip_txt_sz.x-2*imgui.get_style().frame_padding.x
-            # check we don't overlap buttons
-            if self._window_show_controls[w] and buttons and tt_pos_x<button_cursor_pos[0]+total_size.x:
-                tt_pos_x = button_cursor_pos[0]+total_size.x+imgui.get_style().item_spacing.x
-                # check we don't go off the screen
-                if tt_pos_x+tooltip_child_size.x>img_space.x:
-                    # best we can do
-                    tt_pos_x = img_space.x-tooltip_child_size.x
-        tooltip_cursor_pos = (tt_pos_x, img_sz[1]+img_margins[1]-tooltip_txt_sz.y-2*imgui.get_style().frame_padding.y)
-        if not self._window_show_controls[w] or not buttons:
-            txt_sz = tooltip_txt_sz
-            button_cursor_pos = tooltip_cursor_pos
-            controls_child_size = tooltip_child_size
+            margin = (space - max_row_width)/2
+            button_cursor_pos = (int(left_edge + margin), img_sz[1]+img_margins[1]-total_height)
+            controls_child_size = imgui.ImVec2(max_row_width, total_height)
 
 
         # draw bottom status overlay
-        imgui.set_cursor_pos((overlay_x_pos,img_sz[1]+img_margins[1]-overlay_size.y))
+        imgui.set_cursor_pos(overlay_cursor_pos)
         imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
         imgui.begin_child("##status_overlay", size=overlay_size)
         imgui.set_cursor_pos(imgui.get_style().frame_padding)
         imgui.text(overlay_text)
         imgui.end_child()
-        imgui.pop_style_color()
 
 
         # draw buttons
@@ -724,85 +725,88 @@ class GUI:
                 imgui.set_tooltip(overlay_text)
 
         if buttons:
-            imgui.push_style_color(imgui.Col_.child_bg, (0.0, 0.0, 0.0, 0.6))
             imgui.set_cursor_pos(button_cursor_pos)
             imgui.begin_child("##controls_overlay", size=controls_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
             if not self._window_show_controls[w]:
                 _draw_action_tooltip()
 
-            for b,sz in zip(buttons,button_sizes):
-                if b is None:
-                    imgui.dummy(sz)
-                    imgui.same_line()
-                    continue
-                mod_key = 0
-                if b.has_shift and imgui.is_key_down(imgui.Key.mod_shift):
-                    # ensure the shortcut with shift is picked up
-                    mod_key = imgui.Key.mod_shift
-                flags = imgui.InputFlags_.route_global
-                if b.repeats:
-                    flags |= imgui.InputFlags_.repeat
-                if b.key is not None:
-                    imgui.set_next_item_shortcut(b.key|mod_key, flags=flags)
-                lbl = b.lbl
-                if b.action==Action.Pause:
-                    lbl = lbl[1] if self._is_playing else lbl[0]
-                disable = False
-                if b.action==Action.Annotate_Delete:
-                    disable = not annotate_keys # we are not in an interval
-                if disable:
-                    imgui.begin_disabled()
-                if self._window_show_controls[w]:
-                    if b.color is not None:
-                        but_alphas = [imgui.get_style_color_vec4(b).w for b in [imgui.Col_.button, imgui.Col_.button_hovered, imgui.Col_.button_active]]
-                        imgui.push_style_color(imgui.Col_.button,         timeline.color_replace_alpha(b.color,but_alphas[0]).value)
-                        imgui.push_style_color(imgui.Col_.button_hovered, timeline.color_replace_alpha(timeline.color_brighten(b.color, .15),but_alphas[1]).value)
-                        imgui.push_style_color(imgui.Col_.button_active,  timeline.color_replace_alpha(timeline.color_brighten(b.color, .9 ),but_alphas[2]).value)
-                        text_contrast_ratio = 1 / 1.57
-                        text_color = imgui.ImColor(imgui.get_style_color_vec4(imgui.Col_.text))
-                        imgui.push_style_color(imgui.Col_.text,           timeline.color_adjust_contrast(text_color,text_contrast_ratio,b.color).value)
-                    activated = imgui.button(lbl, size=sz)
-                    if b.color is not None:
-                        imgui.pop_style_color(4)
-                else:
-                    activated = imgui.invisible_button(lbl, size=sz)
-                if activated:
-                    match b.action:
-                        case Action.Pause:
-                            self._requests.append(('toggle_pause',None))
-                        case Action.Back_Time:
-                            self._requests.append(('delta_time', -10. if imgui.is_key_down(imgui.Key.mod_shift) else -1.))
-                        case Action.Back_Frame:
-                            self._requests.append(('delta_frame', -10 if imgui.is_key_down(imgui.Key.mod_shift) else -1))
-                        case Action.Forward_Frame:
-                            self._requests.append(('delta_frame',  10 if imgui.is_key_down(imgui.Key.mod_shift) else  1))
-                        case Action.Forward_Time:
-                            self._requests.append(('delta_time',  10. if imgui.is_key_down(imgui.Key.mod_shift) else  1.))
-                        case Action.Close:
-                            self._requests.append(('close',None))
-                        case Action.Quit:
-                            self._requests.append(('exit',None))
-                        case Action.Annotate_Make:
-                            self._requests.append(('add_coding',(b.event, self._current_frame[w][2])))
-                        case Action.Annotate_Delete:
-                            for k,iv in zip(annotate_keys,annotate_ivals):
-                                if len(iv)>1 and self._current_frame[w][2] in iv:
-                                    # on the edge of an episode, return only the edge so we don't delete the whole episode
-                                    self._requests.append(('delete_coding',(k,[self._current_frame[w][2]])))
-                                else:
-                                    self._requests.append(('delete_coding',(k,iv)))
-                if self._window_show_controls[w] and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal) and b.full_tooltip:
-                    imgui.set_tooltip(b.full_tooltip)
-                if disable:
-                    imgui.end_disabled()
-                imgui.same_line()
+            for b_row, r_sz in rows:
+                imgui.set_cursor_pos_x(int((controls_child_size.x-r_sz.x)/2))
+                for i_b, (b,sz) in enumerate(b_row):
+                    if b is None:
+                        imgui.dummy(sz)
+                        if i_b < len(b_row)-1:
+                            imgui.same_line()
+                        continue
+                    mod_key = 0
+                    if b.has_shift and imgui.is_key_down(imgui.Key.mod_shift):
+                        # ensure the shortcut with shift is picked up
+                        mod_key = imgui.Key.mod_shift
+                    flags = imgui.InputFlags_.route_global
+                    if b.repeats:
+                        flags |= imgui.InputFlags_.repeat
+                    if b.key is not None:
+                        imgui.set_next_item_shortcut(b.key|mod_key, flags=flags)
+                    lbl = b.lbl
+                    if b.action==Action.Pause:
+                        lbl = lbl[1] if self._is_playing else lbl[0]
+                    disable = False
+                    if b.action==Action.Annotate_Delete:
+                        disable = not annotate_keys # we are not in an interval
+                    if disable:
+                        imgui.begin_disabled()
+                    if self._window_show_controls[w]:
+                        if b.color is not None:
+                            but_alphas = [imgui.get_style_color_vec4(b).w for b in [imgui.Col_.button, imgui.Col_.button_hovered, imgui.Col_.button_active]]
+                            imgui.push_style_color(imgui.Col_.button,         timeline.color_replace_alpha(b.color,but_alphas[0]).value)
+                            imgui.push_style_color(imgui.Col_.button_hovered, timeline.color_replace_alpha(timeline.color_brighten(b.color, .15),but_alphas[1]).value)
+                            imgui.push_style_color(imgui.Col_.button_active,  timeline.color_replace_alpha(timeline.color_brighten(b.color, .9 ),but_alphas[2]).value)
+                            text_contrast_ratio = 1 / 1.57
+                            text_color = imgui.ImColor(imgui.get_style_color_vec4(imgui.Col_.text))
+                            imgui.push_style_color(imgui.Col_.text,           timeline.color_adjust_contrast(text_color,text_contrast_ratio,b.color).value)
+                        activated = imgui.button(lbl, size=sz)
+                        if b.color is not None:
+                            imgui.pop_style_color(4)
+                    else:
+                        activated = imgui.invisible_button(lbl, size=sz)
+                    if activated:
+                        match b.action:
+                            case Action.Pause:
+                                self._requests.append(('toggle_pause',None))
+                            case Action.Back_Time:
+                                self._requests.append(('delta_time', -10. if imgui.is_key_down(imgui.Key.mod_shift) else -1.))
+                            case Action.Back_Frame:
+                                self._requests.append(('delta_frame', -10 if imgui.is_key_down(imgui.Key.mod_shift) else -1))
+                            case Action.Forward_Frame:
+                                self._requests.append(('delta_frame',  10 if imgui.is_key_down(imgui.Key.mod_shift) else  1))
+                            case Action.Forward_Time:
+                                self._requests.append(('delta_time',  10. if imgui.is_key_down(imgui.Key.mod_shift) else  1.))
+                            case Action.Close:
+                                self._requests.append(('close',None))
+                            case Action.Quit:
+                                self._requests.append(('exit',None))
+                            case Action.Annotate_Make:
+                                self._requests.append(('add_coding',(b.event, self._current_frame[w][2])))
+                            case Action.Annotate_Delete:
+                                for k,iv in zip(annotate_keys,annotate_ivals):
+                                    if len(iv)>1 and self._current_frame[w][2] in iv:
+                                        # on the edge of an episode, return only the edge so we don't delete the whole episode
+                                        self._requests.append(('delete_coding',(k,[self._current_frame[w][2]])))
+                                    else:
+                                        self._requests.append(('delete_coding',(k,iv)))
+                    if self._window_show_controls[w] and imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal) and b.full_tooltip:
+                        imgui.set_tooltip(b.full_tooltip)
+                    if disable:
+                        imgui.end_disabled()
+                    if i_b < len(b_row)-1:
+                        imgui.same_line()
             imgui.end_child()
             if self._window_show_controls[w] and self._window_show_action_tooltip[w]:
                 imgui.set_cursor_pos(tooltip_cursor_pos)
                 imgui.begin_child("##tooltip_overlay", size=tooltip_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
                 _draw_action_tooltip()
                 imgui.end_child()
-            imgui.pop_style_color()
+        imgui.pop_style_color()
         imgui.end_child()
 
         # draw timeline, if any
