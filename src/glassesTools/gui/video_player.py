@@ -572,7 +572,7 @@ class GUI:
         win_space = imgui.get_content_region_avail()
         imgui.push_style_var(imgui.StyleVar_.item_spacing, imgui.ImVec2(0,0))   # ensure no spacing between image and timeline
         imgui.set_next_window_size_constraints(imgui.ImVec2(-1, win_space.y-tl_total_height), imgui.ImVec2(-1, win_space.y-tl_min_height))
-        imgui.begin_child(f"img_child_{w}", imgui.ImVec2(0, win_space.y-tl_initial_height), imgui.ChildFlags_.resize_y)
+        imgui.begin_child(f"img_child_{w}", imgui.ImVec2(0, win_space.y-tl_initial_height), imgui.ChildFlags_.resize_y if tl is not None else 0)
         img_space = imgui.get_content_region_avail()
         self._window_sfac[w] = min([img_space.x/img_sz_pix[0], img_space.y/img_sz_pix[1]])
         img_sz = (img_sz_pix * self._window_sfac[w]).astype('int')
