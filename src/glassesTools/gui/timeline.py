@@ -578,7 +578,7 @@ class Timeline:
             cursor_pos = imgui.get_cursor_screen_pos()
             size       = imgui.get_content_region_avail()
             imgui.begin_child('##tracks',size=(self.draw_width,0), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scroll_with_mouse)
-            height = self.track_height*hello_imgui.dpi_window_size_factor()*len(self._annotations_frame)
+            height = int(self.track_height*hello_imgui.dpi_window_size_factor())*len(self._annotations_frame)
             self._draw_tracks(cursor_pos, size, height)
             imgui.end_child()
         imgui.end_child()

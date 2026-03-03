@@ -537,29 +537,31 @@ class GUI:
         # determine window size if needed
         dpi_fac = hello_imgui.dpi_window_size_factor()
         img_sz_pix = np.array([self._frame_size[w][1]*dpi_fac, self._frame_size[w][0]*dpi_fac])
-        tl_height = 0   # calc size of timeline
-        tl_min_height = 0
+        tl_total_height = tl_initial_height = tl_min_height = 0
+        # calc size of timeline, if any
         if (tl:=self._window_timeline[w]) is not None:
             timeline_fixed_elements_height = tl.get_fixed_elements_height()
-            tracks_height = self._window_timeline[w].track_height*tl.get_num_annotations()*dpi_fac
-            tl_height = int(timeline_fixed_elements_height+tracks_height)
-            tl_min_height = int(timeline_fixed_elements_height + self._window_timeline[w].track_height*dpi_fac)  # at least one track high
+            num_tracks = tl.get_num_annotations()
+            track_height = int(self._window_timeline[w].track_height*dpi_fac)
+            tl_total_height = int(timeline_fixed_elements_height + track_height*num_tracks)
+            tl_initial_height = int(timeline_fixed_elements_height + track_height*min(num_tracks,10))  # start showing no more than 10 tracks, otherwise timeline might take too much space on screen at the beginning
+            tl_min_height = int(timeline_fixed_elements_height + track_height)  # at least one track high
         if self._window_determine_size[w]:
             win     = glfw_utils.glfw_window_hello_imgui()
             w_bounds= gui_utils.get_current_monitor(*glfw.get_window_pos(win))[1]
             w_bounds= gui_utils.adjust_bounds_for_framesize(w_bounds, glfw.get_window_frame_size(win))
-            w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_height]  # adjust for timeline
+            w_bounds.size = [w_bounds.size[0], w_bounds.size[1]-tl_initial_height]  # adjust for timeline
             img_fit = w_bounds.ensure_window_fits_this_monitor(hello_imgui.ScreenBounds(size=[int(x) for x in img_sz_pix]))
             self._window_sfac[w] = min([x/y for x,y in zip(img_fit.size,img_sz_pix)])
             img_fit.size = [int(x*self._window_sfac[w]) for x in img_sz_pix]
             if not need_begin_end:
                 glfw.set_window_pos (win, *img_fit.position)
-                glfw.set_window_size(win, img_fit.size[0], img_fit.size[1]+tl_height)
+                glfw.set_window_size(win, img_fit.size[0], img_fit.size[1]+tl_initial_height)
 
         if need_begin_end:
             if self._window_determine_size[w]:
                 imgui.set_next_window_pos(img_fit.position)
-                imgui.set_next_window_size([x+y for x,y in zip(img_fit.size,(0, tl_height))])
+                imgui.set_next_window_size([x+y for x,y in zip(img_fit.size,(0, tl_initial_height))])
             opened, self._window_visible[w] = imgui.begin(self._windows[w], self._window_visible[w], self._window_flags)
             if not opened:
                 imgui.end()
@@ -569,8 +571,8 @@ class GUI:
         # draw image
         win_space = imgui.get_content_region_avail()
         imgui.push_style_var(imgui.StyleVar_.item_spacing, imgui.ImVec2(0,0))   # ensure no spacing between image and timeline
-        imgui.set_next_window_size_constraints(imgui.ImVec2(-1, win_space.y-tl_height), imgui.ImVec2(-1, win_space.y-tl_min_height))
-        imgui.begin_child(f"img_child_{w}", imgui.ImVec2(0, win_space.y-tl_height), imgui.ChildFlags_.resize_y)
+        imgui.set_next_window_size_constraints(imgui.ImVec2(-1, win_space.y-tl_total_height), imgui.ImVec2(-1, win_space.y-tl_min_height))
+        imgui.begin_child(f"img_child_{w}", imgui.ImVec2(0, win_space.y-tl_initial_height), imgui.ChildFlags_.resize_y)
         img_space = imgui.get_content_region_avail()
         self._window_sfac[w] = min([img_space.x/img_sz_pix[0], img_space.y/img_sz_pix[1]])
         img_sz = (img_sz_pix * self._window_sfac[w]).astype('int')
