@@ -237,7 +237,7 @@ class Detector:
         return img_points, ids, rejected_img_points
 
     def _refine_detection(self, image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, camera_params: ocv.CameraParams):
-        return refine_detection(image, detected_corners, detected_ids, rejected_corners, det, board, camera_params.camera_mtx, camera_params.distort_coeffs)
+        return refine_detection(image, detected_corners, detected_ids, rejected_corners, det, board, camera_params)
 
     def _filter_detections(self, img_points: list[np.ndarray], ids: np.ndarray, expected_ids: list[np.ndarray], keep_expected=True):
         return filter_detections(img_points, ids, expected_ids, keep_expected)
@@ -459,12 +459,12 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     board_corner_points = np.pad(board_corner_points,((0,0),(0,0),(0,1)),'constant', constant_values=(0.,0.)) # Nx4x2 -> Nx4x3 (at Z=0 to all points)
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
 
-def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, camera_mtx, distort_coeffs):
+def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, camera_parameters: ocv.CameraParams):
     img_points, ids, rejected_img_points, recovered_ids = \
         det.refineDetectedMarkers(
             image = image, board = board,
             detectedCorners = detected_corners, detectedIds = detected_ids, rejectedCorners = rejected_corners,
-            cameraMatrix = camera_mtx, distCoeffs = distort_coeffs
+            cameraMatrix = camera_parameters.camera_mtx, distCoeffs = camera_parameters.distort_coeffs
             )
     if img_points and img_points[0].shape[0]==4:
         # there are versions out there where there is a bug in output shape of each set of corners, fix up
