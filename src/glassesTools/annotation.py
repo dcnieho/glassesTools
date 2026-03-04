@@ -24,6 +24,8 @@ type_map = {
     EventType.Target        : Type.Interval,
 }
 
+internal_types = {EventType.Target}
+
 tooltip_map = {
     EventType.Validate      : 'Validation episode',
     EventType.Sync_Camera   : 'Camera sync point',
