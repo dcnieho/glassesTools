@@ -460,7 +460,7 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
 
 def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, camera_parameters: ocv.CameraParams):
-    img_points, ids, rejected_img_points, recovered_ids = \
+    img_points, ids, rejected_img_points, recovered_idxs = \
         det.refineDetectedMarkers(
             image = image, board = board,
             detectedCorners = detected_corners, detectedIds = detected_ids, rejectedCorners = rejected_corners,
@@ -472,6 +472,7 @@ def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_c
     if rejected_img_points and rejected_img_points[0].shape[0]==4:
         # same as for corners
         rejected_img_points = [np.reshape(c,(1,4,2)) for c in rejected_img_points]
+    recovered_ids = [ids[i] for i in recovered_idxs] if ids is not None and recovered_idxs is not None else None
 
     return img_points, ids, rejected_img_points, recovered_ids
 
