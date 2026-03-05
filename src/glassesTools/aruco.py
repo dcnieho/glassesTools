@@ -200,24 +200,25 @@ class Detector:
         # For each plane, refine detected markers (eliminates markers not part of the plane, adds missing markers to the poster)
         out_planes: dict[str] = {}
         for p in self.planes:
-            if ids is not None and len(ids)>self.planes[p]['min_num_markers']:
+            if ids is not None:
+                pl_img_points, pl_ids = filter_detections(img_points, ids, self._plane_marker_ids[p])
                 ok, corners_consistent, ids_consistent, rejected_indices = filter_board_duplicates(
-                    self._boards[p], *self._filter_detections(img_points, ids, self._plane_marker_ids[p]), camera_params)
+                    self._boards[p], pl_img_points, pl_ids, camera_params)
                 if ok:
                     if rejected_indices:
                         rejected_img_points += tuple([img_points[i] for i in rejected_indices])
-                    img_points = corners_consistent
-                    ids = ids_consistent
+                    pl_img_points = corners_consistent
+                    pl_ids = ids_consistent
 
-                img_points, ids, rejected_img_points, recovered_ids = \
-                    self._refine_detection(image, img_points, ids, rejected_img_points,
-                                           self._det, self._boards[p], camera_params)
+                recovered_ids = None
+                if len(pl_ids)>self.planes[p]['min_num_markers']:
+                    pl_img_points, pl_ids, rejected_img_points, recovered_ids = \
+                        self._refine_detection(image, pl_img_points, pl_ids, rejected_img_points,
+                                            self._det, self._boards[p], camera_params)
 
-                out_planes[p] = dict(zip(['img_points', 'ids', 'recovered_ids'],(img_points, ids, recovered_ids)))
+                out_planes[p] = dict(zip(['img_points', 'ids', 'recovered_ids'],(pl_img_points, pl_ids, recovered_ids)))
             else:
-                out_planes[p] = None if ids is None else dict(zip(['img_points', 'ids', 'recovered_ids'],(img_points, ids, None)))
-            if out_planes[p]:
-                out_planes[p]['img_points'],out_planes[p]['ids'] = self._filter_detections(out_planes[p]['img_points'], out_planes[p]['ids'], self._plane_marker_ids[p])
+                out_planes[p] = None
 
         # For individual markers, only keep the ones known
         out_individual: dict[str] = {}
