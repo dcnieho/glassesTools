@@ -5,6 +5,7 @@ import pandas as pd
 import json
 import traceback
 import random
+import os
 from collections import defaultdict
 import cv2
 
@@ -312,4 +313,5 @@ def main():
             win.close()
 
 if __name__=="__main__":
+    os.chdir(os.path.dirname(os.path.abspath(__file__)))
     main()
