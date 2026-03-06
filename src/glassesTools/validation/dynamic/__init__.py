@@ -67,7 +67,7 @@ def setup_to_automatic_coding(config_dir: str|pathlib.Path|None=None, file_name:
     out["border_bits"] = setup["segment_marker"]["border_bits"]
     return out
 
-def setup_to_plane_config(output_dir: str|pathlib.Path, config_dir: str|pathlib.Path|None=None, file_name: str='setup.json') -> dict[str,list[marker.MarkerID]]:
+def setup_to_plane_config(output_dir: str|pathlib.Path, config_dir: str|pathlib.Path|None=None, file_name: str='setup.json') -> dict[str,list[marker.MarkerID]|bool]:
     output_dir = pathlib.Path(output_dir)
     if not output_dir.is_dir():
         raise RuntimeError(f'The requested directory "{output_dir}" does not exist')
@@ -144,12 +144,14 @@ def setup_to_plane_config(output_dir: str|pathlib.Path, config_dir: str|pathlib.
     target_positions.to_csv(output_dir/valSetup['targetPosFile'], float_format='%.8f')
     marker_positions.to_csv(output_dir/valSetup['markerPosFile'], float_format='%.8f')
 
-    # last, get segmentation markers used for start and end of validation interval
-    segmentation_markers: dict[str,list[marker.MarkerID]] = {}
+    # last, get segmentation setup (markers used for start and end of validation interval) and info about repetitions
+    segmentation_markers: dict[str,list[marker.MarkerID]|bool] = {}
     aruco_dict_id = aruco.str_to_dict_id(setup["aruco"]["dict"])
     for s,o in zip(('start_IDs','end_IDs'),('start_markers','end_markers')):
         segmentation_markers[o] = [marker.MarkerID(m, aruco_dict_id) for m in setup["validation"]["segment_marker"][s]]
     segmentation_markers['marker_border_bits'] = setup["aruco"]["border_bits"]
+    n_repetitions = setup["validation"]["n_repetitions"]
+    segmentation_markers['split_consecutive'] = n_repetitions>1 and not setup["validation"]["show_segment_between_repetitions"]
     return segmentation_markers
 
 
