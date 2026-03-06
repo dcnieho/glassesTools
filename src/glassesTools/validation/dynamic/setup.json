@@ -29,6 +29,7 @@
 
     "validation": {
         "n_repetitions": 1,
+        "show_segment_between_repetitions": true,
 
         "segment_marker": {
             "start_IDs": [200, 201],

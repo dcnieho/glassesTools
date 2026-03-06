@@ -157,7 +157,7 @@ def prepare_validation(win: visual.Window, config: dict, screen_config: dict):
     background = visual.ImageStim(win, visual.BufferImageStim(win, stim=stimList).image)    # because https://github.com/psychopy/psychopy/issues/840
     return {'background': background, 'target_positions': target_positions, 'fiducial_positions': fiducial_positions}
 
-def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_vars: dict):
+def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_vars: dict, last_pos = None):
     # prepare visual objects
     fixation_target = ABCFixPoint(win, outer_color=config["targets"]["look"]["outer_color"], inner_color=config["targets"]["look"]["inner_color"], units=config["targets"]["units"])
     aruco_ims = [visual.ImageStim(win, image=None, size=config["markers"]["size"], units=config["markers"]["units"]) for _ in config["markers"]["replace_IDs"]]
@@ -177,7 +177,9 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
     n_capture_frames= int(config["targets"]["duration"]*refresh_rate)
 
     # show fixation target sequence
-    if config["targets"]["start_from_screen_center"]:
+    if last_pos is not None:
+        old_pos = last_pos
+    elif config["targets"]["start_from_screen_center"]:
         old_pos = np.array([0.,0.])
     else:
         old_pos = task_vars['target_positions'].loc[targets[0],['x','y']].to_numpy()
@@ -241,6 +243,7 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
             win.flip()
 
         old_pos = pos
+    return old_pos
 
 def run_validation(win: visual.Window, config: dict):
     # prepare fiducials
@@ -263,20 +266,23 @@ def run_validation(win: visual.Window, config: dict):
     task_vars = prepare_validation(win, config["validation"], config["screen"])
 
     # run validation
+    last_pos = None
     for r in range(config["validation"]["n_repetitions"]):
         # signal start
-        for m_id in config["validation"]["segment_marker"]["start_IDs"]:
-            segmenter.draw(m_id)
+        if r==0 or config["validation"]["show_segment_between_repetitions"]:
+            for m_id in config["validation"]["segment_marker"]["start_IDs"]:
+                segmenter.draw(m_id)
 
         # show targets
-        show_validation(win, config["validation"], config["screen"]["refresh_rate"], task_vars)
+        last_pos = show_validation(win, config["validation"], config["screen"]["refresh_rate"], task_vars, last_pos if not config["validation"]["show_segment_between_repetitions"] else None)
 
         # signal end
-        for m_id in config["validation"]["segment_marker"]["end_IDs"]:
-            segmenter.draw(m_id)
+        if r==config["validation"]["n_repetitions"]-1 or config["validation"]["show_segment_between_repetitions"]:
+            for m_id in config["validation"]["segment_marker"]["end_IDs"]:
+                segmenter.draw(m_id)
 
         # blank screen to separate validation intervals
-        if r!=config["validation"]["n_repetitions"]-1:
+        if r<config["validation"]["n_repetitions"]-1 and config["validation"]["show_segment_between_repetitions"]:
             win.flip()
             core.wait(1.)
 
