@@ -215,12 +215,11 @@ class GUI:
                     if implot.begin_plot('##X',flags=implot.Flags_.no_mouse_text):
                         implot.setup_axis(implot.ImAxis_.x1, None if d==0 else 'time (s)')
                         implot.setup_axis(implot.ImAxis_.y1, 'horizontal coordinate (pix)' if d==0 else 'vertical coordinate (pix)')
+                        spec = implot.Spec()
                         if self._hovered==d:
-                            implot.push_style_var(implot.StyleVar_.line_weight, implot.get_style().line_weight*2)
+                            spec.line_weight *= 2
                             imgui.set_mouse_cursor(imgui.MouseCursor_.hand)
-                        implot.plot_line("gaze", gt, gx if d==0 else gy)
-                        if self._hovered==d:
-                            implot.pop_style_var()
+                        implot.plot_line("gaze", gt, gx if d==0 else gy, spec)
                         implot.plot_line("target", self.target_data['ts'], self.target_data['x' if d==0 else 'y'])
                         if implot.is_plot_hovered():
                             self._do_data_drag(d)
