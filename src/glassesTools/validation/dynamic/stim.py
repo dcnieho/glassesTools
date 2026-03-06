@@ -177,7 +177,10 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
     n_capture_frames= int(config["targets"]["duration"]*refresh_rate)
 
     # show fixation target sequence
-    old_pos = task_vars['target_positions'].loc[targets[0],['x','y']].to_numpy()
+    if config["targets"]["start_from_screen_center"]:
+        old_pos = np.array([0.,0.])
+    else:
+        old_pos = task_vars['target_positions'].loc[targets[0],['x','y']].to_numpy()
     for i in targets:
         check_escape(win)
 

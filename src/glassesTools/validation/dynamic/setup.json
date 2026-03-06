@@ -50,6 +50,7 @@
             "file": "targetPositions.csv",
             "units": "cm",
             "first_ID": 1,
+            "start_from_screen_center": true,
             "center_target": 5,
             "duration": 1.0,
             "placeholder": {
