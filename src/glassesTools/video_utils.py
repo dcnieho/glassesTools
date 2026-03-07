@@ -159,6 +159,12 @@ def _get_frame_timestamps_opencv(vid_file: pathlib.Path) -> np.array:
         if frame_idx==1 and ts==vid.get(cv2.CAP_PROP_POS_MSEC):
             continue
 
+        if len(frame_ts)>0 and frame_ts[-1]>0 and ts==0.0:
+            # time reset to zero, could be a sign the file is finished
+            if frame_idx/nframes>=.99:
+                break
+            raise RuntimeError("The video file is corrupt. Time is not monotonically increasing.")
+
         frame_ts.append(ts)
         # check if we're done. Can't trust ret==False to indicate we're at end of video, as it may also return false for some frames when video has errors in the middle that we can just read past
         if (not ret and frame_idx>0 and frame_idx/nframes<.99):
