@@ -17,7 +17,7 @@ from fractions import Fraction
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
-from .. import naming
+from .. import naming, video_utils
 
 
 def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False, cam_cal_file: str|pathlib.Path=None) -> Recording:
@@ -84,14 +84,24 @@ def getRecordingInfo(inputDir: str|pathlib.Path) -> list[Recording]:
         _,recording = r.stem.split('_')
 
         # check there is a matching scenevideo
+        # this can be a series of pictures in a folder
         sceneVidDir = r.parent / ('ScenePics_' + recording)
+        sceneVidFile= ''
         if not sceneVidDir.is_dir():
-            # print(f"folder {sceneVidDir} not found, meaning there is no scene video for this recording, skipping")
-            continue
+            # or a video
+            sceneVidFiles = list(r.parent.glob(f'gazeVideo_{recording}*.mp4'))
+            if not sceneVidFiles:
+                # print(f"recording {recording} skipped, no matching scene video found (looked for a folder named 'ScenePics_{recording}' or a video file starting with 'gazeVideo_{recording}')")
+                continue
+            elif len(sceneVidFiles)>1:
+                raise RuntimeError(f'Multiple scene videos found for recording {recording}, cannot determine which one to use: {[f.name for f in sceneVidFile]}')
+            else:
+                sceneVidFile = sceneVidFiles[0]
 
         recInfos.append(Recording(source_directory=inputDir, eye_tracker=EyeTracker.SeeTrue_STONE))
         recInfos[-1].participant = inputDir.name
         recInfos[-1].name = recording
+        recInfos[-1].scene_video_file = sceneVidFile.name
 
     # should return None if no valid recordings found
     return recInfos if recInfos else None
@@ -108,9 +118,13 @@ def checkRecording(inputDir: str|pathlib.Path, recInfo: Recording):
         return False
 
     # check we have an exported scene video
-    file = f'ScenePics_{recInfo.name}'
-    if not (inputDir / file).is_dir():
-        return False
+    if recInfo.scene_video_file:
+        if not (inputDir / recInfo.scene_video_file).is_file():
+            return False
+    else:
+        file = f'ScenePics_{recInfo.name}'
+        if not (inputDir / file).is_dir():
+            return False
 
     return True
 
@@ -121,133 +135,151 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
     """
 
     # get scene video dimensions by interrogating a frame in sceneVidDir
-    sceneVidDir = inputDir / ('ScenePics_' + recInfo.name)
-    frame = next(sceneVidDir.glob('*.jpeg'))
-    h,w,_ = cv2.imread(frame).shape
+    if recInfo.scene_video_file:
+        sceneVidFile = inputDir / recInfo.scene_video_file
+        vid = cv2.VideoCapture(str(sceneVidFile))
+        if not vid.isOpened():
+            raise RuntimeError(f'the file "{sceneVidFile}" could not be opened')
+        w = vid.get(cv2.CAP_PROP_FRAME_WIDTH)
+        h = vid.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        vid.release()
+    else:
+        sceneVidDir = inputDir / ('ScenePics_' + recInfo.name)
+        frame = next(sceneVidDir.glob('*.jpeg'))
+        h,w,_ = cv2.imread(frame).shape
 
     # prep gaze data and get video frame timestamps from it
     print('  Prepping gaze data...')
     file = f'EyeData_{recInfo.name}.csv'
     gazeDf, frameTimestamps = formatGazeData(inputDir / file, [w,h])
 
-    # make scene video
-    print('  Prepping scene video...')
-    # 1. see if there are frames missing, insert black frames if so
-    frames = []
-    for f in sceneVidDir.glob('*.jpeg'):
-        _,fr = f.stem.split('_')
-        frames.append(int(fr))
-    frames = sorted(frames)
+    if recInfo.scene_video_file:
+        # fix up the gaze data:
+        gazeDf.index -= gazeDf.index.min()
+        # override the scene video frame idx, seems to be off a lot (I observed ts for a 20 hz video, while it actually was 30 hz.. meaningless)
+        frameTimestamps = video_utils.get_frame_timestamps_from_video(recInfo.get_scene_video_path())
+        gazeDf['frame_idx'] = video_utils.timestamps_to_frame_number(gazeDf.index,frameTimestamps['timestamp'].to_numpy())
+    else:
+        # we need to make the scene video from the loose frames
 
-    # 2. see if framenumbers are as expected from the gaze data file
-    # get average ifi
-    ifi = np.mean(np.diff(frameTimestamps.index))
-    # 2.1 remove frame timestamps that are before the first frame for which we have an image
-    frameTimestamps=frameTimestamps.drop(frameTimestamps[frameTimestamps.frame_idx < frames[ 0]].index)
-    # 2.2 remove frame timestamps that are beyond last frame for which we have an image
-    frameTimestamps=frameTimestamps.drop(frameTimestamps[frameTimestamps.frame_idx > frames[-1]].index)
-    # 2.3 add frame timestamps for images we have before first eye data
-    if frames[ 0] < frameTimestamps.iloc[ 0,:].to_numpy()[0]:
-        nFrames = frameTimestamps.iloc[ 0,:].to_numpy()[0] - frames[ 0]
-        t0 = frameTimestamps.index[0]
-        f0 = frameTimestamps.iloc[ 0,:].to_numpy()[0]
-        for f in range(-1,-(nFrames+1),-1):
-            frameTimestamps.loc[t0+f*ifi] = f0+f
-        frameTimestamps = frameTimestamps.sort_index()
-    # 2.4 add frame timestamps for images we have after last eye data
-    if frames[-1] > frameTimestamps.iloc[-1,:].to_numpy()[0]:
-        nFrames = frames[-1] - frameTimestamps.iloc[-1,:].to_numpy()[0]
-        t0 = frameTimestamps.index[-1]
-        f0 = frameTimestamps.iloc[-1,:].to_numpy()[0]
-        for f in range(1,nFrames+1):
-            frameTimestamps.loc[t0+f*ifi] = f0+f
-        frameTimestamps = frameTimestamps.sort_index()
-    # 2.5 check if holes, fill
-    blackFrames = []
-    frameDelta = np.diff(frames)
-    if np.any(frameDelta>1):
-        # frames images missing, add them (NB: if timestamps also missing, thats dealt with below)
-        idxGaps = np.argwhere(frameDelta>1).flatten()     # idxGaps is last idx before each gap
-        frGaps  = np.array(frames)[idxGaps].flatten()
-        nFrames = frameDelta[idxGaps].flatten()
-        for b,x in zip(frGaps+1,nFrames):
-            for y in range(x-1):
-                blackFrames.append(b+y)
-
-        # make black frame
-        blackIm = np.zeros((h,w,3), np.uint8)   # black image
-        for f in blackFrames:
-            # store black frame to file
-            cv2.imwrite(sceneVidDir / f'frame_{f:d}.jpeg',blackIm)
-            frames.append(f)
+        # make scene video
+        print('  Prepping scene video...')
+        # 1. see if there are frames missing, insert black frames if so
+        frames = []
+        for f in sceneVidDir.glob('*.jpeg'):
+            _,fr = f.stem.split('_')
+            frames.append(int(fr))
         frames = sorted(frames)
 
-    # 3. make into video
-    # 3.1 find unique scene camera frames and their timestamps
-    firstFrame      = frameTimestamps['frame_idx'].min()
-    firstFrameTs    = frameTimestamps['frame_idx'].idxmin()
-    frameTimestamps = frameTimestamps.reset_index().groupby('frame_idx').first().reset_index()
-    # 3.2 make concat filter input file
-    concat_file = outputDir/'concat_input.txt'
-    with open(concat_file, 'wt') as f:
-        f.writelines('ffconcat version 1.0\n')
-        fnames = (f'frame_{f}.jpeg' for f in frameTimestamps['frame_idx'].to_numpy())
-        f.writelines((f"file '{sceneVidDir / fn}'\n" for fn in fnames))
+        # 2. see if framenumbers are as expected from the gaze data file
+        # get average ifi
+        ifi = np.mean(np.diff(frameTimestamps.index))
+        # 2.1 remove frame timestamps that are before the first frame for which we have an image
+        frameTimestamps=frameTimestamps.drop(frameTimestamps[frameTimestamps.frame_idx < frames[ 0]].index)
+        # 2.2 remove frame timestamps that are beyond last frame for which we have an image
+        frameTimestamps=frameTimestamps.drop(frameTimestamps[frameTimestamps.frame_idx > frames[-1]].index)
+        # 2.3 add frame timestamps for images we have before first eye data
+        if frames[ 0] < frameTimestamps.iloc[ 0,:].to_numpy()[0]:
+            nFrames = frameTimestamps.iloc[ 0,:].to_numpy()[0] - frames[ 0]
+            t0 = frameTimestamps.index[0]
+            f0 = frameTimestamps.iloc[ 0,:].to_numpy()[0]
+            for f in range(-1,-(nFrames+1),-1):
+                frameTimestamps.loc[t0+f*ifi] = f0+f
+            frameTimestamps = frameTimestamps.sort_index()
+        # 2.4 add frame timestamps for images we have after last eye data
+        if frames[-1] > frameTimestamps.iloc[-1,:].to_numpy()[0]:
+            nFrames = frames[-1] - frameTimestamps.iloc[-1,:].to_numpy()[0]
+            t0 = frameTimestamps.index[-1]
+            f0 = frameTimestamps.iloc[-1,:].to_numpy()[0]
+            for f in range(1,nFrames+1):
+                frameTimestamps.loc[t0+f*ifi] = f0+f
+            frameTimestamps = frameTimestamps.sort_index()
+        # 2.5 check if holes, fill
+        blackFrames = []
+        frameDelta = np.diff(frames)
+        if np.any(frameDelta>1):
+            # frames images missing, add them (NB: if timestamps also missing, thats dealt with below)
+            idxGaps = np.argwhere(frameDelta>1).flatten()     # idxGaps is last idx before each gap
+            frGaps  = np.array(frames)[idxGaps].flatten()
+            nFrames = frameDelta[idxGaps].flatten()
+            for b,x in zip(frGaps+1,nFrames):
+                for y in range(x-1):
+                    blackFrames.append(b+y)
 
-    # 3.3 determine frame pts and durations
-    ifis            = np.diff(frameTimestamps['timestamp'].to_numpy())
-    ifis            = np.append(ifis,[np.median(ifis)])
-    durs            = ifis/1000
-    pts_time        = np.cumsum(np.append([0],durs))
+            # make black frame
+            blackIm = np.zeros((h,w,3), np.uint8)   # black image
+            for f in blackFrames:
+                # store black frame to file
+                cv2.imwrite(sceneVidDir / f'frame_{f:d}.jpeg',blackIm)
+                frames.append(f)
+            frames = sorted(frames)
 
-    # 3.4 read frames through concat filter, output to mp4 with the right pts and dur
-    outFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
-    ts = 900000
-    with av.open(concat_file, 'r', format='concat', options={'safe':'0'}) as inp:
-        in_stream = inp.streams.video[0]
-        with av.open(outFile, 'w', format='mp4') as out:
-            out_stream = out.add_stream('libx264')
-            out_stream.width = in_stream.codec_context.width  # Set frame width to be the same as the width of the input stream
-            out_stream.height = in_stream.codec_context.height  # Set frame height to be the same as the height of the input stream
-            out_stream.pix_fmt = in_stream.codec_context.pix_fmt  # Copy pixel format from input stream to output stream
-            out_stream.time_base = Fraction(1, ts)
+        # 3. make into video
+        # 3.1 find unique scene camera frames and their timestamps
+        firstFrame      = frameTimestamps['frame_idx'].min()
+        firstFrameTs    = frameTimestamps['frame_idx'].idxmin()
+        frameTimestamps = frameTimestamps.reset_index().groupby('frame_idx').first().reset_index()
+        # 3.2 make concat filter input file
+        concat_file = outputDir/'concat_input.txt'
+        with open(concat_file, 'wt') as f:
+            f.writelines('ffconcat version 1.0\n')
+            fnames = (f'frame_{f}.jpeg' for f in frameTimestamps['frame_idx'].to_numpy())
+            f.writelines((f"file '{sceneVidDir / fn}'\n" for fn in fnames))
 
-            for frame_idx, frame in enumerate(inp.decode(in_stream)):
-                frame.pts       = np.round(pts_time[frame_idx]/out_stream.time_base)
-                frame.dts       = np.round(pts_time[frame_idx]/out_stream.time_base)
-                frame.duration  = np.round(  durs  [frame_idx]/out_stream.time_base)
-                frame.time_base = out_stream.time_base
+        # 3.3 determine frame pts and durations
+        ifis            = np.diff(frameTimestamps['timestamp'].to_numpy())
+        ifis            = np.append(ifis,[np.median(ifis)])
+        durs            = ifis/1000
+        pts_time        = np.cumsum(np.append([0],durs))
 
-                packet = out_stream.encode(frame)
+        # 3.4 read frames through concat filter, output to mp4 with the right pts and dur
+        outFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
+        ts = 900000
+        with av.open(concat_file, 'r', format='concat', options={'safe':'0'}) as inp:
+            in_stream = inp.streams.video[0]
+            with av.open(outFile, 'w', format='mp4') as out:
+                out_stream = out.add_stream('libx264')
+                out_stream.width = in_stream.codec_context.width  # Set frame width to be the same as the width of the input stream
+                out_stream.height = in_stream.codec_context.height  # Set frame height to be the same as the height of the input stream
+                out_stream.pix_fmt = in_stream.codec_context.pix_fmt  # Copy pixel format from input stream to output stream
+                out_stream.time_base = Fraction(1, ts)
+
+                for frame_idx, frame in enumerate(inp.decode(in_stream)):
+                    frame.pts       = np.round(pts_time[frame_idx]/out_stream.time_base)
+                    frame.dts       = np.round(pts_time[frame_idx]/out_stream.time_base)
+                    frame.duration  = np.round(  durs  [frame_idx]/out_stream.time_base)
+                    frame.time_base = out_stream.time_base
+
+                    packet = out_stream.encode(frame)
+                    out.mux(packet)
+
+                # Flush the encoder
+                packet = out_stream.encode(None)
                 out.mux(packet)
-            
-            # Flush the encoder
-            packet = out_stream.encode(None)
-            out.mux(packet)
 
-    # 3.5 clean up
-    # check for success
-    concat_file.unlink(missing_ok=True)
-    if outFile.is_file():
-        recInfo.scene_video_file = outFile.name
-    else:
-        raise RuntimeError('Error making a scene video out of the SeeTrue''s frames')
+        # 3.5 clean up
+        # check for success
+        concat_file.unlink(missing_ok=True)
+        if outFile.is_file():
+            recInfo.scene_video_file = outFile.name
+        else:
+            raise RuntimeError('Error making a scene video out of the SeeTrue''s frames')
 
-    # delete the black frames we added, if any
-    for f in blackFrames:
-        if (sceneVidDir / 'frame_{:d}.jpeg'.format(f)).is_file():
-            (sceneVidDir / 'frame_{:d}.jpeg'.format(f)).unlink(missing_ok=True)
+        # delete the black frames we added, if any
+        for f in blackFrames:
+            if (sceneVidDir / 'frame_{:d}.jpeg'.format(f)).is_file():
+                (sceneVidDir / 'frame_{:d}.jpeg'.format(f)).unlink(missing_ok=True)
 
-    # 4. fix up frame idxs and timestamps in gaze and video data
-    # prep the gaze timestamps
-    gazeDf.index -= firstFrameTs
-    # overwrite the video frames, now we have one video frame per gaze sample
-    gazeDf['frame_idx'] -= firstFrame
+        # 4. fix up frame idxs and timestamps in gaze and video data
+        # prep the gaze timestamps
+        gazeDf.index -= firstFrameTs
+        # overwrite the video frames, now we have one video frame per gaze sample
+        gazeDf['frame_idx'] -= firstFrame
 
-    # Also fix video timestamps
-    frameTimestamps = frameTimestamps.drop(columns=['frame_idx'])
-    frameTimestamps.index.name = 'frame_idx'
-    frameTimestamps['timestamp'] -= firstFrameTs
+        # Also fix video timestamps
+        frameTimestamps = frameTimestamps.drop(columns=['frame_idx'])
+        frameTimestamps.index.name = 'frame_idx'
+        frameTimestamps['timestamp'] -= firstFrameTs
 
     return gazeDf, frameTimestamps
 
@@ -300,6 +332,8 @@ def gazedata2df(textFile: str|pathlib.Path, sceneVideoDimensions: list[int]):
 
     df = pd.read_table(textFile,sep=';',index_col=False)
     df.columns=df.columns.str.strip()
+    # sort by Frame number
+    df = df.sort_values('Frame number').reset_index(drop=True)
 
     # rename and reorder columns
     lookup = {'Timestamp': 'timestamp',
