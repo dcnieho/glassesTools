@@ -1,9 +1,10 @@
 import pathlib
 import pandas as pd
+import typing
 
 from .. import data_types
 
-def collect_data_quality(rec_dirs: list[str | pathlib.Path], file_name: str|dict[str,str]='dataQuality.tsv', col_for_parent=None):
+def collect_data_quality(rec_dirs: typing.Sequence[str | pathlib.Path], file_name: str|dict[str,str]='dataQuality.tsv', col_for_parent=None):
     # 1. collect all data quality metrics from the provided directories
     rec_files: list = []
     idx_vals = ['recording']
