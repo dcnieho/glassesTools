@@ -46,8 +46,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
         rec_info = recInfos[0]  # take first, arbitrarily. If anything else wanted, user should call this function with a correct rec_info themselves
 
     # make output dirs
-    if not output_dir.is_dir():
-        output_dir.mkdir()
+    output_dir.mkdir(exist_ok=True)
 
 
     #### prep the data
@@ -84,11 +83,11 @@ def getRecordingInfo(inputDir: str|pathlib.Path) -> list[Recording]:
         _,recording = r.stem.split('_')
 
         # check there is a matching scenevideo
-        # this can be a series of pictures in a folder
+        # this can be a series of pictures in a folder (preferred)
         sceneVidDir = r.parent / ('ScenePics_' + recording)
         sceneVidFile= ''
         if not sceneVidDir.is_dir():
-            # or a video
+            # or a video (fallback option, export to mp4 by the SeeTrue software is not recommended for further processing, at this stage at least)
             sceneVidFiles = list(r.parent.glob(f'gazeVideo_{recording}*.mp4'))
             if not sceneVidFiles:
                 # print(f"recording {recording} skipped, no matching scene video found (looked for a folder named 'ScenePics_{recording}' or a video file starting with 'gazeVideo_{recording}')")
@@ -101,7 +100,7 @@ def getRecordingInfo(inputDir: str|pathlib.Path) -> list[Recording]:
         recInfos.append(Recording(source_directory=inputDir, eye_tracker=EyeTracker.SeeTrue_STONE))
         recInfos[-1].participant = inputDir.name
         recInfos[-1].name = recording
-        recInfos[-1].scene_video_file = sceneVidFile.name
+        recInfos[-1].scene_video_file = sceneVidFile if sceneVidFile=='' else sceneVidFile.name
 
     # should return None if no valid recordings found
     return recInfos if recInfos else None
@@ -112,6 +111,7 @@ def checkRecording(inputDir: str|pathlib.Path, recInfo: Recording):
     This checks that the folder is properly prepared
     (i.e. the required BeGaze exports were run)
     """
+    inputDir = pathlib.Path(inputDir)
     # check we have an exported gaze data file
     file = f'EyeData_{recInfo.name}.csv'
     if not (inputDir / file).is_file():
