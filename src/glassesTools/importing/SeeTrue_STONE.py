@@ -235,6 +235,7 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
         # 3.4 read frames through concat filter, output to mp4 with the right pts and dur
         outFile = outputDir / f'{naming.scene_camera_video_fname_stem}.mp4'
         ts = 900000
+        tb = Fraction(1, ts)
         with av.open(concat_file, 'r', format='concat', options={'safe':'0'}) as inp:
             in_stream = inp.streams.video[0]
             with av.open(outFile, 'w', format='mp4') as out:
@@ -242,20 +243,20 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
                 out_stream.width = in_stream.codec_context.width  # Set frame width to be the same as the width of the input stream
                 out_stream.height = in_stream.codec_context.height  # Set frame height to be the same as the height of the input stream
                 out_stream.pix_fmt = in_stream.codec_context.pix_fmt  # Copy pixel format from input stream to output stream
-                out_stream.time_base = Fraction(1, ts)
+                out_stream.codec_context.time_base = tb
+                out_stream.time_base = tb
 
                 for frame_idx, frame in enumerate(inp.decode(in_stream)):
-                    frame.pts       = np.round(pts_time[frame_idx]/out_stream.time_base)
-                    frame.dts       = np.round(pts_time[frame_idx]/out_stream.time_base)
-                    frame.duration  = np.round(  durs  [frame_idx]/out_stream.time_base)
+                    frame.pts       = int(np.round(pts_time[frame_idx]/out_stream.time_base))
+                    frame.duration  = int(np.round(  durs  [frame_idx]/out_stream.time_base))
                     frame.time_base = out_stream.time_base
 
-                    packet = out_stream.encode(frame)
-                    out.mux(packet)
+                    for packet in out_stream.encode(frame):
+                        out.mux(packet)
 
                 # Flush the encoder
-                packet = out_stream.encode(None)
-                out.mux(packet)
+                for packet in out_stream.encode(None):
+                    out.mux(packet)
 
         # 3.5 clean up
         # check for success
