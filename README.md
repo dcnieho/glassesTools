@@ -187,7 +187,7 @@ The `glassesTools.gaze_headref.Gaze` class is used for storing a sample of head-
 | --- | --- | --- |
 |`timestamp`|`float`|Timestamp (ms) for the gaze sample.|
 |`frame_idx`|`int`|Index (0-based) of the frame in the scene video that this gaze sample belongs to.|
-|`gaze_pos_vid`|`np.ndarray`|Gaze position on the scene video (pixels)|
+|`gaze_pos_vid`|`np.ndarray`|Gaze position on the scene video (pixels). `(0,0)` is top-left.|
 |`gaze_pos_3d`|`np.ndarray`|(3D) Gaze position in the eye tracker's coordinate system (mm)|
 |`gaze_dir_l`|`np.ndarray`|Gaze direction vector for the left eye in the eye tracker's coordinate system.|
 |`gaze_ori_l`|`np.ndarray`|Origin for the left eye's gaze direction vector (mm) in the eye tracker's coordinate system.|
