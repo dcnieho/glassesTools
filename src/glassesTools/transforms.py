@@ -91,6 +91,8 @@ def distort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[
     elif cam_params.has_colmap_camera():
         # unproject, ignoring distortion as this is an undistorted point
         points_w = cam_params.colmap_camera_no_distortion.cam_from_img(points_cam.reshape((-1,2)))
+        if points_w.shape[1]==2:
+            points_w = np.c_[points_w, np.ones(len(points_w))]
         # reproject, applying distortion
         return cam_params.colmap_camera.img_from_cam(points_w)
     else:
@@ -105,6 +107,8 @@ def undistort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtyp
     elif cam_params.has_colmap_camera():
         # unproject, removing distortion
         points_w = cam_params.colmap_camera.cam_from_img(points_cam.reshape((-1,2)))
+        if points_w.shape[1]==2:
+            points_w = np.c_[points_w, np.ones(len(points_w))]
         # reproject, without applying distortion
         return cam_params.colmap_camera_no_distortion.img_from_cam(points_w)
     else:
