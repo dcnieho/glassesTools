@@ -187,9 +187,12 @@ class Plane:
             if np.any(corners[:,0]<-x_margin) or np.any(corners[:,0]>self.plane_size.x+x_margin) or \
                np.any(corners[:,1]<-y_margin) or np.any(corners[:,1]>self.plane_size.y+y_margin):
                 center  = ", ".join(map(lambda x: f"{x:.4f}",self.markers[key].center))
+                sz = np.vstack((np.hypot(corners[0,0]-corners[1,0], corners[0,1]-corners[1,1]),
+                                np.hypot(corners[1,0]-corners[2,0], corners[1,1]-corners[2,1]))).T
+                sz = float(min(sz.flatten()))
                 corners = [", ".join(map(lambda x: f"{x:.4f}",c)) for c in corners]
                 plane_corners = [", ".join(map(lambda x: f"{x:.4f}",c)) for c in (self.bbox[:2],self.bbox[2:])]
-                raise ValueError(f'Marker {key} with center positioned at ({center}), size {self.marker_size:.4f} and rotation {self.markers[key].rot:.1f} deg would\nhave its corners at ({corners[0]}), ({corners[1]}), ({corners[2]}), and ({corners[3]}),\nwhich is outside the defined plane which ranges from ({plane_corners[0]}) to ({plane_corners[1]}). Ensure all\nsizes and positions are in the same unit (e.g. mm) and check the marker position csv file, marker size and plane size.')
+                raise ValueError(f'Marker {key} with center positioned at ({center}), size {sz:.4f} and rotation {self.markers[key].rot:.1f} deg would\nhave its corners at ({corners[0]}), ({corners[1]}), ({corners[2]}), and ({corners[3]}),\nwhich is outside the defined plane which ranges from ({plane_corners[0]}) to ({plane_corners[1]}). Ensure all\nsizes and positions are in the same unit (e.g. mm) and check the marker position csv file, marker size and plane size.')
             corner_points.append(corners)
 
         # get info about marker positions on the board
