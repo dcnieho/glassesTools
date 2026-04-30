@@ -44,7 +44,7 @@ def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=N
     else:
         frameTimestamps = None
 
-    # check gaze data hass a frame index column, and if not, make one
+    # check gaze data has a frame index column, and if not, make one
     gaze_data = pd.read_csv(output_dir/naming.gaze_data_fname, delimiter='\t')
     if 'frame_idx' not in gaze_data.columns:
         print('    !! No frame index column found in gaze data, adding one based on timestamps...')
@@ -55,6 +55,9 @@ def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=N
         gaze_data.insert(1,'frame_idx',frameIdx['frame_idx'].values)
         # store back
         gaze_data.to_csv(output_dir/naming.gaze_data_fname, sep='\t', index=False, na_rep='nan')
+    # check that timestamps in the gazedata are unique
+    if not gaze_data['timestamp'].is_unique:
+        raise RuntimeError('There are duplicate timestamps in the imported gaze data file, this is not supported. Please make sure each gaze sample has a unique timestamp.')
 
     if not gotCal:
         print('    !! No camera calibration provided!')
