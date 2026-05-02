@@ -242,10 +242,15 @@ def json2df(jsonFile: str|pathlib.Path, sceneVideoDimensions: list[int]) -> pd.D
         df['pup_diam_'+which_eye] = dfR['data.eye'+eye+'.pupildiameter']
 
     # binocular gaze data
-    df[data_files.get_column_labels('gaze_pos_3d',3) ] = pd.DataFrame(expander(dfR['data.gaze3d'].tolist(),3), index=dfR.index)
-    df[data_files.get_column_labels('gaze_pos_vid',2)] = pd.DataFrame(expander(dfR['data.gaze2d'].tolist(),2), index=dfR.index)
-    df.loc[:,'gaze_pos_vid_x'] *= sceneVideoDimensions[0]
-    df.loc[:,'gaze_pos_vid_y'] *= sceneVideoDimensions[1]
+    if 'data.gaze3d' in dfR.columns:
+        df[data_files.get_column_labels('gaze_pos_3d',3) ] = pd.DataFrame(expander(dfR['data.gaze3d'].tolist(),3), index=dfR.index)
+    if 'data.gaze2d' in dfR.columns:
+        df[data_files.get_column_labels('gaze_pos_vid',2)] = pd.DataFrame(expander(dfR['data.gaze2d'].tolist(),2), index=dfR.index)
+        df.loc[:,'gaze_pos_vid_x'] *= sceneVideoDimensions[0]
+        df.loc[:,'gaze_pos_vid_y'] *= sceneVideoDimensions[1]
+    else:
+        # if no gaze2d, add empty columns for gaze_pos_vid
+        df[data_files.get_column_labels('gaze_pos_vid',2)] = np.nan
 
     # return the dataframe
     return df
