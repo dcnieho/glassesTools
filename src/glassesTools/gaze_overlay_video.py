@@ -109,7 +109,7 @@ class VideoMaker:
         if wanted_frame_idx is not None and self._cache is not None and self._cache[1][1]==wanted_frame_idx:
             return self._cache
 
-        should_exit, frame, frame_idx, frame_ts = self.video.read_frame(report_gap=True, wanted_frame_idx=wanted_frame_idx)
+        should_exit, frame, frame_idx, frame_ts, frame_info = self.video.read_frame(report_gap=True, wanted_frame_idx=wanted_frame_idx)
 
         if should_exit:
             self._cache = Status.Finished, (None, None, None)
@@ -131,14 +131,14 @@ class VideoMaker:
         # for VFR video files
         if frame is None:
             # we don't have a valid frame or nothing to do, continue to next
-            self._cache = Status.Skip, (frame, frame_idx, frame_ts)
+            self._cache = Status.Skip, (frame, frame_idx, frame_ts, frame_info)
             return self._cache
 
-        self._cache = Status.Ok, (frame, frame_idx, frame_ts)
+        self._cache = Status.Ok, (frame, frame_idx, frame_ts, frame_info)
         return self._cache
 
     def process_one_frame(self) -> Status:
-        status, (frame, frame_idx, frame_ts) = self._read_frame()
+        status, (frame, frame_idx, frame_ts, frame_info) = self._read_frame()
         if status==Status.Finished:
             return status
         if frame is None:

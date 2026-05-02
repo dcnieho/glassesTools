@@ -31,7 +31,7 @@ def show_visualization(
     should_exit = False
     first_frame = True
     for frame_idx in range(max_frame_idx+1):
-        done, frame, frame_idx, frame_ts = cap.read_frame(report_gap=True)
+        done, frame, frame_idx, frame_ts, frame_info = cap.read_frame(report_gap=True)
         if first_frame and frame is not None:
             gui.set_frame_size(frame.shape, gui.main_window_id)
             first_frame = False
