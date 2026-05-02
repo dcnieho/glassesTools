@@ -112,7 +112,18 @@ class CV2VideoReader:
         self.nframes = len(self._ts)
         self.frame_idx = -1
         self._last_good_ts = (-1, -1., -1.)  # frame_idx, ts from opencv, ts from file
-        self._cache: tuple[bool, np.ndarray, int, float] = None # self._cache[2] is frame index
+        self._cache: tuple[bool, np.ndarray, int, float, dict[str,Any]] = None # self._cache[2] is frame index
+
+        # check if there is a file with info about each frame (such as size, and offset on the sensor if an ROI is used) and if so, read it and check it matches the number of frames in the video
+        frame_info_file = self.file.parent / (self.file.stem+'_frame_info.tsv')
+        if frame_info_file.is_file():
+            # read frame info from file
+            self.frame_info = pd.read_csv(frame_info_file, sep='\t', index_col='frame_idx')
+            if len(self.frame_info)!=self.nframes:
+                raise ValueError(f'The number of frames in the frame info file ({len(self.frame_info)}) does not match the number of frames in the video ({self.nframes}). Please check your files.')
+        else:
+            self.frame_info = None
+
 
     def __del__(self):
         self._cap.release()
@@ -123,8 +134,29 @@ class CV2VideoReader:
     def set_prop(self, cv2_prop, val):
         return self._cap.set(cv2_prop, val)
 
+    def has_offsets(self):
+        return self.frame_info is not None and 'offset_x' in self.frame_info.columns and 'offset_y' in self.frame_info.columns
+
+    def check_cam_params(self, cam_params: CameraParams):
+        if cam_params.resolution is None:
+            return
+        vid_height = int(self.get_prop(cv2.CAP_PROP_FRAME_HEIGHT))
+        vid_width = int(self.get_prop(cv2.CAP_PROP_FRAME_WIDTH))
+        if cam_params.resolution[0]!=vid_width or cam_params.resolution[1]!=vid_height:
+            if self.has_offsets():
+                # check the size of the frame in the frame info matches the video
+                fi_widths = self.frame_info['width'].unique()
+                fi_heights = self.frame_info['height'].unique()
+                if len(fi_widths)!=1 or len(fi_heights)!=1:
+                    raise ValueError(f"The frame info file has more than one frame width or height, which means that the recording resolution of the video changed during the recording. This should not be possible. Please check your files.")
+                if fi_widths[0]==vid_width and fi_heights[0]==vid_height:
+                    # everything consistent -> ok
+                    return
+                raise ValueError(f"The resolution of the video matches neither that set in the camera parameters ({cam_params.resolution[0]}x{cam_params.resolution[1]}), nor that expected from the frame info file ({fi_widths[0]}x{fi_heights[0]}). The video has resolution {vid_width}x{vid_height}. Please check your files.")
+            raise ValueError(f"The resolution of the video does not match that set in the camera parameters ({cam_params.resolution[0]}x{cam_params.resolution[1]}). The video has resolution {vid_width}x{vid_height}. In this situation, a frame info file should be provided (expected name {self.file.stem+'_frame_info.tsv'}) containing info about where the ROI was on the camera sensor. This file was not found or did not contain the expected information (columns 'offset_x', 'offset_y', 'width' and 'height'). Please check your files.")
+
     # NB: we seek by spooling, because I found seeking through setting cv2.CAP_PROP_POS_MSEC unreliable
-    def read_frame(self, report_gap=False, wanted_frame_idx:int=None) -> tuple[bool, np.ndarray, int, float]:
+    def read_frame(self, report_gap=False, wanted_frame_idx:int=None) -> tuple[bool, np.ndarray, int, float, dict[str,Any]]:
         if wanted_frame_idx!=None:
             if wanted_frame_idx<0 or wanted_frame_idx>=self.nframes:
                 raise ValueError(f'wanted_frame_idx ({wanted_frame_idx}) out of bounds ([0-{self.nframes-1}])')
@@ -152,7 +184,7 @@ class CV2VideoReader:
             # check if we're done. Can't trust ret==False to indicate we're at end of video, as
             # it may also return False for some corrupted frames that we can just read past
             if not ret and (self.frame_idx==0 or self.frame_idx/self.nframes>.99):
-                self._cache = True, None, None, None
+                self._cache = True, None, None, None, {}
                 return self._cache
 
             # keep going
@@ -174,9 +206,9 @@ class CV2VideoReader:
             if self.frame_idx==wanted_frame_idx:
                 if not ret or frame is None:
                     # we might not have a valid frame, but we're not done yet
-                    self._cache = False, None,  self.frame_idx, ts_from_list
+                    self._cache = False, None,  self.frame_idx, ts_from_list, {}
                 else:
-                    self._cache = False, frame, self.frame_idx, ts_from_list
+                    self._cache = False, frame, self.frame_idx, ts_from_list, {} if self.frame_info is None or self.frame_idx not in self.frame_info.index else self.frame_info.loc[self.frame_idx].to_dict()
                 return self._cache
 
     def _find_closest_idx(self, time: float, times: np.ndarray) -> int:

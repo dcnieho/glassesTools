@@ -183,6 +183,8 @@ class Estimator:
         self.video_ts   = frame_timestamp_file if isinstance(frame_timestamp_file,timestamps.VideoTimestamps) else timestamps.VideoTimestamps(frame_timestamp_file)
         self.video      = ocv.CV2VideoReader(video_file, self.video_ts.timestamps)
         self.cam_params = camera_calibration_file if isinstance(camera_calibration_file,ocv.CameraParams) else ocv.CameraParams.read_from_file(camera_calibration_file)
+        # check video uses the full sensor size, as we assume this for the pose estimation (e.g. for correct handling of distortion)
+        self.video.check_cam_params(self.cam_params)
 
         self.plane_functions    : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray]]] = {}
         self.plane_intervals    : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]]     = {}
