@@ -299,14 +299,14 @@ class Estimator:
                 self.estimate_homography(object_points, img_points)
         return pose
 
-    def process_one_frame(self, wanted_frame_idx:int = None) -> tuple[Status, dict[str, Pose], dict[str, marker.Pose], dict[str, tuple[int, typing.Any]], tuple[np.ndarray, int, float]]:
+    def process_one_frame(self, wanted_frame_idx:int = None) -> tuple[Status, dict[str, Pose], dict[str, marker.Pose], dict[str, tuple[int, typing.Any]], tuple[np.ndarray, int, float, dict[str, typing.Any]]]:
         if self._first_frame and self.has_gui:
             self.gui.set_playing(True)
 
         if wanted_frame_idx is not None and self._cache is not None and self._cache[4][1]==wanted_frame_idx:
             return self._cache
 
-        should_exit, frame, frame_idx, frame_ts = self.video.read_frame(report_gap=True, wanted_frame_idx=wanted_frame_idx)
+        should_exit, frame, frame_idx, frame_ts, frame_info = self.video.read_frame(report_gap=True, wanted_frame_idx=wanted_frame_idx)
 
         if should_exit or (self.allow_early_exit and \
             (
@@ -314,7 +314,7 @@ class Estimator:
                 (not self.individual_marker_intervals or intervals.beyond_last_interval(frame_idx, self.individual_marker_intervals)) and \
                 (not self.extra_proc_intervals        or intervals.beyond_last_interval(frame_idx, self.extra_proc_intervals))
             )):
-            self._cache = Status.Finished, None, None, None, (None, None, None)
+            self._cache = Status.Finished, None, None, None, (None, None, None, None)
             return self._cache
         if self.progress_updater:
             self.progress_updater()
@@ -327,7 +327,7 @@ class Estimator:
             requests = self.gui.get_requests()
             for r,_ in requests:
                 if r=='exit':   # only requests we need to handle
-                    self._cache = Status.Finished, None, None, None, (None, None, None)
+                    self._cache = Status.Finished, None, None, None, (None, None, None, None)
                     return self._cache
                 if r=='close':
                     self.has_gui = False
@@ -345,7 +345,7 @@ class Estimator:
             if self.has_gui:
                 # do update timeline of the viewers
                 self.gui.update_image(None, frame_ts/1000., frame_idx)
-            self._cache = Status.Skip, None, None, None, (frame, frame_idx, frame_ts)
+            self._cache = Status.Skip, None, None, None, (frame, frame_idx, frame_ts, frame_info)
             return self._cache
 
         pose_out                : dict[str, Pose]                   = {}
@@ -411,7 +411,7 @@ class Estimator:
         if self.has_gui:
             self.gui.update_image(frame, frame_ts/1000., frame_idx)
 
-        self._cache = Status.Ok, pose_out, individual_marker_out, extra_processing_out, (frame, frame_idx, frame_ts)
+        self._cache = Status.Ok, pose_out, individual_marker_out, extra_processing_out, (frame, frame_idx, frame_ts, frame_info)
         return self._cache
 
     def process_video(self) -> tuple[dict[str, list[Pose]], dict[_T, list[marker.Pose]], dict[str, list[tuple[int, typing.Any]]]]:
