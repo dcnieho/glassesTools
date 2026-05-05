@@ -31,11 +31,10 @@ def openCVPolylines(img, pts, isClosed, color, thickness, sub_pixel_fac):
     if np.all([not math.isnan(x) and abs(x)<np.iinfo(np.intc).max for x in pts.flatten()]):
         cv2.polylines(img, [pts], isClosed, color, thickness, lineType=cv2.LINE_AA, shift=int(math.log2(sub_pixel_fac)))
 
-def openCVFrameAxis(img, cam_params: ocv.CameraParams, rvec,  tvec,  arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.], offsetX=0, offsetY=0):
+def openCVFrameAxis(img, cam_params: ocv.CameraParams, rvec,  tvec,  arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.], ROI_offset=[0.,0.]):
     # same as the openCV function, but with anti-aliasing for a nicer image if subPixelFac>1
     points = np.vstack((np.zeros((1,3)), arm_length*np.eye(3)))+np.vstack(4*[np.asarray(position)])
-    cam_points = transforms.project_points(points, cam_params, rot_vec=rvec, trans_vec=tvec)
-    offset = np.array([offsetX, offsetY])
+    cam_points = transforms.project_points(points, cam_params, rot_vec=rvec, trans_vec=tvec, ROI_offset=ROI_offset)
     # z-sort them
     RMat = cv2.Rodrigues(rvec)[0]
     RtMat = np.hstack((RMat, tvec.reshape(3,1)))
@@ -44,7 +43,7 @@ def openCVFrameAxis(img, cam_params: ocv.CameraParams, rvec,  tvec,  arm_length,
     # draw
     colors = ((0, 0, 255), (0, 255, 0), (255, 0, 0))
     for i in order:
-        openCVLine(img, cam_points[0].flatten()-offset, cam_points[i+1].flatten()-offset, colors[i], thickness, sub_pixel_fac)
+        openCVLine(img, cam_points[0].flatten(), cam_points[i+1].flatten(), colors[i], thickness, sub_pixel_fac)
 
 def arucoDetectedMarkers(img,corners,ids,border_color=(0,255,0), draw_IDs = True, sub_pixel_fac=1, special_highlight = None):
     if special_highlight is None:
