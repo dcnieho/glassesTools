@@ -62,16 +62,21 @@ def show_visualization(
         if show_planes:
             ref_img = {p: planes[p].get_ref_image(400) for p in planes}
 
+        if 'offset_x' in frame_info and 'offset_y' in frame_info:
+            ROI_offset = (frame_info['offset_x'], frame_info['offset_y'])
+        else:
+            ROI_offset = (0,0)
+
         if frame_idx in head_gazes:
             for gaze_head in head_gazes[frame_idx]:
                 # draw gaze point on scene video
-                gaze_head.draw(frame, cam_params, sub_pixel_fac)
+                gaze_head.draw(frame, cam_params, sub_pixel_fac, ROI_offset=ROI_offset)
 
         # draw plane gazes on video and plane
         for p in planes:
             if frame_idx in plane_gazes[p]:
                 for gaze_world in plane_gazes[p][frame_idx]:
-                    gaze_world.draw_on_world_video(frame, cam_params, sub_pixel_fac, None if not p in poses or not frame_idx in poses[p] else poses[p][frame_idx])
+                    gaze_world.draw_on_world_video(frame, cam_params, ROI_offset, sub_pixel_fac, None if not p in poses or not frame_idx in poses[p] else poses[p][frame_idx])
                     if show_planes:
                         gaze_world.draw_on_plane(ref_img[p], planes[p], sub_pixel_fac)
 

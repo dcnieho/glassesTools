@@ -146,12 +146,17 @@ class VideoMaker:
             frame = np.zeros(self._res,'uint8')
 
         # draw gaze
+        if 'offset_x' in frame_info and 'offset_y' in frame_info:
+            ROI_offset = (frame_info['offset_x'], frame_info['offset_y'])
+        else:
+            ROI_offset = (0,0)
         if frame_idx in self.gaze:
             for g in self.gaze[frame_idx]:
                 g.draw(frame, self.cam_params, sub_pixel_fac=self.sub_pixel_fac,
                        clr=self.vid_pos_color, radius=self.vid_pos_radius, thickness=self.vid_pos_thickness,
                        draw_3d_gaze_point=self.world_pos_color is not None,
-                       world_clr=self.world_pos_color, world_radius=self.world_pos_radius, world_thickness=self.world_pos_thickness)
+                       world_clr=self.world_pos_color, world_radius=self.world_pos_radius, world_thickness=self.world_pos_thickness,
+                       ROI_offset=ROI_offset)
 
         # now that all processing is done, handle gui
         if self.has_gui:
