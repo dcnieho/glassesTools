@@ -48,12 +48,12 @@ class Gaze:
         self.gaze_dir_r   : np.ndarray  = gaze_dir_r
         self.gaze_ori_r   : np.ndarray  = gaze_ori_r
 
-    def draw(self, img:np.ndarray, camera_params:ocv.CameraParams=None, sub_pixel_fac=1, clr=(0,255,0), draw_3d_gaze_point=True, world_clr=(0,255,255), radius=8, world_radius=5, thickness=2, world_thickness=-1):
+    def draw(self, img:np.ndarray, camera_params:ocv.CameraParams=None, sub_pixel_fac=1, clr=(0,255,0), draw_3d_gaze_point=True, world_clr=(0,255,255), radius=8, world_radius=5, thickness=2, world_thickness=-1, ROI_offset=[0.,0.]):
         drawing.openCVCircle(img, self.gaze_pos_vid, radius, clr, thickness, sub_pixel_fac)
         # draw 3D gaze point as well, usually coincides with 2D gaze point, but not always. E.g. the Adhawk MindLink may
         # apply a correction for parallax error to the projected gaze point using the vergence signal.
         if draw_3d_gaze_point and self.gaze_pos_3d is not None and camera_params is not None and camera_params.has_intrinsics():
-            a = transforms.project_points(np.array(self.gaze_pos_3d).reshape(1,3), camera_params, rot_vec=camera_params.rotation_vec, trans_vec=camera_params.position).flatten()
+            a = transforms.project_points(np.array(self.gaze_pos_3d).reshape(1,3), camera_params, rot_vec=camera_params.rotation_vec, trans_vec=camera_params.position, ROI_offset=ROI_offset).flatten()
             drawing.openCVCircle(img, a, world_radius, world_clr, world_thickness, sub_pixel_fac)
 
 

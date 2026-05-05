@@ -99,11 +99,11 @@ class Gaze:
                     gaze_point = (gaze_point[0]+gaze_point[1])/2
         return gaze_point
 
-    def draw_on_world_video(self, img, camera_params: ocv.CameraParams, sub_pixel_fac=1, pose: pose.Pose=None,
+    def draw_on_world_video(self, img, camera_params: ocv.CameraParams, ROI_offset: tuple[int, int]=(0,0), sub_pixel_fac=1, pose: pose.Pose=None,
                             clr_vidPos=(255,255,0), clr_world_pos=(255,0,255), clr_left=(0,0,255), clr_right=(255,0,0), clr_average=(255,0,255)):
         # project to camera, display
         def _project(pos):
-            return transforms.project_points(pos.reshape(1,3), camera_params).flatten()
+            return transforms.project_points(pos.reshape(1,3), camera_params, ROI_offset=ROI_offset).flatten()
         def _draw(img,cam_pos,sz,clr):
             if not math.isnan(cam_pos[0]):
                 drawing.openCVCircle(img, cam_pos, sz, clr, -1, sub_pixel_fac)
@@ -113,7 +113,7 @@ class Gaze:
         if not camera_params.has_intrinsics():
             if pose is not None and pose.homography_successful():
                 # gaze position on plane by homography
-                _draw(img,pose.plane_to_cam_homography(self.gazePosPlane2D_vidPos_homography,camera_params),3,clr_vidPos)
+                _draw(img,pose.plane_to_cam_homography(self.gazePosPlane2D_vidPos_homography,camera_params,ROI_offset),3,clr_vidPos)
             # rest requires camera cal, so return
             return
 
