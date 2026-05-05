@@ -73,10 +73,10 @@ class Pose:
     def pose_successful(self):
         return self.R_vec is not None and self.T_vec is not None
 
-    def draw_frame_axis(self, frame, camera_params: ocv.CameraParams, arm_length, sub_pixel_fac = 8):
+    def draw_frame_axis(self, frame, camera_params: ocv.CameraParams, arm_length, sub_pixel_fac = 8, ROI_offset=[0.,0.]):
         if not camera_params.has_intrinsics():
             return
-        drawing.openCVFrameAxis(frame, camera_params, self.R_vec, self.T_vec, arm_length, 3, sub_pixel_fac)
+        drawing.openCVFrameAxis(frame, camera_params, self.R_vec, self.T_vec, arm_length, 3, sub_pixel_fac, ROI_offset=ROI_offset)
 
 
 def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,Pose]:
