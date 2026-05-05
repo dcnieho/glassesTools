@@ -31,7 +31,7 @@ def openCVPolylines(img, pts, isClosed, color, thickness, sub_pixel_fac):
     if np.all([not math.isnan(x) and abs(x)<np.iinfo(np.intc).max for x in pts.flatten()]):
         cv2.polylines(img, [pts], isClosed, color, thickness, lineType=cv2.LINE_AA, shift=int(math.log2(sub_pixel_fac)))
 
-def openCVFrameAxis(img, cam_params: ocv.CameraParams, rvec,  tvec,  arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.], ROI_offset=[0.,0.]):
+def openCVFrameAxis(img, cam_params: ocv.CameraParams, rvec,  tvec,  arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.], ROI_offset=(0,0)):
     # same as the openCV function, but with anti-aliasing for a nicer image if subPixelFac>1
     points = np.vstack((np.zeros((1,3)), arm_length*np.eye(3)))+np.vstack(4*[np.asarray(position)])
     cam_points = transforms.project_points(points, cam_params, rot_vec=rvec, trans_vec=tvec, ROI_offset=ROI_offset)
