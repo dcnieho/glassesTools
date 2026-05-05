@@ -58,59 +58,81 @@ def apply_homography(points, H):
     return cv2.perspectiveTransform(points.astype('float').reshape((-1,1,2)),H).reshape((-1,2))
 
 
-def distort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
+def distort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams, ROI_offset: np.ndarray[tuple[typing.Literal[2]], np.dtype[np.float64]]=None) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
     if np.all(np.isnan(points_cam)):
         return np.full_like(points_cam, np.nan)
+
+    points_cam = points_cam.reshape((-1,2)).astype('float')
+    if ROI_offset is not None:
+        points_cam += ROI_offset
 
     if cam_params.has_opencv_camera():
         # unproject, ignoring distortion as this is an undistorted point
         points_w = cv2.undistortPoints(points_cam.astype('float'), cam_params.camera_mtx, np.zeros((1, 5)))
         # reproject, applying distortion
-        return cv2.projectPoints(cv2.convertPointsToHomogeneous(points_w), np.zeros((1, 1, 3)), np.zeros((1, 1, 3)), cam_params.camera_mtx, cam_params.distort_coeffs)[0].reshape((-1,2))
+        points_cam_d = cv2.projectPoints(cv2.convertPointsToHomogeneous(points_w), np.zeros((1, 1, 3)), np.zeros((1, 1, 3)), cam_params.camera_mtx, cam_params.distort_coeffs)[0].reshape((-1,2))
     elif cam_params.has_colmap_camera():
         # unproject, ignoring distortion as this is an undistorted point
         points_w = cam_params.colmap_camera_no_distortion.cam_from_img(points_cam.reshape((-1,2)))
         if points_w.shape[1]==2:
             points_w = np.c_[points_w, np.ones(len(points_w))]
         # reproject, applying distortion
-        return cam_params.colmap_camera.img_from_cam(points_w)
+        points_cam_d = cam_params.colmap_camera.img_from_cam(points_w)
     else:
         return np.full_like(points_cam, np.nan)
 
-def undistort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
+    if ROI_offset is not None:
+        points_cam_d -= ROI_offset
+
+    return points_cam_d
+
+def undistort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams, ROI_offset: np.ndarray[tuple[typing.Literal[2]], np.dtype[np.float64]]=None) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
     if np.all(np.isnan(points_cam)):
         return np.full_like(points_cam, np.nan)
 
+    points_cam = points_cam.reshape((-1,2)).astype('float')
+    if ROI_offset is not None:
+        points_cam += ROI_offset
+
     if cam_params.has_opencv_camera():
-        return cv2.undistortPoints(points_cam.astype('float'), cam_params.camera_mtx, cam_params.distort_coeffs, P=cam_params.camera_mtx).reshape((-1,2)) # P=cameraMatrix to reproject to camera
+        points_cam_und = cv2.undistortPoints(points_cam, cam_params.camera_mtx, cam_params.distort_coeffs, P=cam_params.camera_mtx).reshape((-1,2)) # P=cameraMatrix to reproject to camera
     elif cam_params.has_colmap_camera():
         # unproject, removing distortion
-        points_w = cam_params.colmap_camera.cam_from_img(points_cam.reshape((-1,2)))
+        points_w = cam_params.colmap_camera.cam_from_img(points_cam)
         if points_w.shape[1]==2:
             points_w = np.c_[points_w, np.ones(len(points_w))]
         # reproject, without applying distortion
-        return cam_params.colmap_camera_no_distortion.img_from_cam(points_w)
+        points_cam_und = cam_params.colmap_camera_no_distortion.img_from_cam(points_w)
     else:
         return np.full_like(points_cam, np.nan)
 
-def unproject_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams) -> np.ndarray[tuple[M, typing.Literal[3]], np.dtype[np.float64]]:
+    if ROI_offset is not None:
+        points_cam_und -= ROI_offset
+
+    return points_cam_und
+
+def unproject_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]], cam_params: ocv.CameraParams, ROI_offset: np.ndarray[tuple[typing.Literal[2]], np.dtype[np.float64]]=None) -> np.ndarray[tuple[M, typing.Literal[3]], np.dtype[np.float64]]:
     if np.all(np.isnan(points_cam)):
         return np.full((points_cam.shape[0],3), np.nan)
 
+    points_cam = points_cam.reshape((-1,2)).astype('float')
+    if ROI_offset is not None:
+        points_cam += ROI_offset
+
     if cam_params.has_opencv_camera():
-        points_w = cv2.undistortPoints(points_cam.reshape((-1,2)).astype('float'), cam_params.camera_mtx, cam_params.distort_coeffs).reshape((-1,2))
+        points_w = cv2.undistortPoints(points_cam, cam_params.camera_mtx, cam_params.distort_coeffs).reshape((-1,2))
         return cv2.convertPointsToHomogeneous(points_w).reshape((-1,3))
     elif cam_params.has_colmap_camera():
-        return cv2.convertPointsToHomogeneous(cam_params.colmap_camera.cam_from_img(points_cam.reshape((-1,2)))).reshape((-1,3))
+        return cv2.convertPointsToHomogeneous(cam_params.colmap_camera.cam_from_img(points_cam)).reshape((-1,3))
     else:
         return np.full((points_cam.shape[0],3), np.nan)
 
-def project_points(points_world: np.ndarray[tuple[M, typing.Literal[3]], np.dtype[np.float64]], cam_params: ocv.CameraParams, ignore_distortion=False, rot_vec: np.ndarray[tuple[typing.Literal[3]], np.dtype[np.float64]]=None, trans_vec: np.ndarray[tuple[typing.Literal[3]], np.dtype[np.float64]]=None) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
+def project_points(points_world: np.ndarray[tuple[M, typing.Literal[3]], np.dtype[np.float64]], cam_params: ocv.CameraParams, ignore_distortion=False, rot_vec: np.ndarray[tuple[typing.Literal[3]], np.dtype[np.float64]]=None, trans_vec: np.ndarray[tuple[typing.Literal[3]], np.dtype[np.float64]]=None, ROI_offset: np.ndarray[tuple[typing.Literal[2]], np.dtype[np.float64]]=None) -> np.ndarray[tuple[M, typing.Literal[2]], np.dtype[np.float64]]:
     if np.all(np.isnan(points_world)):
         return np.full((points_world.shape[0],2), np.nan)
 
     if cam_params.has_opencv_camera():
-        return cv2.projectPoints(points_world.astype('float'),
+        img_points = cv2.projectPoints(points_world.astype('float'),
                                  np.zeros((1, 1, 3)) if rot_vec is None else rot_vec,
                                  np.zeros((1, 1, 3)) if trans_vec is None else trans_vec,
                                  cam_params.camera_mtx,
@@ -121,11 +143,16 @@ def project_points(points_world: np.ndarray[tuple[M, typing.Literal[3]], np.dtyp
             RtMat = np.hstack((RMat, trans_vec.reshape(3,1)))
             points_world = np.matmul(RtMat,cv2.convertPointsToHomogeneous(points_world.reshape((-1,3))).reshape((-1,4)).T).T
         if ignore_distortion:
-            return cam_params.colmap_camera_no_distortion.img_from_cam(points_world.reshape((-1,3)))
+            img_points = cam_params.colmap_camera_no_distortion.img_from_cam(points_world.reshape((-1,3)))
         else:
-            return cam_params.colmap_camera.img_from_cam(points_world.reshape((-1,3))).reshape((-1,2))
+            img_points = cam_params.colmap_camera.img_from_cam(points_world.reshape((-1,3))).reshape((-1,2))
     else:
         return np.full((points_world.shape[0],2), np.nan)
+
+    if ROI_offset is not None:
+        img_points -= ROI_offset
+
+    return img_points
 
 
 def intersect_plane_ray(plane_normal, plane_point, ray_direction, ray_point, epsilon=1e-6):
