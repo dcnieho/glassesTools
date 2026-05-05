@@ -194,7 +194,7 @@ class Detector:
         self._det = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(self.dictionary_id),
                                             detector_params, refine_params)
 
-    def detect_markers(self, image: cv2.UMat, camera_params: ocv.CameraParams) -> tuple[dict[str,dict[str]],dict[str],dict[str],list[np.ndarray]]:
+    def detect_markers(self, image: cv2.UMat, frame_info: dict, camera_params: ocv.CameraParams) -> tuple[dict[str,dict[str]],dict[str],dict[str],list[np.ndarray]]:
         img_points, ids, rejected_img_points = self._detect_markers(image, self._det)
 
         # For each plane, refine detected markers (eliminates markers not part of the plane, adds missing markers to the poster)
@@ -203,7 +203,7 @@ class Detector:
             if ids is not None:
                 pl_img_points, pl_ids = filter_detections(img_points, ids, self._plane_marker_ids[p])
                 ok, corners_consistent, ids_consistent, rejected_indices = filter_board_duplicates(
-                    self._boards[p], pl_img_points, pl_ids, camera_params)
+                    self._boards[p], pl_img_points, pl_ids, frame_info, camera_params)
                 if ok:
                     if rejected_indices:
                         rejected_img_points += tuple([img_points[i] for i in rejected_indices])
@@ -214,7 +214,7 @@ class Detector:
                 if len(pl_ids)>self.planes[p]['min_num_markers']:
                     pl_img_points, pl_ids, rejected_img_points, recovered_ids = \
                         self._refine_detection(image, pl_img_points, pl_ids, rejected_img_points,
-                                            self._det, self._boards[p], camera_params)
+                                            self._det, self._boards[p], frame_info, camera_params)
 
                 out_planes[p] = dict(zip(['img_points', 'ids', 'recovered_ids'],(pl_img_points, pl_ids, recovered_ids)))
             else:
@@ -237,8 +237,8 @@ class Detector:
             ids = None
         return img_points, ids, rejected_img_points
 
-    def _refine_detection(self, image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, camera_params: ocv.CameraParams):
-        return refine_detection(image, detected_corners, detected_ids, rejected_corners, det, board, camera_params)
+    def _refine_detection(self, image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, frame_info: dict, camera_params: ocv.CameraParams):
+        return refine_detection(image, detected_corners, detected_ids, rejected_corners, det, board, frame_info, camera_params)
 
     def _filter_detections(self, img_points: list[np.ndarray], ids: np.ndarray, expected_ids: list[np.ndarray], keep_expected=True):
         return filter_detections(img_points, ids, expected_ids, keep_expected)
@@ -396,59 +396,59 @@ class Manager:
         # aruco detection so that each detector is run only once on a frame
         for p in self.planes:
             estimator.add_plane(p,
-                                lambda pn, fi, fr, cp: self._detect_plane(pn, fi, fr, cp),
+                                lambda pn, fi, fr, finf, cp: self._detect_plane(pn, fi, fr, finf, cp),
                                 self.plane_proc_intervals[p],
-                                lambda pn, fi, fr, _: self._visualize_plane(pn, fi, fr))
+                                lambda pn, fi, fr, finf, _: self._visualize_plane(pn, fi, fr, finf))
         for m in self.individual_markers:
             estimator.add_individual_marker(m,
-                                            lambda k, fi, fr, cp: self._detect_individual_marker(k, fi, fr, cp),
+                                            lambda k, fi, fr, finf, cp: self._detect_individual_marker(k, fi, fr, finf, cp),
                                             self.individual_markers_proc_intervals[m],
-                                            lambda k, fi, fr, _: self._visualize_individual_marker(k, fi, fr))
+                                            lambda k, fi, fr, finf, _: self._visualize_individual_marker(k, fi, fr, finf))
 
-    def _detect_plane(self, plane_name: str, frame_idx: int, frame: np.ndarray, camera_parameters: ocv.CameraParams):
+    def _detect_plane(self, plane_name: str, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams):
         if plane_name not in self._plane_to_detector:
             raise ValueError(f'The plane {plane_name} is not known')
         aruco_dict_id = self._plane_to_detector[plane_name]
-        detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, frame, camera_parameters)
+        detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, frame, frame_info, camera_parameters)
         if not detect_tuple[0] or plane_name not in detect_tuple[0] or not detect_tuple[0][plane_name]:
             return None, None
         return self._detectors[aruco_dict_id].get_matching_image_board_points(plane_name, detect_tuple)
 
-    def _detect_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray, camera_parameters: ocv.CameraParams):
+    def _detect_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams):
         if mark not in self.individual_markers:
             raise ValueError(f'The individual marker {marker.marker_ID_to_str(mark)} is not known')
-        detect_tuple = self._get_detector_cache(mark.aruco_dict_id, frame_idx, frame, camera_parameters)
+        detect_tuple = self._get_detector_cache(mark.aruco_dict_id, frame_idx, frame, frame_info, camera_parameters)
         if not detect_tuple[1] or detect_tuple[1]['ids'] is None or mark.m_id not in detect_tuple[1]['ids']:
             return None, None
         return self._detectors[mark.aruco_dict_id].get_individual_marker_points(mark.m_id, detect_tuple)
 
-    def _get_detector_cache(self, aruco_dict_id: int, frame_idx: int, frame: np.ndarray, camera_parameters: ocv.CameraParams):
+    def _get_detector_cache(self, aruco_dict_id: int, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams):
         if aruco_dict_id not in self._det_cache or self._det_cache[aruco_dict_id][0]!=frame_idx:
             if frame is None:
                 return None
-            detect_tuple = self._detectors[aruco_dict_id].detect_markers(frame, camera_parameters)
+            detect_tuple = self._detectors[aruco_dict_id].detect_markers(frame, frame_info, camera_parameters)
             self._det_cache[aruco_dict_id] = (frame_idx, detect_tuple)
         return self._det_cache[aruco_dict_id][1]
 
-    def _visualize_plane(self, plane_name: str, frame_idx: int, frame: np.ndarray):
+    def _visualize_plane(self, plane_name: str, frame_idx: int, frame: np.ndarray, frame_info: dict):
         if plane_name not in self._plane_to_detector:
             raise ValueError(f'The plane {plane_name} is not known')
         aruco_dict_id = self._plane_to_detector[plane_name]
         if aruco_dict_id in self._last_viz_frame_idx and self._last_viz_frame_idx[aruco_dict_id]==frame_idx:
             # nothing to do, already drawn
             return
-        detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, None, None)
+        detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, None, frame_info, None)
         if detect_tuple is not None:
             frame = self._detectors[aruco_dict_id].visualize(frame, detect_tuple, plane_marker_color=self._plane_marker_color, recovered_plane_marker_color=self._recovered_plane_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
             self._last_viz_frame_idx[aruco_dict_id] = frame_idx
 
-    def _visualize_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray):
+    def _visualize_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray, frame_info: dict):
         if mark not in self.individual_markers:
             raise ValueError(f'The individual marker {marker.marker_ID_to_str(mark)} is not known')
         if mark.aruco_dict_id in self._last_viz_frame_idx and self._last_viz_frame_idx[mark.aruco_dict_id]==frame_idx:
             # nothing to do, already drawn
             return
-        detect_tuple = self._get_detector_cache(mark.aruco_dict_id, frame_idx, None, None)
+        detect_tuple = self._get_detector_cache(mark.aruco_dict_id, frame_idx, None, frame_info, None)
         if detect_tuple is not None:
             frame = self._detectors[mark.aruco_dict_id].visualize(frame, detect_tuple, plane_marker_color=self._plane_marker_color, recovered_plane_marker_color=self._recovered_plane_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
             self._last_viz_frame_idx[mark.aruco_dict_id] = frame_idx
@@ -460,7 +460,7 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     board_corner_points = np.pad(board_corner_points,((0,0),(0,0),(0,1)),'constant', constant_values=(0.,0.)) # Nx4x2 -> Nx4x3 (at Z=0 to all points)
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
 
-def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, camera_parameters: ocv.CameraParams):
+def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, frame_info: dict, camera_parameters: ocv.CameraParams):
     img_points, ids, rejected_img_points, _ = det.refineDetectedMarkers(
             image = image, board = board,
             detectedCorners = detected_corners, detectedIds = detected_ids, rejectedCorners = rejected_corners,
@@ -561,13 +561,14 @@ def _estimate_board_pose(
     board: cv2.aruco.Board,
     corners_list: list[np.ndarray],
     ids: np.ndarray,
+    frame_info: dict,
     camera_params: ocv.CameraParams
 ) -> tuple[bool, np.ndarray | None, np.ndarray | None]:
     """INTERNAL: Estimate pose using all detections. Returns (ok, rvec, tvec)."""
     objP, imgP = board.matchImagePoints(corners_list, ids)
     if len(objP) == 0:
         return False, None, None
-    retval, rvec, tvec, _ = pose.estimate_pose(objP, imgP, camera_params)
+    retval, rvec, tvec, _ = pose.estimate_pose(objP, imgP, frame_info, camera_params)
     if retval <= 0:
         return False, None, None
     return True, rvec, tvec
@@ -576,6 +577,7 @@ def filter_board_duplicates(
     board: cv2.aruco.Board,
     corners: list[np.ndarray],
     ids: np.ndarray,
+    frame_info: dict,
     camera_params: ocv.CameraParams,
     *,
     min_markers: int = 2,
@@ -636,10 +638,15 @@ def filter_board_duplicates(
     # Prepare an array form of ids for fast slicing
     ids_arr = ids.reshape(-1, 1)
 
-    best_err = float("inf")
-    best_indices: list[int] = []
+    if 'offset_x' in frame_info and 'offset_y' in frame_info:
+        # if we have a ROI, need to add the offset to the image points to get correct pose estimation
+        ROI_offset = np.array([frame_info['offset_x'], frame_info['offset_y']])
+    else:
+        ROI_offset = np.array([0., 0.])
 
     # Iterate all choices, one index from each duplicate group
+    best_err = float("inf")
+    best_indices: list[int] = []
     for choice in itertools.product(*dup_groups):
         # Selected detections = singles + one per duplicated ID group
         selected = singles + list(choice)
@@ -652,7 +659,7 @@ def filter_board_duplicates(
         sel_corners = [corners[i] for i in selected]
         sel_ids = ids_arr[selected]  # shape (K,1)
 
-        retval, rvec, tvec = _estimate_board_pose(board, sel_corners, sel_ids, camera_params)
+        retval, rvec, tvec = _estimate_board_pose(board, sel_corners, sel_ids, frame_info, camera_params)
         if retval <= 0:
             # Pose failed; skip this combination
             continue
@@ -668,7 +675,7 @@ def filter_board_duplicates(
                 # Board doesn't define this ID; skip (shouldn't happen if detections are on the same board)
                 continue
             obj4x3 = board_map[mid]  # (4,3)
-            proj4x2 = transforms.project_points(obj4x3, camera_params, rot_vec=rvec, trans_vec=tvec)
+            proj4x2 = transforms.project_points(obj4x3, camera_params, rot_vec=rvec, trans_vec=tvec, ROI_offset=ROI_offset)
 
             obs4x2 = _corners_4x2(corners[i])
             err = _mean_corner_error_projected(obs4x2, proj4x2, test_rotations=test_corner_rotations)

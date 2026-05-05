@@ -186,20 +186,20 @@ class Estimator:
         # check video uses the full sensor size, as we assume this for the pose estimation (e.g. for correct handling of distortion)
         self.video.check_cam_params(self.cam_params)
 
-        self.plane_functions    : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray]]] = {}
+        self.plane_functions    : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], tuple[np.ndarray,np.ndarray]]] = {}
         self.plane_intervals    : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]]     = {}
-        self.plane_visualizers  : dict[str, typing.Callable[[str,int,np.ndarray,np.ndarray], None]|None]= {}
+        self.plane_visualizers  : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray], None]|None]= {}
 
-        self.individual_marker_functions    : dict[_T, typing.Callable[[_T,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray|None]]] = {}
+        self.individual_marker_functions    : dict[_T, typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], tuple[np.ndarray,np.ndarray|None]]] = {}
         self.individual_marker_intervals    : dict[_T, tuple[annotation.EventType, list[int]|list[list[int]]]]      = {}
-        self.individual_marker_visualizers  : dict[_T, typing.Callable[[_T,int,np.ndarray,np.ndarray], None]|None]  = {}
+        self.individual_marker_visualizers  : dict[_T, typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],np.ndarray], None]|None]  = {}
 
-        self.extra_proc_functions   : dict[str, typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], tuple]] = {}
+        self.extra_proc_functions   : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams,typing.Any], tuple]] = {}
         self.extra_proc_intervals   : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None]= {}
         self.extra_proc_parameters  : dict[str, dict[str,typing.Any]]                                       = {}
-        self.extra_proc_visualizers : dict[str, typing.Callable[[str,np.ndarray,int,typing.Any], None]|None]= {}
+        self.extra_proc_visualizers : dict[str, typing.Callable[[str,np.ndarray,dict[str,typing.Any],int,typing.Any], None]|None]= {}
 
-        self._cache: tuple[Status, dict[str, Pose], dict[_T, marker.Pose], dict[str, tuple[int, typing.Any]], tuple[np.ndarray, int, float]] = None  # self._cache[4][1] is frame number
+        self._cache: tuple[Status, dict[str, Pose], dict[_T, marker.Pose], dict[str, tuple[int, typing.Any]], tuple[np.ndarray, int, float, dict[str,typing.Any]]] = None  # self._cache[4][1] is frame number
 
         self.gui                    : video_player.GUI          = None
         self.has_gui                                            = False
@@ -280,23 +280,23 @@ class Estimator:
                int(self.video.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)), \
                    self.video.get_prop(cv2.CAP_PROP_FPS)
 
-    def estimate_pose(self, object_points: np.ndarray, img_points: np.ndarray, flags=cv2.SOLVEPNP_ITERATIVE) -> tuple[int, np.ndarray, np.ndarray, float]:
-        return estimate_pose(object_points, img_points, self.cam_params, flags)
+    def estimate_pose(self, frame_info: dict, object_points: np.ndarray, img_points: np.ndarray, flags=cv2.SOLVEPNP_ITERATIVE) -> tuple[int, np.ndarray, np.ndarray, float]:
+        return estimate_pose(object_points, img_points, frame_info, self.cam_params, flags)
 
-    def estimate_homography(self, object_points: np.ndarray, img_points: np.ndarray) -> tuple[int, np.ndarray]:
-        return estimate_homography(object_points, img_points, self.cam_params)
+    def estimate_homography(self, frame_info: dict, object_points: np.ndarray, img_points: np.ndarray) -> tuple[int, np.ndarray]:
+        return estimate_homography(object_points, img_points, frame_info, self.cam_params)
 
     # higher level functions for detecting + pose estimation
-    def estimate_pose_and_homography(self, frame_idx: int, object_points: np.ndarray, img_points: np.ndarray) -> tuple[Pose, dict[str]]:
+    def estimate_pose_and_homography(self, frame_idx: int, frame_info: dict, object_points: np.ndarray, img_points: np.ndarray) -> tuple[Pose, dict[str]]:
         pose = Pose(frame_idx)
         if object_points is not None and img_points is not None and img_points.shape[0]>=4: # at least four image points needed
             # get camera pose
             pose.pose_N_points, pose.pose_R_vec, pose.pose_T_vec, pose.pose_reprojection_error = \
-                self.estimate_pose(object_points, img_points)
+                self.estimate_pose(frame_info, object_points, img_points)
 
             # also get homography (direct image plane to plane in world transform)
             pose.homography_N_points, pose.homography_mat = \
-                self.estimate_homography(object_points, img_points)
+                self.estimate_homography(frame_info, object_points, img_points)
         return pose
 
     def process_one_frame(self, wanted_frame_idx:int = None) -> tuple[Status, dict[str, Pose], dict[str, marker.Pose], dict[str, tuple[int, typing.Any]], tuple[np.ndarray, int, float, dict[str, typing.Any]]]:
@@ -351,33 +351,34 @@ class Estimator:
         pose_out                : dict[str, Pose]                   = {}
         individual_marker_out   : dict[_T , marker.Pose]            = {}
         extra_processing_out    : dict[str, tuple[int, typing.Any]] = {}
+        ROI_offset = [frame_info['offset_x'], frame_info['offset_y']] if 'offset_x' in frame_info and 'offset_y' in frame_info else [0., 0.]
         if planes_for_this_frame:
             # detect fiducials
             plane_points: dict[str, tuple[np.ndarray,np.ndarray]] = {}
             for p in planes_for_this_frame:
-                det_output = self.plane_functions[p](p, frame_idx, frame, self.cam_params)
+                det_output = self.plane_functions[p](p, frame_idx, frame, frame_info, self.cam_params)
                 if det_output[0] is not None:
                     plane_points[p] = det_output
             # determine pose
             for p in plane_points:
-                pose_out[p] = self.estimate_pose_and_homography(frame_idx, *plane_points[p])
+                pose_out[p] = self.estimate_pose_and_homography(frame_idx, frame_info, *plane_points[p])
 
         if indiv_markers_for_this_frame:
             # detect fiducials
             indiv_marker_points: dict[_T, tuple[np.ndarray,np.ndarray]] = {}
             for i in indiv_markers_for_this_frame:
-                det_output = self.individual_marker_functions[i](i, frame_idx, frame, self.cam_params)
+                det_output = self.individual_marker_functions[i](i, frame_idx, frame, frame_info, self.cam_params)
                 if det_output[1] is not None:   # object points may not be available (e.g. when marker size is not set), so check for image points
                     indiv_marker_points[i] = det_output
             # determine pose, if wanted
             for i in indiv_marker_points:
                 mpose = marker.Pose(frame_idx)
                 if indiv_marker_points[i][0] is not None:   # object points may not be available (e.g. when marker size is not set). If so, skip pose estimation
-                    _, mpose.R_vec, mpose.T_vec, _ = self.estimate_pose(*indiv_marker_points[i], flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                    _, mpose.R_vec, mpose.T_vec, _ = self.estimate_pose(frame_info, *indiv_marker_points[i], flags=cv2.SOLVEPNP_IPPE_SQUARE)
                 individual_marker_out[i] = mpose
 
         for e in extra_processing_for_this_frame:
-            eproc = self.extra_proc_functions[e](e, frame_idx, frame, self.cam_params, **self.extra_proc_parameters[e])
+            eproc = self.extra_proc_functions[e](e, frame_idx, frame, frame_info, self.cam_params, **self.extra_proc_parameters[e])
             if eproc is not None:
                 extra_processing_out[e] = (frame_idx, eproc)
 
@@ -388,25 +389,25 @@ class Estimator:
                 for p in plane_points:
                     if self.plane_visualizers[p] is None:
                         continue
-                    self.plane_visualizers[p](p, frame_idx, frame, plane_points[p][0])
+                    self.plane_visualizers[p](p, frame_idx, frame, frame_info, plane_points[p][0])
             if indiv_markers_for_this_frame:
                 for i in indiv_marker_points:
                     if self.individual_marker_visualizers[i] is None:
                         continue
-                    self.individual_marker_visualizers[i](i, frame_idx, frame, indiv_marker_points[i][0])
+                    self.individual_marker_visualizers[i](i, frame_idx, frame, frame_info, indiv_marker_points[i][0])
             for e in extra_processing_for_this_frame:
                 if self.show_extra_processing_output and self.extra_proc_visualizers[e] and e in extra_processing_out:
-                    self.extra_proc_visualizers[e](e, frame, *extra_processing_out[e])
+                    self.extra_proc_visualizers[e](e, frame, frame_info, *extra_processing_out[e])
 
             # now also draw pose, if wanted
             if self.plane_axis_arm_length:
                 for p in pose_out:
                     if pose_out[p].pose_successful():
-                        pose_out[p].draw_frame_axis(frame, self.cam_params, self.plane_axis_arm_length, 3, sub_pixel_fac=self.sub_pixel_fac)
+                        pose_out[p].draw_frame_axis(frame, self.cam_params, self.plane_axis_arm_length, 3, sub_pixel_fac=self.sub_pixel_fac, ROI_offset=ROI_offset)
             if self.individual_marker_axis_arm_length:
                 for i in individual_marker_out:
                     if individual_marker_out[i].pose_successful():
-                        individual_marker_out[i].draw_frame_axis(frame, self.cam_params, self.individual_marker_axis_arm_length, self.sub_pixel_fac)
+                        individual_marker_out[i].draw_frame_axis(frame, self.cam_params, self.individual_marker_axis_arm_length, self.sub_pixel_fac, ROI_offset=ROI_offset)
 
         if self.has_gui:
             self.gui.update_image(frame, frame_ts/1000., frame_idx)
@@ -434,12 +435,15 @@ class Estimator:
 
         return poses_out, individual_markers_out, extra_processing_out
 
-def estimate_pose(object_points: np.ndarray, img_points: np.ndarray, cam_params: ocv.CameraParams, flags=cv2.SOLVEPNP_ITERATIVE) -> tuple[int, np.ndarray, np.ndarray, float]:
+def estimate_pose(object_points: np.ndarray, img_points: np.ndarray, frame_info: dict, cam_params: ocv.CameraParams, flags=cv2.SOLVEPNP_ITERATIVE) -> tuple[int, np.ndarray, np.ndarray, float]:
     # NB: N_markers also flags success of the pose estimation: it will also be 0 if not successful or not possible (e.g., missing intrinsics)
     N_points, R_vec, T_vec, reprojection_error = 0, None, None, -1.
     if object_points is None or not cam_params.has_intrinsics() or object_points.shape[0]<4:   # minimum 4 points needed
         return N_points, R_vec, T_vec, reprojection_error
 
+    if 'offset_x' in frame_info and 'offset_y' in frame_info:
+        # if we have a ROI, need to add the offset to the image points to get correct pose estimation
+        img_points = img_points + np.array([frame_info['offset_x'], frame_info['offset_y']])
     if cam_params.has_opencv_camera():
         N_solutions, R_vec, T_vec, reprojection_error = \
             cv2.solvePnPGeneric(object_points, img_points, cam_params.camera_mtx, cam_params.distort_coeffs, np.empty(1), np.empty(1), flags=flags)
@@ -459,15 +463,21 @@ def estimate_pose(object_points: np.ndarray, img_points: np.ndarray, cam_params:
             reprojection_error = np.nan
     return N_points, R_vec[0], T_vec[0], reprojection_error
 
-def estimate_homography(object_points: np.ndarray, img_points: np.ndarray, cam_params: ocv.CameraParams) -> tuple[int, np.ndarray]:
+def estimate_homography(object_points: np.ndarray, img_points: np.ndarray, frame_info: dict, cam_params: ocv.CameraParams) -> tuple[int, np.ndarray]:
     # NB: N_points also flags success of the pose estimation: it is 0 if not successful
     N_points, H = 0, None
     if object_points is None or object_points.shape[0]<4:   # minimum 4 points needed
         return N_points, H
 
+    # add offset if we have a ROI so that undistortion is correct
+    if 'offset_x' in frame_info and 'offset_y' in frame_info:
+        ROI_offset = np.array([frame_info['offset_x'], frame_info['offset_y']])
+    else:
+        ROI_offset = np.array([0., 0.])
+
     # use undistorted marker corners if possible
     if cam_params is not None and cam_params.has_intrinsics():
-        img_points = transforms.undistort_points(img_points.reshape((-1,2)),cam_params).reshape((-1,1,2))
+        img_points = transforms.undistort_points(img_points.reshape((-1,2)), cam_params, ROI_offset=ROI_offset).reshape((-1,1,2))
 
     H = transforms.estimate_homography(object_points, img_points)
     if H is not None:
