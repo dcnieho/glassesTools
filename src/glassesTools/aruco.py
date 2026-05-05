@@ -461,6 +461,13 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
 
 def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, frame_info: dict, camera_parameters: ocv.CameraParams):
+    # if there is an ROI_offset  set in frame_info, take it into account when refining
+    if (has_offset := 'offset_x' in frame_info and 'offset_y' in frame_info):
+        offset = np.array([frame_info['offset_x'], frame_info['offset_y']], dtype=np.float32)
+        detected_corners = [c+offset for c in detected_corners]
+        rejected_corners = [c+offset for c in rejected_corners]
+
+    # do refine
     img_points, ids, rejected_img_points, _ = det.refineDetectedMarkers(
             image = image, board = board,
             detectedCorners = detected_corners, detectedIds = detected_ids, rejectedCorners = rejected_corners,
@@ -476,6 +483,11 @@ def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_c
     recovered_ids = None
     if detected_ids is not None and ids is not None:
         recovered_ids = np.array(list(set(ids.flatten())-set(detected_ids.flatten()))).reshape((-1,1))
+
+    # Remove the offset from the refined corners before returning
+    if has_offset:
+        img_points = [c-offset for c in img_points]
+        rejected_img_points = [c-offset for c in rejected_img_points]
 
     return img_points, ids, rejected_img_points, recovered_ids
 
