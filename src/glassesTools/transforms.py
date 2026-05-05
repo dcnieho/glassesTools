@@ -2,7 +2,7 @@ import numpy as np
 import cv2
 import typing
 
-from . import marker, ocv
+from . import ocv
 
 M = typing.TypeVar("M", bound=int)
 N = typing.TypeVar("N", bound=int)
@@ -44,27 +44,6 @@ def dist_from_bbox(x,y,bbox):
     dy = pos[1] if pos[1]<0. else pos[1]-1
     return abs(max(dx,dy))
 
-
-def estimate_homography_known_marker(known: list[marker.Marker], detected_corners, detected_IDs):
-    # collect matching corners in image and in world
-    img_points = []
-    obj_points = []
-    detected_IDs = detected_IDs.flatten()
-    if len(detected_IDs) != len(detected_corners):
-        raise ValueError('unexpected number of IDs (%d) given number of corner arrays (%d)' % (len(detected_IDs),len(detected_corners)))
-    for i in range(0, len(detected_IDs)):
-        if detected_IDs[i] in known:
-            dc = detected_corners[i]
-            if dc.shape[0]==1 and dc.shape[1]==4:
-                dc = np.reshape(dc,(4,1,2))
-            img_points.extend([x.flatten() for x in dc])
-            obj_points.extend(known[detected_IDs[i]].corners)
-
-    if len(img_points) < 4:
-        return None
-
-    # compute Homography
-    return estimate_homography(obj_points, img_points)
 
 def estimate_homography(obj_points, img_points):
     img_points = np.float32(img_points)
