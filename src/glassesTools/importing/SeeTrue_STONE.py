@@ -80,7 +80,7 @@ def getRecordingInfo(inputDir: str|pathlib.Path) -> list[Recording]:
             continue
 
         # get sequence number
-        _,recording = r.stem.split('_')
+        _,recording = r.stem.split('_',1)
 
         # check there is a matching scenevideo
         # this can be a series of pictures in a folder (preferred)
