@@ -178,6 +178,8 @@ def copySeeTrueRecording(inputDir: pathlib.Path, outputDir: pathlib.Path, recInf
         frameTimestamps=frameTimestamps.drop(frameTimestamps[frameTimestamps.frame_idx < frames[ 0]].index)
         # 2.2 remove frame timestamps that are beyond last frame for which we have an image
         frameTimestamps=frameTimestamps.drop(frameTimestamps[frameTimestamps.frame_idx > frames[-1]].index)
+        if frameTimestamps.empty:
+            raise ValueError('Frame indices (column "Scene picture number") are completely outside the range of frames in the images folder. Cannot proceed.')
         # 2.3 add frame timestamps for images we have before first eye data
         if frames[ 0] < frameTimestamps.iloc[ 0,:].to_numpy()[0]:
             nFrames = frameTimestamps.iloc[ 0,:].to_numpy()[0] - frames[ 0]
