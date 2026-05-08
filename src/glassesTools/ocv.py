@@ -96,6 +96,37 @@ class CameraParams:
         return (self.rotation_vec is not None) and (self.position is not None)
 
 
+class FrameInfoHandler:
+    def __init__(self, frame_info_file: pathlib.Path):
+        self.data: pd.DataFrame | dict[str,Any] | None = None
+        self.has_offsets = False
+        self.single_entry = False
+        # check if there is a file with info about each frame (such as size, and offset on the sensor if an ROI is used) and if so, read it and check it matches the number of frames in the video
+        if frame_info_file.is_file():
+            # read frame info from file
+            self.data = pd.read_csv(frame_info_file, sep='\t', index_col='frame_idx')
+            self.has_offsets = 'offset_x' in self.data.columns and 'offset_y' in self.data.columns
+            # check if it is a file with a single entry that applies to all frames
+            if len(self.data)==1 and self.data.index[0]=='all':
+                self.data = self.data.to_dict(orient='index')['all']
+                self.single_entry = True
+
+    def get_frame_info(self, frame_idx: int) -> dict[str,Any]:
+        if self.data is None:
+            return {}
+        if self.single_entry:
+            return self.data
+        if frame_idx not in self.data.index:
+            return {}
+        return self.data.loc[frame_idx].to_dict()
+
+    def get_widths_heights(self) -> tuple[np.ndarray, np.ndarray] | tuple[None, None]:
+        if self.data is None or 'width' not in self.data.columns or 'height' not in self.data.columns:
+            return None, None
+        if self.single_entry:
+            return np.array([self.data['width']]), np.array([self.data['height']])
+        return self.data['width'].unique(), self.data['height'].unique()
+
 class CV2VideoReader:
     def __init__(self, file: str|pathlib.Path, timestamps: list|np.ndarray|pd.DataFrame):
         self.file = pathlib.Path(file)
@@ -116,13 +147,9 @@ class CV2VideoReader:
 
         # check if there is a file with info about each frame (such as size, and offset on the sensor if an ROI is used) and if so, read it and check it matches the number of frames in the video
         frame_info_file = self.file.parent / (self.file.stem+'_frame_info.tsv')
-        if frame_info_file.is_file():
-            # read frame info from file
-            self.frame_info = pd.read_csv(frame_info_file, sep='\t', index_col='frame_idx')
-            if len(self.frame_info)!=self.nframes:
-                raise ValueError(f'The number of frames in the frame info file ({len(self.frame_info)}) does not match the number of frames in the video ({self.nframes}). Please check your files.')
-        else:
-            self.frame_info = None
+        self.frame_info = FrameInfoHandler(frame_info_file)
+        if self.frame_info.data is not None and not self.frame_info.single_entry and len(self.frame_info.data)!=self.nframes:
+            raise ValueError(f'The number of frames in the frame info file ({len(self.frame_info.data)}) does not match the number of frames in the video ({self.nframes}). Please check your files.')
 
 
     def __del__(self):
@@ -135,7 +162,7 @@ class CV2VideoReader:
         return self._cap.set(cv2_prop, val)
 
     def has_offsets(self):
-        return self.frame_info is not None and 'offset_x' in self.frame_info.columns and 'offset_y' in self.frame_info.columns
+        return self.frame_info.has_offsets
 
     def check_cam_params(self, cam_params: CameraParams):
         if cam_params.resolution is None:
@@ -145,8 +172,9 @@ class CV2VideoReader:
         if cam_params.resolution[0]!=vid_width or cam_params.resolution[1]!=vid_height:
             if self.has_offsets():
                 # check the size of the frame in the frame info matches the video
-                fi_widths = self.frame_info['width'].unique()
-                fi_heights = self.frame_info['height'].unique()
+                fi_widths, fi_heights = self.frame_info.get_widths_heights()
+                if fi_widths is None or fi_heights is None:
+                    raise ValueError(f"The resolution of the video does not match that set in the camera parameters ({cam_params.resolution[0]}x{cam_params.resolution[1]}). The video has resolution {vid_width}x{vid_height}. In this situation, a frame info file should be provided (expected name {self.file.stem+'_frame_info.tsv'}) containing info about where the ROI was on the camera sensor. This file was found but did not contain the expected information (columns 'offset_x', 'offset_y' are found, but columns 'width' and/or 'height' are missing). Please check your files.)")
                 if len(fi_widths)!=1 or len(fi_heights)!=1:
                     raise ValueError(f"The frame info file has more than one frame width or height, which means that the recording resolution of the video changed during the recording. This should not be possible. Please check your files.")
                 if fi_widths[0]==vid_width and fi_heights[0]==vid_height:
@@ -208,7 +236,7 @@ class CV2VideoReader:
                     # we might not have a valid frame, but we're not done yet
                     self._cache = False, None,  self.frame_idx, ts_from_list, {}
                 else:
-                    self._cache = False, frame, self.frame_idx, ts_from_list, {} if self.frame_info is None or self.frame_idx not in self.frame_info.index else self.frame_info.loc[self.frame_idx].to_dict()
+                    self._cache = False, frame, self.frame_idx, ts_from_list, self.frame_info.get_frame_info(self.frame_idx)
                 return self._cache
 
     def _find_closest_idx(self, time: float, times: np.ndarray) -> int:
