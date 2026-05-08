@@ -832,6 +832,6 @@ class GUI:
             self._requests.extend(self._window_timeline[w].get_requests())
             imgui.end_child()
 
+        imgui.pop_style_var()
         if need_begin_end:
             imgui.end()
-        imgui.pop_style_var()
