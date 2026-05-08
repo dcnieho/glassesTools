@@ -8,6 +8,8 @@ import pycolmap
 import copy
 from typing import Any
 
+from . import naming
+
 
 class CameraParams:
     def __init__(self,
@@ -146,7 +148,7 @@ class CV2VideoReader:
         self._cache: tuple[bool, np.ndarray, int, float, dict[str,Any]] = None # self._cache[2] is frame index
 
         # check if there is a file with info about each frame (such as size, and offset on the sensor if an ROI is used) and if so, read it and check it matches the number of frames in the video
-        frame_info_file = self.file.parent / (self.file.stem+'_frame_info.tsv')
+        frame_info_file = self.file.parent / (self.file.stem+naming.frame_info_suffix)
         self.frame_info = FrameInfoHandler(frame_info_file)
         if self.frame_info.data is not None and not self.frame_info.single_entry and len(self.frame_info.data)!=self.nframes:
             raise ValueError(f'The number of frames in the frame info file ({len(self.frame_info.data)}) does not match the number of frames in the video ({self.nframes}). Please check your files.')
