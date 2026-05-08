@@ -42,6 +42,6 @@ setuptools.setup(
     python_requires=">=3.11",
     install_requires=required,
     extras_require = {
-        'GUI':  ["imgui_bundle[opengl,glfw]==1.92.600"]
+        'GUI':  ["imgui_bundle[opengl,glfw]==1.92.700"]
     }
 )
