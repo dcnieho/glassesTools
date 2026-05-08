@@ -443,7 +443,7 @@ def estimate_pose(object_points: np.ndarray, img_points: np.ndarray, frame_info:
 
     if 'offset_x' in frame_info and 'offset_y' in frame_info:
         # if we have a ROI, need to add the offset to the image points to get correct pose estimation
-        img_points = img_points + np.array([frame_info['offset_x'], frame_info['offset_y']])
+        img_points = img_points + np.array([frame_info['offset_x'], frame_info['offset_y']], dtype=img_points.dtype)
     if cam_params.has_opencv_camera():
         N_solutions, R_vec, T_vec, reprojection_error = \
             cv2.solvePnPGeneric(object_points, img_points, cam_params.camera_mtx, cam_params.distort_coeffs, np.empty(1), np.empty(1), flags=flags)
@@ -471,9 +471,9 @@ def estimate_homography(object_points: np.ndarray, img_points: np.ndarray, frame
 
     # add offset if we have a ROI so that undistortion is correct
     if 'offset_x' in frame_info and 'offset_y' in frame_info:
-        ROI_offset = np.array([frame_info['offset_x'], frame_info['offset_y']])
+        ROI_offset = np.array([frame_info['offset_x'], frame_info['offset_y']], dtype=img_points.dtype)
     else:
-        ROI_offset = np.array([0., 0.])
+        ROI_offset = np.array([0., 0.], dtype=img_points.dtype)
 
     # use undistorted marker corners if possible
     if cam_params is not None and cam_params.has_intrinsics():

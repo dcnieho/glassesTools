@@ -64,6 +64,7 @@ def distort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtype[
 
     points_cam = points_cam.reshape((-1,2)).astype('float')
     if ROI_offset is not None:
+        ROI_offset = np.array(ROI_offset, dtype='float')
         points_cam += ROI_offset
 
     if cam_params.has_opencv_camera():
@@ -92,6 +93,7 @@ def undistort_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtyp
 
     points_cam = points_cam.reshape((-1,2)).astype('float')
     if ROI_offset is not None:
+        ROI_offset = np.array(ROI_offset, dtype='float')
         points_cam += ROI_offset
 
     if cam_params.has_opencv_camera():
@@ -117,7 +119,7 @@ def unproject_points(points_cam: np.ndarray[tuple[M, typing.Literal[2]], np.dtyp
 
     points_cam = points_cam.reshape((-1,2)).astype('float')
     if ROI_offset is not None:
-        points_cam += ROI_offset
+        points_cam += np.array(ROI_offset, dtype='float')
 
     if cam_params.has_opencv_camera():
         points_w = cv2.undistortPoints(points_cam, cam_params.camera_mtx, cam_params.distort_coeffs).reshape((-1,2))
@@ -150,7 +152,7 @@ def project_points(points_world: np.ndarray[tuple[M, typing.Literal[3]], np.dtyp
         return np.full((points_world.shape[0],2), np.nan)
 
     if ROI_offset is not None:
-        img_points -= ROI_offset
+        img_points -= np.array(ROI_offset, dtype='float')
 
     return img_points
 

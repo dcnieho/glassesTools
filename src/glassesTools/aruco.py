@@ -463,7 +463,7 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
 def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, frame_info: dict, camera_parameters: ocv.CameraParams):
     # if there is an ROI_offset  set in frame_info, take it into account when refining
     if (has_offset := 'offset_x' in frame_info and 'offset_y' in frame_info):
-        offset = np.array([frame_info['offset_x'], frame_info['offset_y']], dtype=np.float32)
+        offset = np.array([frame_info['offset_x'], frame_info['offset_y']], dtype=detected_corners[0].dtype if detected_corners else np.float32)
         detected_corners = [c+offset for c in detected_corners]
         rejected_corners = [c+offset for c in rejected_corners]
 
