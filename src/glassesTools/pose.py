@@ -326,7 +326,8 @@ class Estimator:
 
             requests = self.gui.get_requests()
             for r,_ in requests:
-                if r=='exit':   # only requests we need to handle
+                # only requests we need to handle
+                if r=='exit':
                     self._cache = Status.Finished, None, None, None, (None, None, None, None)
                     return self._cache
                 if r=='close':
