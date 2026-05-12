@@ -222,6 +222,7 @@ def getRecordingInfo(inputDir: str|pathlib.Path, device: EyeTracker) -> Recordin
             return None
         with open(file, 'r') as j:
             iInfo = json.load(j)
+        # NB for parsing this file: at least with Neon Player v6, the local export looks very similar to the cloud export, but the local export doesn't contain all the same fields. so be careful parsing
 
         # check this is for the expected device
         is_neon = 'Neon' in iInfo['android_device_name'] or 'frame_name' in iInfo
@@ -244,7 +245,8 @@ def getRecordingInfo(inputDir: str|pathlib.Path, device: EyeTracker) -> Recordin
             recInfo.firmware_version = f"{iInfo['pipeline_version']} ({iInfo['firmware_version'][0]}.{iInfo['firmware_version'][1]})"
         else:
             recInfo.firmware_version = iInfo['pipeline_version']
-        recInfo.participant = iInfo['wearer_name']
+        if 'wearer_name' in iInfo:  # NB: appears to be missing in Neon Player exports
+            recInfo.participant = iInfo['wearer_name']
 
     # we got a valid recording and at least some info if we got here
     # return what we've got
