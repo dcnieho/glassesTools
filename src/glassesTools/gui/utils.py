@@ -34,7 +34,7 @@ def draw_hover_text(hover_text: str, text="(?)", force=False, hovered_flags=imgu
     return False
 
 
-def draw_process_state(state: process_pool.State, have_hover_popup=True, progress: tuple[float,str]=None):
+def draw_process_state(state: process_pool.State, have_hover_popup=True, progress: tuple[float,str]|None=None):
     symbol_size = imgui.calc_text_size(ifa6.ICON_FA_CIRCLE)
     match state:
         case process_pool.State.Not_Run:
