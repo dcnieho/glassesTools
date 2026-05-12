@@ -6,6 +6,7 @@ import typing
 import threading
 import dataclasses
 import time
+import warnings
 
 from . import json, utils
 
@@ -165,6 +166,43 @@ class JobPayload(typing.NamedTuple):
     args:   tuple
     kwargs: dict
 
+
+@dataclasses.dataclass
+class JobWarning:
+    message: str
+    category: str
+    filename: str
+    lineno: int
+    line: str | None = None
+
+
+@dataclasses.dataclass
+class WarningStore:
+    warnings: list[JobWarning] = dataclasses.field(default_factory=list)
+
+    def append(self, warning: JobWarning):
+        self.warnings.append(warning)
+
+    def get(self) -> list[JobWarning]:
+        return list(self.warnings)
+
+
+def _run_with_warning_capture(fn: typing.Callable[..., typing.Any], warning_store, *args, **kwargs):
+    with warnings.catch_warnings():
+        warnings.simplefilter('always')
+
+        def _showwarning(message, category, filename, lineno, file=None, line=None):
+            warning_store.append(JobWarning(
+                message=str(message),
+                category=category.__name__,
+                filename=filename,
+                lineno=lineno,
+                line=line.rstrip() if line is not None else None,
+            ))
+
+        warnings.showwarning = _showwarning
+        return fn(*args, **kwargs)
+
 class _EMA(object):
     """
     Exponential moving average: smoothing to give progressively lower
@@ -268,6 +306,7 @@ class JobProgress:
     def set_finished(self):
         self.update(self.total-self.n)
 multiprocessing.managers.BaseManager.register('JobProgress', JobProgress)
+multiprocessing.managers.BaseManager.register('WarningStore', WarningStore)
 
 @dataclasses.dataclass
 class JobDescription(typing.Generic[_UserDataT]):
@@ -283,7 +322,14 @@ class JobDescription(typing.Generic[_UserDataT]):
     _pool_job_id:       typing.Optional[int]            = None
     _future:            typing.Optional[ProcessFuture]  = dataclasses.field(init=False, default=None)
     _final_state:       typing.Optional[State]          = dataclasses.field(init=False, default=None)
+    _warning_store:     typing.Optional[WarningStore]   = dataclasses.field(init=False, default=None)
     error:              typing.Optional[str]            = None
+
+    @property
+    def warnings(self) -> list[JobWarning]:
+        if self._warning_store is None:
+            return []
+        return self._warning_store.get()
 
     def get_state(self) -> State:
         if self._final_state is not None:
@@ -324,6 +370,7 @@ class JobScheduler(typing.Generic[_UserDataT]):
         with self._job_id_provider:
             job_id = self._job_id_provider.get_count()
         self.jobs[job_id] = JobDescription(user_data, payload, progress_indicator, done_callback, exclusive_id, priority, depends_on)
+        self.jobs[job_id]._warning_store = self._manager.WarningStore()
         self._pending_jobs.append(job_id)
         return job_id
 
@@ -397,7 +444,7 @@ class JobScheduler(typing.Generic[_UserDataT]):
                 extra_kwargs['progress_indicator'] = to_schedule.progress
 
             to_schedule._pool_job_id, to_schedule._future = \
-                self._pool.run(to_schedule.payload.fn, to_schedule.user_data, to_schedule.done_callback, *to_schedule.payload.args, **extra_kwargs, **to_schedule.payload.kwargs)
+                self._pool.run(_run_with_warning_capture, to_schedule.user_data, to_schedule.done_callback, to_schedule.payload.fn, to_schedule._warning_store, *to_schedule.payload.args, **extra_kwargs, **to_schedule.payload.kwargs)
             self._pending_jobs.remove(job_id)
             if to_schedule.exclusive_id is not None:
                 exclusive_ids.add(to_schedule.exclusive_id)
