@@ -40,14 +40,14 @@ class CameraParams:
             self.colmap_camera = pycolmap.Camera(colmap_camera_dict)
         elif self.has_opencv_camera():
             # turn into colmap camera
-            self.colmap_camera = pycolmap.Camera.create(0, pycolmap.CameraModelId.FULL_OPENCV, self.camera_mtx[0,0], *self.resolution)
+            self.colmap_camera = pycolmap.Camera.create_from_model_id(0, pycolmap.CameraModelId.FULL_OPENCV, self.camera_mtx[0,0], *self.resolution)
 
             cal_params = np.zeros((self.colmap_camera.extra_params_idxs()[-1]+1,))
             cal_params[self.colmap_camera.focal_length_idxs()]     = [self.camera_mtx[0,0], self.camera_mtx[1,1]]
             cal_params[self.colmap_camera.principal_point_idxs()]  = self.camera_mtx[0:2,2]
             if len(self.distort_coeffs)>len(self.colmap_camera.extra_params_idxs()):
                 self.colmap_camera = None
-                print(f'Warning: could not make colmap FULL_OPENCV camera as there are too many distortion parameters {len(self.distort_coeffs)}')
+                warnings.warn(f'Could not make colmap FULL_OPENCV camera as there are too many distortion parameters {len(self.distort_coeffs)}')
             else:
                 cal_params[self.colmap_camera.extra_params_idxs()[0:len(self.distort_coeffs)]] = self.distort_coeffs.flatten()
                 self.colmap_camera.params = cal_params
@@ -223,8 +223,8 @@ class CV2VideoReader:
                 # check for gap, and if there is a gap, fix up frame_idx if needed
                 if self._last_good_ts[0]!=-1 and ts_from_list-self._last_good_ts[2] < ocv_ts-self._last_good_ts[1]-1:  # little bit of leeway (1ms) for precision or mismatched timestamps
                     # we skipped some frames altogether, need to correct current frame_idx
-                    t_jump = ocv_ts-self._last_good_ts[1]   # compare OpenCV timestamps to get size of jump
-                    tss = self._ts-self._last_good_ts[2]     # apply jump to our own timestamps (so, we're robust to e.g. OpenCV ignoring the edit list)
+                    t_jump = ocv_ts-self._last_good_ts[1]       # compare OpenCV timestamps to get size of jump
+                    tss = self._ts-self._last_good_ts[2]        # apply jump to our own timestamps (so, we're robust to e.g. OpenCV ignoring the edit list)
                     # find best matching frame idx so we catch up with the jump
                     self.frame_idx = self._find_closest_idx(t_jump, tss)
                     ts_from_list = self._ts[self.frame_idx]
