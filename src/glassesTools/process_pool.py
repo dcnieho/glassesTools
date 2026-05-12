@@ -174,6 +174,7 @@ class JobWarning:
     filename: str
     lineno: int
     line: str | None = None
+    notified: bool = False
 
 
 @dataclasses.dataclass
@@ -185,6 +186,13 @@ class WarningStore:
 
     def get(self) -> list[JobWarning]:
         return list(self.warnings)
+
+    def get_unnotified(self) -> list[tuple[int, JobWarning]]:
+        return [(index, warning) for index, warning in enumerate(self.warnings) if not warning.notified]
+
+    def mark_notified(self, warning_index: int):
+        if 0 <= warning_index < len(self.warnings):
+            self.warnings[warning_index].notified = True
 
 
 def _run_with_warning_capture(fn: typing.Callable[..., typing.Any], warning_store, *args, **kwargs):
@@ -330,6 +338,15 @@ class JobDescription(typing.Generic[_UserDataT]):
         if self._warning_store is None:
             return []
         return self._warning_store.get()
+
+    def get_unnotified_warnings(self) -> list[tuple[int, JobWarning]]:
+        if self._warning_store is None:
+            return []
+        return self._warning_store.get_unnotified()
+
+    def mark_warning_notified(self, warning_index: int):
+        if self._warning_store is not None:
+            self._warning_store.mark_notified(warning_index)
 
     def get_state(self) -> State:
         if self._final_state is not None:
