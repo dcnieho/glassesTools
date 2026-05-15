@@ -203,6 +203,7 @@ class Estimator:
 
         self.gui                    : video_player.GUI          = None
         self.has_gui                                            = False
+        self.stop_gui_on_delete                                 = True
         self.allow_early_exit                                   = True
         self.progress_updater       : typing.Callable[[], None] = None
 
@@ -215,7 +216,7 @@ class Estimator:
         self._first_frame                                       = True
 
     def __del__(self):
-        if self.has_gui:
+        if self.has_gui and self.stop_gui_on_delete:
             self.gui.stop()
 
     def add_plane(self, plane: str,
@@ -257,10 +258,11 @@ class Estimator:
         self.extra_proc_parameters[name]= func_parameters
         self.extra_proc_visualizers[name]= visualizer
 
-    def attach_gui(self, gui: video_player.GUI, episodes: dict[str, list[int]] = None, window_id: int = None):
-        self.gui            = gui
-        self.has_gui        = self.gui is not None
-        self.do_visualize   = self.has_gui
+    def attach_gui(self, gui: video_player.GUI|None, episodes: dict[str, list[int]] = None, window_id: int = None, stop_gui_on_delete: bool = True):
+        self.gui                = gui
+        self.has_gui            = self.gui is not None
+        self.stop_gui_on_delete = stop_gui_on_delete
+        self.do_visualize       = self.has_gui
 
         if self.has_gui:
             self.gui.set_show_timeline(True, self.video_ts, episodes, window_id)
