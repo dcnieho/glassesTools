@@ -188,16 +188,16 @@ class Estimator:
 
         self.plane_functions    : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], tuple[np.ndarray,np.ndarray]]] = {}
         self.plane_intervals    : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]]     = {}
-        self.plane_visualizers  : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray], None]|None]= {}
+        self.plane_visualizers  : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None]= {}
 
         self.individual_marker_functions    : dict[_T, typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], tuple[np.ndarray,np.ndarray|None]]] = {}
         self.individual_marker_intervals    : dict[_T, tuple[annotation.EventType, list[int]|list[list[int]]]]      = {}
-        self.individual_marker_visualizers  : dict[_T, typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],np.ndarray], None]|None]  = {}
+        self.individual_marker_visualizers  : dict[_T, typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None]  = {}
 
         self.extra_proc_functions   : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams,typing.Any], tuple]] = {}
         self.extra_proc_intervals   : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None]= {}
         self.extra_proc_parameters  : dict[str, dict[str,typing.Any]]                                       = {}
-        self.extra_proc_visualizers : dict[str, typing.Callable[[str,np.ndarray,dict[str,typing.Any],int,typing.Any], None]|None]= {}
+        self.extra_proc_visualizers : dict[str, typing.Callable[[str,np.ndarray,dict[str,typing.Any],int,typing.Any|None], None]|None]= {}
 
         self._cache: tuple[Status, dict[str, Pose], dict[_T, marker.Pose], dict[str, tuple[int, typing.Any]], tuple[np.ndarray, int, float, dict[str,typing.Any]]] = None  # self._cache[4][1] is frame number
 
@@ -221,8 +221,8 @@ class Estimator:
 
     def add_plane(self, plane: str,
                   plane_function: typing.Callable[[str,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray]|None],
-                  processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]=None,
-                  plane_visualizer: typing.Callable[[str,int,np.ndarray,np.ndarray], None]=None):
+                  processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None=None,
+                  plane_visualizer: typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None=None):
         if not self._first_frame:
             raise RuntimeError(f'You cannot register planes once video processing has started')
         if plane in self.plane_functions:
@@ -233,8 +233,8 @@ class Estimator:
 
     def add_individual_marker(self, key: _T,
                               individual_marker_function: typing.Callable[[_T,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray|None|None]],
-                              processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]=None,
-                              individual_marker_visualizer: typing.Callable[[str,int,np.ndarray,np.ndarray], None]=None):
+                              processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None=None,
+                              individual_marker_visualizer: typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None=None):
         if not self._first_frame:
             raise RuntimeError(f'You cannot register individual markers once video processing has started')
         if key in self.individual_marker_functions:
@@ -248,7 +248,7 @@ class Estimator:
                                       processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None,
                                       func: typing.Callable[[str,int,np.ndarray,ocv.CameraParams,typing.Any], tuple],
                                       func_parameters: dict[str, typing.Any],
-                                      visualizer: typing.Callable[[str,np.ndarray,int,typing.Any], None]):
+                                      visualizer: typing.Callable[[str,np.ndarray,dict[str,typing.Any],int,typing.Any|None], None]):
         if not self._first_frame:
             raise RuntimeError(f'You cannot register extra processing functions once video processing has started')
         if name in self.extra_proc_functions:
@@ -355,9 +355,9 @@ class Estimator:
         individual_marker_out   : dict[_T , marker.Pose]            = {}
         extra_processing_out    : dict[str, tuple[int, typing.Any]] = {}
         ROI_offset = [frame_info['offset_x'], frame_info['offset_y']] if 'offset_x' in frame_info and 'offset_y' in frame_info else [0., 0.]
+        plane_points: dict[str, tuple[np.ndarray,np.ndarray]] = {}
         if planes_for_this_frame:
             # detect fiducials
-            plane_points: dict[str, tuple[np.ndarray,np.ndarray]] = {}
             for p in planes_for_this_frame:
                 det_output = self.plane_functions[p](p, frame_idx, frame, frame_info, self.cam_params)
                 if det_output[0] is not None:
@@ -366,9 +366,9 @@ class Estimator:
             for p in plane_points:
                 pose_out[p] = self.estimate_pose_and_homography(frame_idx, frame_info, *plane_points[p])
 
+        indiv_marker_points: dict[_T, tuple[np.ndarray,np.ndarray]] = {}
         if indiv_markers_for_this_frame:
             # detect fiducials
-            indiv_marker_points: dict[_T, tuple[np.ndarray,np.ndarray]] = {}
             for i in indiv_markers_for_this_frame:
                 det_output = self.individual_marker_functions[i](i, frame_idx, frame, frame_info, self.cam_params)
                 if det_output[1] is not None:   # object points may not be available (e.g. when marker size is not set), so check for image points
@@ -389,18 +389,21 @@ class Estimator:
         if self.do_visualize:
             # first draw all detection output
             if planes_for_this_frame:
-                for p in plane_points:
-                    if self.plane_visualizers[p] is None:
+                for p in planes_for_this_frame:
+                    plane_visualizer = self.plane_visualizers[p]
+                    if plane_visualizer is None:
                         continue
-                    self.plane_visualizers[p](p, frame_idx, frame, frame_info, plane_points[p][0])
+                    plane_visualizer(p, frame_idx, frame, frame_info, plane_points[p][0] if p in plane_points else None)
             if indiv_markers_for_this_frame:
-                for i in indiv_marker_points:
-                    if self.individual_marker_visualizers[i] is None:
+                for i in indiv_markers_for_this_frame:
+                    individual_marker_visualizer = self.individual_marker_visualizers[i]
+                    if individual_marker_visualizer is None:
                         continue
-                    self.individual_marker_visualizers[i](i, frame_idx, frame, frame_info, indiv_marker_points[i][0])
+                    individual_marker_visualizer(i, frame_idx, frame, frame_info, indiv_marker_points[i][0] if i in indiv_marker_points else None)
             for e in extra_processing_for_this_frame:
-                if self.show_extra_processing_output and self.extra_proc_visualizers[e] and e in extra_processing_out:
-                    self.extra_proc_visualizers[e](e, frame, frame_info, *extra_processing_out[e])
+                extra_proc_visualizer = self.extra_proc_visualizers[e]
+                if self.show_extra_processing_output and extra_proc_visualizer is not None:
+                    extra_proc_visualizer(e, frame, frame_info, frame_idx, extra_processing_out[e][1] if e in extra_processing_out else None)
 
             # now also draw pose, if wanted
             if self.plane_axis_arm_length:
