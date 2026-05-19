@@ -209,8 +209,8 @@ class Estimator:
 
         self.do_visualize                                       = False
         self.sub_pixel_fac                                      = 8
-        self.plane_axis_arm_length                              = 25
-        self.individual_marker_axis_arm_length                  = 25
+        self.plane_axis_arm_length                              = 25.
+        self.individual_marker_axis_arm_length                  = 25.
         self.show_extra_processing_output                       = True
 
         self._first_frame                                       = True
