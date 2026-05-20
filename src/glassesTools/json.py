@@ -55,6 +55,7 @@ class TypeEntry:
 
 TYPE_REGISTRY = []
 def register_type(entry: TypeEntry):
+    TYPE_REGISTRY[:] = [existing for existing in TYPE_REGISTRY if existing.reg_name != entry.reg_name]
     TYPE_REGISTRY.append(entry)
 register_type(TypeEntry(pathlib.Path,'pathlib.Path',str,lambda x: pathlib.Path(x)))
 register_type(TypeEntry(set,'builtin.set',list,lambda x: set(x)))
