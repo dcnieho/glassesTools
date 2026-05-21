@@ -6,6 +6,7 @@ import shutil
 import pathlib
 import json
 import csv
+import typing
 import cv2
 import pandas as pd
 import numpy as np
@@ -51,7 +52,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
     print('  Getting camera calibration...')
     if cam_cal_file is not None:
         shutil.copyfile(str(cam_cal_file), str(output_dir / naming.scene_camera_calibration_fname))
-        sceneVideoDimensions = np.array([1280, 720])
+        sceneVideoDimensions = [1280, 720]
     else:
         print('    !! No camera calibration provided! Defaulting to hardcoded')
         sceneVideoDimensions = getCameraHardcoded(output_dir)
@@ -167,7 +168,7 @@ def getCameraHardcoded(outputDir: str|pathlib.Path):
         fs.write(name=key,val=value)
     fs.release()
 
-    return camera['resolution']
+    return typing.cast(list[int], camera['resolution'].tolist())
 
 
 def formatGazeData(inputDir: str|pathlib.Path, sceneVideoDimensions: list[int], recInfo: Recording):
