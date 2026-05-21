@@ -6,6 +6,7 @@ Name of recording will be the name of the folder that is imported.
 import shutil
 import pathlib
 import pandas as pd
+import warnings
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
@@ -47,7 +48,7 @@ def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=N
     # check gaze data has a frame index column, and if not, make one
     gaze_data = pd.read_csv(output_dir/naming.gaze_data_fname, delimiter='\t')
     if 'frame_idx' not in gaze_data.columns:
-        print('    !! No frame index column found in gaze data, adding one based on timestamps...')
+        warnings.warn(f'No frame index column found in gaze data for recording {rec_info.name}, adding one based on timestamps...')
         if frameTimestamps is None:
             frameTimestamps = pd.read_csv(output_dir/naming.frame_timestamps_fname, delimiter='\t', index_col='frame_idx')
         # make frame index column by matching timestamps
@@ -60,7 +61,7 @@ def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=N
         raise RuntimeError('There are duplicate timestamps in the imported gaze data file, this is not supported. Please make sure each gaze sample has a unique timestamp.')
 
     if not gotCal:
-        print('    !! No camera calibration provided!')
+        warnings.warn(f'No camera calibration provided for recording {rec_info.name}, a recording with the {device_name} {EyeTracker.Generic.value} device!')
 
     if not rec_info.duration:
         # if duration not known, fill it

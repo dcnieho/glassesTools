@@ -13,6 +13,7 @@ import shutil
 import pathlib
 import pandas as pd
 import datetime
+import warnings
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
@@ -48,7 +49,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
     if cam_cal_file is not None:
         shutil.copyfile(cam_cal_file, output_dir / naming.scene_camera_calibration_fname)
     else:
-        print('    !! No camera calibration provided!')
+        warnings.warn(f'No camera calibration provided for recording {rec_info.name}, a recording with the {EyeTracker.Argus_ETVision.value} device!')
     print('  Prepping gaze data...')
     gazeDf, frameTimestamps = formatGazeData(source_dir, rec_info)
 

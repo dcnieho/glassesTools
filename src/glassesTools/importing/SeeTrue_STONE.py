@@ -13,6 +13,7 @@ import cv2
 import pandas as pd
 import numpy as np
 import av
+import warnings
 from fractions import Fraction
 
 from ..recording import Recording
@@ -57,7 +58,7 @@ def preprocessData(output_dir: str|pathlib.Path, source_dir: str|pathlib.Path=No
     if cam_cal_file is not None:
         shutil.copyfile(str(cam_cal_file), str(output_dir / naming.scene_camera_calibration_fname))
     else:
-        print('    !! No camera calibration provided! Defaulting to hardcoded')
+        warnings.warn(f'No camera calibration provided for recording {rec_info.name}, a recording with the {EyeTracker.SeeTrue_STONE.value} device! Will default to hardcoded calibration.')
         getCameraHardcoded(output_dir)
 
 

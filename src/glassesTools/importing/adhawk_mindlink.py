@@ -54,7 +54,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
         shutil.copyfile(str(cam_cal_file), str(output_dir / naming.scene_camera_calibration_fname))
         sceneVideoDimensions = [1280, 720]
     else:
-        print('    !! No camera calibration provided! Defaulting to hardcoded')
+        warnings.warn(f'No camera calibration provided for recording {rec_info.name}, a recording with the {EyeTracker.AdHawk_MindLink.value} device! Will default to hardcoded calibration.')
         sceneVideoDimensions = getCameraHardcoded(output_dir)
     print('  Prepping gaze data...')
     gazeDf, frameTimestamps = formatGazeData(source_dir, sceneVideoDimensions, rec_info)
