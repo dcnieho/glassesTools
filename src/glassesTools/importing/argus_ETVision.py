@@ -17,7 +17,7 @@ import warnings
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
-from .. import naming, timestamps, video_utils
+from .. import naming, process_pool, timestamps, video_utils
 
 
 def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False, cam_cal_file: str|pathlib.Path=None) -> Recording:
@@ -49,7 +49,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
     if cam_cal_file is not None:
         shutil.copyfile(cam_cal_file, output_dir / naming.scene_camera_calibration_fname)
     else:
-        warnings.warn(f'No camera calibration provided for recording {rec_info.name}, a recording with the {EyeTracker.Argus_ETVision.value} device!')
+        warnings.warn(f'No camera calibration provided for recording {rec_info.name}, a recording with the {EyeTracker.Argus_ETVision.value} device!', process_pool.ProcessingWarning)
     print('  Prepping gaze data...')
     gazeDf, frameTimestamps = formatGazeData(source_dir, rec_info)
 

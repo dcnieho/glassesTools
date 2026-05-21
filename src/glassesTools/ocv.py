@@ -8,7 +8,7 @@ import pycolmap
 import copy
 from typing import Any
 
-from . import naming
+from . import naming, process_pool
 
 
 class CameraParams:
@@ -47,7 +47,7 @@ class CameraParams:
             cal_params[self.colmap_camera.principal_point_idxs()]  = self.camera_mtx[0:2,2]
             if len(self.distort_coeffs)>len(self.colmap_camera.extra_params_idxs()):
                 self.colmap_camera = None
-                warnings.warn(f'Could not make colmap FULL_OPENCV camera as there are too many distortion parameters {len(self.distort_coeffs)}')
+                warnings.warn(f'Could not make colmap FULL_OPENCV camera as there are too many distortion parameters {len(self.distort_coeffs)}', process_pool.ProcessingWarning)
             else:
                 cal_params[self.colmap_camera.extra_params_idxs()[0:len(self.distort_coeffs)]] = self.distort_coeffs.flatten()
                 self.colmap_camera.params = cal_params
@@ -194,7 +194,7 @@ class CV2VideoReader:
             wanted_frame_idx = self.frame_idx+1
 
         if self.frame_idx>wanted_frame_idx:
-            warnings.warn(f'Requested frame ({wanted_frame_idx}) was earlier than current position of reader (frame {self.frame_idx}). Impossible to deliver because this video reader strictly advances forward. Returning last read frame', RuntimeWarning)
+            warnings.warn(f'Requested frame ({wanted_frame_idx}) was earlier than current position of reader (frame {self.frame_idx}). Impossible to deliver because this video reader strictly advances forward. Returning last read frame', process_pool.ProcessingWarning)
             # this condition can only occur if we've already read something and thus have a cache, so this check should never trigger
             if self._cache is None:
                 raise RuntimeError(f'No cache, unexpected failure mode, contact developer')

@@ -11,7 +11,7 @@ import warnings
 from ..recording import Recording
 from ..eyetracker import EyeTracker
 from .. import gaze_headref
-from .. import naming, video_utils
+from .. import naming, process_pool, video_utils
 
 def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, device_name: str=None, copy_scene_video = True, source_dir_as_relative_path = False, cam_cal_file: str|pathlib.Path=None) -> Recording:
     from . import check_folders, _store_data
@@ -48,7 +48,7 @@ def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=N
     # check gaze data has a frame index column, and if not, make one
     gaze_data = pd.read_csv(output_dir/naming.gaze_data_fname, delimiter='\t')
     if 'frame_idx' not in gaze_data.columns:
-        warnings.warn(f'No frame index column found in gaze data for recording {rec_info.name}, adding one based on timestamps...')
+        warnings.warn(f'No frame index column found in gaze data for recording {rec_info.name}, adding one based on timestamps...', process_pool.ProcessingWarning)
         if frameTimestamps is None:
             frameTimestamps = pd.read_csv(output_dir/naming.frame_timestamps_fname, delimiter='\t', index_col='frame_idx')
         # make frame index column by matching timestamps
@@ -61,7 +61,7 @@ def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=N
         raise RuntimeError('There are duplicate timestamps in the imported gaze data file, this is not supported. Please make sure each gaze sample has a unique timestamp.')
 
     if not gotCal:
-        warnings.warn(f'No camera calibration provided for recording {rec_info.name}, a recording with the {device_name} {EyeTracker.Generic.value} device!')
+        warnings.warn(f'No camera calibration provided for recording {rec_info.name}, a recording with the {device_name} {EyeTracker.Generic.value} device!', process_pool.ProcessingWarning)
 
     if not rec_info.duration:
         # if duration not known, fill it

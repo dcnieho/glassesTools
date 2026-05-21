@@ -14,7 +14,7 @@ import datetime
 
 from ..recording import Recording
 from ..eyetracker import EyeTracker
-from .. import naming, timestamps, video_utils
+from .. import naming, process_pool, timestamps, video_utils
 
 
 def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False, cam_cal_file: str|pathlib.Path=None) -> Recording:
@@ -54,7 +54,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
         shutil.copyfile(str(cam_cal_file), str(output_dir / naming.scene_camera_calibration_fname))
         sceneVideoDimensions = [1280, 720]
     else:
-        warnings.warn(f'No camera calibration provided for recording {rec_info.name}, a recording with the {EyeTracker.AdHawk_MindLink.value} device! Will default to hardcoded calibration.')
+        warnings.warn(f'No camera calibration provided for recording {rec_info.name}, a recording with the {EyeTracker.AdHawk_MindLink.value} device! Will default to hardcoded calibration.', process_pool.ProcessingWarning)
         sceneVideoDimensions = getCameraHardcoded(output_dir)
     print('  Prepping gaze data...')
     gazeDf, frameTimestamps = formatGazeData(source_dir, sceneVideoDimensions, rec_info)
