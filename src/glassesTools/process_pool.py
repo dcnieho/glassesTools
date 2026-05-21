@@ -167,6 +167,10 @@ class JobPayload(typing.NamedTuple):
     kwargs: dict
 
 
+class ProcessingWarning(UserWarning):
+    pass
+
+
 @dataclasses.dataclass
 class JobWarning:
     message: str
@@ -198,15 +202,19 @@ class WarningStore:
 def _run_with_warning_capture(fn: typing.Callable[..., typing.Any], warning_store, *args, **kwargs):
     with warnings.catch_warnings():
         warnings.simplefilter('always')
+        original_showwarning = warnings.showwarning
 
         def _showwarning(message, category, filename, lineno, file=None, line=None):
-            warning_store.append(JobWarning(
-                message=str(message),
-                category=category.__name__,
-                filename=filename,
-                lineno=lineno,
-                line=line.rstrip() if line is not None else None,
-            ))
+            if issubclass(category, ProcessingWarning):
+                warning_store.append(JobWarning(
+                    message=str(message),
+                    category=category.__name__,
+                    filename=filename,
+                    lineno=lineno,
+                    line=line.rstrip() if line is not None else None,
+                ))
+            else:
+                original_showwarning(message, category, filename, lineno, file=file, line=line)
 
         warnings.showwarning = _showwarning
         return fn(*args, **kwargs)
