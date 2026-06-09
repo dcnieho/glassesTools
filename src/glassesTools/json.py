@@ -57,6 +57,18 @@ TYPE_REGISTRY = []
 def register_type(entry: TypeEntry):
     TYPE_REGISTRY[:] = [existing for existing in TYPE_REGISTRY if existing.reg_name != entry.reg_name]
     TYPE_REGISTRY.append(entry)
-register_type(TypeEntry(pathlib.Path,'pathlib.Path',str,lambda x: pathlib.Path(x)))
+
+def _normalize_path_separators(path: str):
+    if path.startswith('\\\\'):
+        return path
+    return path.replace('\\','/')
+
+def _path_to_json(path: pathlib.Path):
+    return _normalize_path_separators(str(path))
+
+def _path_from_json(path: str):
+    return pathlib.Path(_normalize_path_separators(path))
+
+register_type(TypeEntry(pathlib.Path,'pathlib.Path',_path_to_json,_path_from_json))
 register_type(TypeEntry(set,'builtin.set',list,lambda x: set(x)))
 register_type(TypeEntry(tuple,'builtin.tuple',list,lambda x: tuple(x)))
