@@ -168,20 +168,28 @@ def write_dict_to_file(gazes: list[Gaze] | dict[int,list[Gaze]], file_name:str|p
 def from_head(poses:           pose.Pose , gazes_head:               gaze_headref.Gaze  , camera_params: ocv.CameraParams) ->               Gaze  : ...
 @typing.overload
 def from_head(poses: dict[int, pose.Pose], gazes_head: dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams, progress_updater: typing.Callable[[], None]=None) -> dict[int,list[Gaze]]: ...
+@typing.overload
+def from_head(poses: dict[int, list[pose.Pose]], gazes_head: dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams, progress_updater: typing.Callable[[], None]=None) -> dict[int,list[Gaze]]: ...
 
-def from_head(poses: pose.Pose|dict[int, pose.Pose], gazes: gaze_headref.Gaze|dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams, progress_updater: typing.Callable[[], None]=None) -> Gaze|dict[int,list[Gaze]]:
+def from_head(poses: pose.Pose|dict[int, pose.Pose]|dict[int, list[pose.Pose]], gazes: gaze_headref.Gaze|dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams, progress_updater: typing.Callable[[], None]=None) -> Gaze|dict[int,list[Gaze]]:
     if not isinstance(poses, dict):
         return _from_head_impl(poses, gazes, camera_params)
 
     world_gazes = {}
-    for frame_idx in poses:
-        if frame_idx in gazes:
-            world_gazes[frame_idx] = []
-            for gaze in gazes[frame_idx]:
-                gaze_world = _from_head_impl(poses[frame_idx], gaze, camera_params)
-                world_gazes[frame_idx].append(gaze_world)
-                if progress_updater:
-                    progress_updater()
+    for frame_idx in gazes:
+        if frame_idx not in poses:
+            continue
+        world_gazes[frame_idx] = []
+        for sample_idx, gaze in enumerate(gazes[frame_idx]):
+            this_pose = pose.get_sample_pose(poses, frame_idx, sample_idx, gaze.timestamp)
+            if this_pose is None:
+                continue
+            gaze_world = _from_head_impl(this_pose, gaze, camera_params)
+            world_gazes[frame_idx].append(gaze_world)
+            if progress_updater:
+                progress_updater()
+        if not world_gazes[frame_idx]:
+            del world_gazes[frame_idx]
     return world_gazes
 
 def _from_head_impl(pose: pose.Pose, gaze: gaze_headref.Gaze, camera_params: ocv.CameraParams) -> Gaze:

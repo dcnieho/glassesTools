@@ -9,7 +9,7 @@ from .. import data_types, gaze_worldref, naming, pose, transforms
 
 def compute(
         gazes: str|pathlib.Path|dict[int, list[gaze_worldref.Gaze]],
-        poses: str|pathlib.Path|dict[int, pose.Pose],
+        poses: str|pathlib.Path|dict[int, pose.Pose]|dict[int, list[pose.Pose]],
         marker_intervals: str|pathlib.Path|pd.DataFrame,
         validation_intervals: list[list[int]],
         targets: dict[int, np.ndarray],
@@ -30,7 +30,7 @@ def compute(
     if not isinstance(gazes, dict):
         gazes = gaze_worldref.read_dict_from_file(gazes,validation_intervals)
     if not isinstance(poses, dict):
-        poses = pose.read_dict_from_file(poses,validation_intervals, ts_column_suffixes=['VOR',''])
+        poses = pose.read_list_dict_from_file(poses,validation_intervals, ts_column_suffixes=['VOR',''])
     # prep targets
     targets_for_homography = {t_id: np.append(targets[t_id][0:2], distance_mm_for_homography) for t_id in targets}
 
@@ -76,7 +76,7 @@ def compute(
             q_data = np.logical_and(ts>=st, ts<=et)
 
             offset = np.full((np.count_nonzero(q_data),len(d_types),2), np.nan)
-            target_cam: dict[int,np.ndarray] = {}
+            target_cam: dict[int,dict[int,np.ndarray]] = {}
             for idt,dt in enumerate(d_types):
                 # get data
                 fields = data_types.get_world_gaze_fields_for_data_type(dt)
@@ -107,14 +107,17 @@ def compute(
                         vTarget = targets_for_homography[t]
                     else:
                         # use 3D vectors known given pose information
-                        if frame_idx not in poses:
+                        this_pose = pose.get_sample_pose(poses, frame_idx, timestamp=float(ts[i, 0]))
+                        if this_pose is None:
                             continue
                         if frame_idx not in target_cam:
-                            target_cam[frame_idx] = poses[frame_idx].world_frame_to_cam(targets[t])
+                            target_cam[frame_idx] = {}
+                        if i not in target_cam[frame_idx]:
+                            target_cam[frame_idx][i] = this_pose.world_frame_to_cam(targets[t])
 
                         # get vectors from origin to target and to gaze point
                         vGaze   = gaze[i,:]            -ori[i,:]
-                        vTarget = target_cam[frame_idx]-ori[i,:]
+                        vTarget = target_cam[frame_idx][i]-ori[i,:]
 
                     # get offset
                     ang2D               = transforms.angle_between(vTarget,vGaze)

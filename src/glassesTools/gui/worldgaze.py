@@ -6,7 +6,7 @@ from . import video_player
 
 def show_visualization(
         in_video: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path, camera_calibration_file: str|pathlib.Path,
-        planes: dict[str, plane.Plane], poses: dict[str, dict[int, pose.Pose]],
+        planes: dict[str, plane.Plane], poses: dict[str, dict[int, pose.Pose] | dict[int, list[pose.Pose]]],
         head_gazes: dict[int, list[gaze_headref.Gaze]], plane_gazes: dict[str, dict[int, list[gaze_worldref.Gaze]]],
         annotations: dict[str, tuple[annotation.EventType, list[list[int]]]],
         gui: video_player.GUI, show_planes: bool, show_only_intervals: bool, sub_pixel_fac: int
@@ -76,7 +76,8 @@ def show_visualization(
         for p in planes:
             if frame_idx in plane_gazes[p]:
                 for gaze_world in plane_gazes[p][frame_idx]:
-                    gaze_world.draw_on_world_video(frame, cam_params, ROI_offset, sub_pixel_fac, None if not p in poses or not frame_idx in poses[p] else poses[p][frame_idx])
+                    this_pose = None if p not in poses else pose.get_sample_pose(poses[p], frame_idx, timestamp=frame_ts)
+                    gaze_world.draw_on_world_video(frame, cam_params, ROI_offset, sub_pixel_fac, this_pose)
                     if show_planes:
                         gaze_world.draw_on_plane(ref_img[p], planes[p], sub_pixel_fac)
 
@@ -87,7 +88,10 @@ def show_visualization(
         # if we have plane pose, draw plane origin on video
         for p in planes:
             if frame_idx in poses[p]:
-                a = poses[p][frame_idx].get_origin_on_image(cam_params)
+                this_pose = pose.get_sample_pose(poses[p], frame_idx, timestamp=frame_ts)
+                if this_pose is None:
+                    continue
+                a = this_pose.get_origin_on_image(cam_params)
                 drawing.openCVCircle(frame, a, 3, (0,255,0), -1, sub_pixel_fac)
                 ll = 20
                 drawing.openCVLine(frame, (a[0],a[1]-ll), (a[0],a[1]+ll), (0,255,0), 1, sub_pixel_fac)

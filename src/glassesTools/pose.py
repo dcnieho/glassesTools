@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import typing
 import enum
+from scipy.spatial.transform import Rotation, Slerp
 
 from . import annotation, data_files, drawing, intervals, marker, ocv, timestamps, transforms, _has_GUI
 if _has_GUI:
@@ -15,22 +16,35 @@ else:
 
 class Pose:
     # description of tsv file used for storage
-    _columns_compressed = {'frame_idx':1,
+    _columns_compressed = {'timestamp': 1, 'timestamp_VOR': 1, 'frame_idx':1, 'frame_idx_VOR':1,
                            'pose_N_points': 1, 'pose_reprojection_error': 1, 'pose_R_vec': 3, 'pose_T_vec': 3,
                            'homography_N_points': 1, 'homography_mat': 9}
-    _non_float          = {'frame_idx': int, 'pose_ok': bool, 'pose_N_points': int, 'homography_N_points': int}
+    _non_float          = {'frame_idx': int, 'frame_idx_VOR': int, 'pose_ok': bool, 'pose_N_points': int, 'homography_N_points': int}
+    _columns_optional   = ['timestamp', 'timestamp_VOR', 'frame_idx_VOR']
     # backwards compatibility
     _column_patches     = {'pose_N_markers': ('pose_N_points', lambda x: x*4), 'homography_N_markers': ('homography_N_points', lambda x: x*4)}
 
     def __init__(self,
                  frame_idx              : int,
+                 timestamp              : float     = None,
+                 timestamp_ori          : float     = None,
+                 frame_idx_ori          : int       = None,
+                 timestamp_VOR          : float     = None,
+                 frame_idx_VOR          : int       = None,
                  pose_N_points          : int       = 0,
                  pose_reprojection_error: float     = -1.,
                  pose_R_vec             : np.ndarray= None,
                  pose_T_vec             : np.ndarray= None,
                  homography_N_points    : int       = 0,
                  homography_mat         : np.ndarray= None):
+        self.timestamp              : float       = timestamp
         self.frame_idx              : int         = frame_idx
+        # optional timestamps and frame indices. These mirror gaze data fields so
+        # sampled pose rows can stay aligned with synced gaze samples.
+        self.timestamp_ori          : float       = timestamp_ori
+        self.frame_idx_ori          : int         = frame_idx_ori
+        self.timestamp_VOR          : float       = timestamp_VOR
+        self.frame_idx_VOR          : int         = frame_idx_VOR
         # pose
         self.pose_N_points          : int         = pose_N_points       # number of image points (4 per marker if based on ArUco markers) this pose estimate is based on. 0 if failed or otherwise not available
         self.pose_reprojection_error: float       = pose_reprojection_error
@@ -161,15 +175,208 @@ class Pose:
         return transforms.intersect_plane_ray(self._plane_normal, self._plane_point, vector.flatten(), origin.flatten())
 
 
-def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]|None=None) -> dict[int,Pose]:
+def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]|None=None, ts_column_suffixes: list[str]|None=None) -> dict[int,Pose]:
     return data_files.read_file(fileName,
-                                Pose, True, True, False, False,
-                                episodes=episodes)[0]
+                                Pose, True, True, False, bool(ts_column_suffixes),
+                                episodes=episodes, ts_fridx_field_suffixes=ts_column_suffixes)[0]
+
+def read_list_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]|None=None, ts_column_suffixes: list[str]|None=None) -> dict[int,list[Pose]]:
+    return data_files.read_file(fileName,
+                                Pose, True, True, True, bool(ts_column_suffixes),
+                                episodes=episodes, ts_fridx_field_suffixes=ts_column_suffixes)[0]
 
 def write_list_to_file(poses: list[Pose], fileName:str|pathlib.Path, skip_failed=False):
     data_files.write_array_to_file(poses, fileName,
                                     Pose._columns_compressed,
+                                    Pose._columns_optional,
                                     skip_all_nan=skip_failed)
+
+def get_sample_pose(poses: dict[int, Pose] | dict[int, list[Pose]], frame_idx: int, sample_idx: int|None=None, timestamp: float|None=None, timestamp_tolerance: float=1e-4) -> Pose|None:
+    if frame_idx not in poses:
+        return None
+    pose_or_list = poses[frame_idx]
+    if not isinstance(pose_or_list, list):
+        return pose_or_list
+    if not pose_or_list:
+        return None
+    if timestamp is not None and np.isfinite(timestamp):
+        ts = np.array([p.timestamp for p in pose_or_list], dtype=float)
+        if np.any(np.isfinite(ts)):
+            diff = np.abs(ts-timestamp)
+            idx = int(np.nanargmin(diff))
+            if diff[idx] <= timestamp_tolerance:
+                return pose_or_list[idx]
+    if sample_idx is not None and sample_idx < len(pose_or_list):
+        return pose_or_list[sample_idx]
+    if len(pose_or_list)==1:
+        return pose_or_list[0]
+    return None
+
+def _as_pose_list(poses: dict[int, Pose] | list[Pose]) -> list[Pose]:
+    if isinstance(poses, dict):
+        return [poses[k] for k in sorted(poses)]
+    return sorted(poses, key=lambda p: p.frame_idx)
+
+def _active_timestamp(gaze_sample) -> float|None:
+    ts_vor = getattr(gaze_sample, 'timestamp_VOR', None)
+    if ts_vor is not None and np.isfinite(ts_vor):
+        return ts_vor
+    return getattr(gaze_sample, 'timestamp', None)
+
+def _active_frame_idx(gaze_sample) -> int|None:
+    frame_idx_vor = getattr(gaze_sample, 'frame_idx_VOR', None)
+    if frame_idx_vor is not None and np.isfinite(frame_idx_vor):
+        return int(frame_idx_vor)
+    frame_idx = getattr(gaze_sample, 'frame_idx', None)
+    if frame_idx is not None and np.isfinite(frame_idx):
+        return int(frame_idx)
+    return None
+
+def _copy_sample_timing(out: Pose, gaze_sample):
+    out.timestamp     = getattr(gaze_sample, 'timestamp_ori', None)
+    out.frame_idx     = getattr(gaze_sample, 'frame_idx_ori', None)
+    if out.timestamp is None:
+        out.timestamp = getattr(gaze_sample, 'timestamp', None)
+    if out.frame_idx is None:
+        out.frame_idx = getattr(gaze_sample, 'frame_idx', None)
+    out.timestamp_VOR = getattr(gaze_sample, 'timestamp_VOR', None)
+    out.frame_idx_VOR = getattr(gaze_sample, 'frame_idx_VOR', None)
+    return out
+
+def _copy_pose_values(src: Pose, frame_idx: int) -> Pose:
+    return Pose(
+        frame_idx=frame_idx,
+        pose_N_points=src.pose_N_points,
+        pose_reprojection_error=src.pose_reprojection_error,
+        pose_R_vec=None if src.pose_R_vec is None else src.pose_R_vec.copy(),
+        pose_T_vec=None if src.pose_T_vec is None else src.pose_T_vec.copy(),
+        homography_N_points=src.homography_N_points,
+        homography_mat=None if src.homography_mat is None else src.homography_mat.copy()
+    )
+
+def _normalize_homography(H: np.ndarray) -> np.ndarray:
+    H = np.array(H, dtype=float).reshape(3, 3)
+    if np.isfinite(H[2,2]) and abs(H[2,2]) > 1e-12:
+        return H / H[2,2]
+    n = np.linalg.norm(H)
+    if np.isfinite(n) and n > 1e-12:
+        return H / n
+    return H
+
+def _interpolate_pose(left: Pose, right: Pose, alpha: float, out_frame_idx: int) -> Pose|None:
+    out = Pose(frame_idx=out_frame_idx)
+    have_pose = left.pose_successful() and right.pose_successful()
+    have_homography = left.homography_successful() and right.homography_successful()
+    if have_pose:
+        rotations = Rotation.from_rotvec(np.vstack((left.pose_R_vec.flatten(), right.pose_R_vec.flatten())))
+        out.pose_R_vec = Slerp([0., 1.], rotations)([alpha]).as_rotvec()[0]
+        out.pose_T_vec = (1.-alpha)*left.pose_T_vec.flatten() + alpha*right.pose_T_vec.flatten()
+        out.pose_N_points = min(left.pose_N_points, right.pose_N_points)
+        out.pose_reprojection_error = (1.-alpha)*left.pose_reprojection_error + alpha*right.pose_reprojection_error
+    if have_homography:
+        Hl = _normalize_homography(left.homography_mat)
+        Hr = _normalize_homography(right.homography_mat)
+        out.homography_mat = _normalize_homography((1.-alpha)*Hl + alpha*Hr)
+        out.homography_N_points = min(left.homography_N_points, right.homography_N_points)
+    if not have_pose and not have_homography:
+        return None
+    return out
+
+def interpolate_plane_poses_to_gaze_samples(poses: dict[int, Pose] | list[Pose],
+                                            gazes: dict[int, list[typing.Any]] | list[typing.Any],
+                                            video_timestamps: timestamps.VideoTimestamps | list[float] | np.ndarray,
+                                            max_missing_frames: int = 0,
+                                            progress_updater: typing.Callable[[int], None]|None = None) -> list[Pose]:
+    if max_missing_frames < 0:
+        raise ValueError('max_missing_frames must be >= 0')
+
+    if isinstance(gazes, dict):
+        gaze_list = [g for frame_idx in sorted(gazes) for g in gazes[frame_idx]]
+    else:
+        gaze_list = list(gazes)
+
+    def _finish_progress():
+        if progress_updater is not None:
+            progress_updater(len(gaze_list))
+
+    pose_list = [p for p in _as_pose_list(poses) if p.pose_successful() or p.homography_successful()]
+    if len(pose_list) < 2:
+        _finish_progress()
+        return []
+
+    if isinstance(video_timestamps, timestamps.VideoTimestamps):
+        frame_timestamps = np.asarray(video_timestamps.timestamps, dtype=float)
+    else:
+        frame_timestamps = np.asarray(video_timestamps, dtype=float)
+
+    pose_frames = np.array([p.frame_idx for p in pose_list], dtype=int)
+    in_range = np.logical_and(pose_frames >= 0, pose_frames < len(frame_timestamps))
+    pose_list = [p for p, ok in zip(pose_list, in_range) if ok]
+    if len(pose_list) < 2:
+        _finish_progress()
+        return []
+
+    pose_frames = np.array([p.frame_idx for p in pose_list], dtype=int)
+    pose_ts = frame_timestamps[pose_frames]
+    order = np.argsort(pose_ts)
+    pose_list = [pose_list[i] for i in order]
+    pose_frames = pose_frames[order]
+    pose_ts = pose_ts[order]
+
+    pose_idx_by_frame = {frame_idx: pose_idx for pose_idx, frame_idx in enumerate(pose_frames)}
+    closest_sample_by_pose: dict[int, tuple[int, float]] = {}
+    for sample_idx, gaze in enumerate(gaze_list):
+        gaze_ts = _active_timestamp(gaze)
+        if gaze_ts is None or not np.isfinite(gaze_ts):
+            continue
+        pose_idx = pose_idx_by_frame.get(_active_frame_idx(gaze))
+        if pose_idx is None:
+            continue
+        diff = abs(gaze_ts-pose_ts[pose_idx])
+        if pose_idx not in closest_sample_by_pose or diff < closest_sample_by_pose[pose_idx][1]:
+            closest_sample_by_pose[pose_idx] = (sample_idx, diff)
+    anchors = {sample_idx: pose_idx for pose_idx, (sample_idx, _) in closest_sample_by_pose.items()}
+
+    out: list[Pose] = []
+    for sample_idx, gaze in enumerate(gaze_list):
+        if progress_updater is not None:
+            progress_updater(1)
+
+        gaze_ts = _active_timestamp(gaze)
+        if gaze_ts is None or not np.isfinite(gaze_ts):
+            continue
+        right_idx = int(np.searchsorted(pose_ts, gaze_ts, side='left'))
+        if right_idx == 0:
+            if np.isclose(gaze_ts, pose_ts[0]):
+                right_idx = 1
+            else:
+                continue
+        elif right_idx >= len(pose_ts):
+            if np.isclose(gaze_ts, pose_ts[-1]):
+                right_idx = len(pose_ts)-1
+            else:
+                continue
+        left_idx = right_idx-1
+        if pose_frames[right_idx] - pose_frames[left_idx] > max_missing_frames + 1:
+            continue
+        denom = pose_ts[right_idx] - pose_ts[left_idx]
+        if denom <= 0:
+            continue
+        alpha = (gaze_ts-pose_ts[left_idx]) / denom
+        if alpha < -1e-9 or alpha > 1.+1e-9:
+            continue
+        alpha = float(np.clip(alpha, 0., 1.))
+
+        active_frame_idx = _active_frame_idx(gaze)
+        anchor_pose_idx = anchors.get(sample_idx)
+        if anchor_pose_idx in (left_idx, right_idx):
+            new_pose = _copy_pose_values(pose_list[anchor_pose_idx], active_frame_idx)
+        else:
+            new_pose = _interpolate_pose(pose_list[left_idx], pose_list[right_idx], alpha, active_frame_idx)
+        if new_pose is None:
+            continue
+        out.append(_copy_sample_timing(new_pose, gaze))
+    return out
 
 class Status(enum.Enum):
     Ok = enum.auto()

@@ -174,13 +174,13 @@ def select_data_types_to_use(dq_types: typing.Iterable[DataType]|DataType|str|No
     return dq_types
 
 
-def calculate_gaze_angles_to_point(plane_gazes: dict[int, list[gaze_worldref.Gaze]], poses: dict[int, pose.Pose], points: dict[int, np.ndarray], d_types: list[DataType], points_for_homography: dict[int, np.ndarray]|None=None, viewing_distance: float|None = None) -> tuple[list[int], np.ndarray, dict[int, dict[DataType, np.ndarray]]]:
+def calculate_gaze_angles_to_point(plane_gazes: dict[int, list[gaze_worldref.Gaze]], poses: dict[int, pose.Pose] | dict[int, list[pose.Pose]], points: dict[int, np.ndarray], d_types: list[DataType], points_for_homography: dict[int, np.ndarray]|None=None, viewing_distance: float|None = None) -> tuple[list[int], np.ndarray, dict[int, dict[DataType, np.ndarray]]]:
     # collect needed data
     out: dict[int, dict[DataType, np.ndarray]] = {}
     frame_idxs = None
     timestamps = None
     for t in points:
-        points_cam_space: dict[int,np.ndarray] = {}
+        points_cam_space: dict[int,dict[int,np.ndarray]] = {}
         out[t] = {}
         for d_type in d_types:
             if d_type == DataType.pose_left_right_avg:
@@ -201,14 +201,17 @@ def calculate_gaze_angles_to_point(plane_gazes: dict[int, list[gaze_worldref.Gaz
                     vTarget = points_for_homography[t]
                 else:
                     # use 3D vectors known given pose information
-                    if f_idx not in poses:
+                    this_pose = pose.get_sample_pose(poses, f_idx, timestamp=ts[i])
+                    if this_pose is None:
                         continue
                     if f_idx not in points_cam_space:
-                        points_cam_space[f_idx] = poses[f_idx].world_frame_to_cam(points[t])
+                        points_cam_space[f_idx] = {}
+                    if i not in points_cam_space[f_idx]:
+                        points_cam_space[f_idx][i] = this_pose.world_frame_to_cam(points[t])
 
                     # get vectors from origin to target and to gaze point
-                    vGaze   = gaze[i,:]              -ori[i,:]
-                    vTarget = points_cam_space[f_idx]-ori[i,:]
+                    vGaze   = gaze[i,:]                 -ori[i,:]
+                    vTarget = points_cam_space[f_idx][i]-ori[i,:]
 
                 # get offset
                 ang2D               = transforms.angle_between(vTarget,vGaze)
