@@ -30,7 +30,7 @@ def compute(
     if not isinstance(gazes, dict):
         gazes = gaze_worldref.read_dict_from_file(gazes,validation_intervals)
     if not isinstance(poses, dict):
-        poses = pose.read_dict_from_file(poses,validation_intervals)
+        poses = pose.read_dict_from_file(poses,validation_intervals, ts_column_suffixes=['VOR',''])
     # prep targets
     targets_for_homography = {t_id: np.append(targets[t_id][0:2], distance_mm_for_homography) for t_id in targets}
 
