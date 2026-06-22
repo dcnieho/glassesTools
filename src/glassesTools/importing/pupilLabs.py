@@ -241,7 +241,7 @@ def getRecordingInfo(inputDir: str|pathlib.Path, device: EyeTracker) -> Recordin
             recInfo.glasses_serial = iInfo['glasses_serial_number']
             recInfo.scene_camera_serial = iInfo['scene_camera_serial_number']
         recInfo.recording_unit_serial = iInfo['android_device_id']
-        if is_neon:
+        if is_neon and 'firmware_version' in iInfo:
             recInfo.firmware_version = f"{iInfo['pipeline_version']} ({iInfo['firmware_version'][0]}.{iInfo['firmware_version'][1]})"
         else:
             recInfo.firmware_version = iInfo['pipeline_version']
