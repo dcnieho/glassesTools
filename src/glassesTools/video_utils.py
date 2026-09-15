@@ -124,7 +124,7 @@ def _get_isobmmf_timestamps(vid_file: pathlib.Path) -> np.ndarray|None:
 def _get_frame_timestamps_ffprobe(vid_file: pathlib.Path) -> np.array:
     command = ['ffprobe',
                '-v', 'quiet',
-               '-select_streams', 'v',
+               '-select_streams', 'v:0',
                '-of', 'compact=p=0:nk=1',
                '-show_entries', 'packet=pts_time',
                f'{vid_file}']
