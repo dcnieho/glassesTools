@@ -183,11 +183,12 @@ def show_validation(win: visual.Window, config: dict, refresh_rate: int, task_va
         old_pos = np.array([0.,0.])
     else:
         old_pos = task_vars['target_positions'].loc[targets[0],['x','y']].to_numpy()
+    old_pos = np.array(old_pos).astype(float)
     for i in targets:
         check_escape(win)
 
         # Move target to new position
-        pos   = task_vars['target_positions'].loc[i,['x','y']].to_numpy()
+        pos   = task_vars['target_positions'].loc[i,['x','y']].to_numpy().astype(float)
         d     = np.hypot(old_pos[0]-pos[0], old_pos[1]-pos[1])
         old_pos_pix = tools.monitorunittools.convertToPix(np.array([0.,0.]),old_pos,config["targets"]["units"],win)
         pos_pix     = tools.monitorunittools.convertToPix(np.array([0.,0.]),    pos,config["targets"]["units"],win)
