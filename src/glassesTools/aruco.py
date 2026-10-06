@@ -264,7 +264,6 @@ class Detector:
     def visualize(self, frame, detect_tuple=None, sub_pixel_fac=8, plane_marker_color=(0,255,0), recovered_plane_marker_color=(255,255,0), individual_marker_color=(255,0,255), unexpected_marker_color=(150,253,253), rejected_marker_color=None):
         if detect_tuple is None:
             detect_tuple = self._last_detect_output
-        special_highlight = []
 
         # for debug, can draw rejected markers on frame
         if rejected_marker_color is not None:
@@ -273,6 +272,7 @@ class Detector:
         # draw detected markers on the frame
         if plane_marker_color is not None:
             for p in detect_tuple[0]:
+                special_highlight = []
                 if not detect_tuple[0][p] or 'ids' not in detect_tuple[0][p] or len(detect_tuple[0][p]['ids'])==0:
                     continue
                 if recovered_plane_marker_color is not None and detect_tuple[0][p]['recovered_ids'] is not None and len(detect_tuple[0][p]['recovered_ids'])>0:
