@@ -54,7 +54,7 @@ class CameraParams:
         if self.colmap_camera is not None:
             # make version with distortion parameters zeroed out
             cam_dict = copy.deepcopy(self.colmap_camera.todict())
-            cam_dict['params'][4:] = 0
+            cam_dict['params'][self.colmap_camera.extra_params_idxs()] = 0
             self.colmap_camera_no_distortion = pycolmap.Camera(cam_dict)
 
 
