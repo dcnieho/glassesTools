@@ -12,7 +12,7 @@ from . import default_poster
 from . import dynamic
 
 class Plane(_plane.TargetPlane):
-    def __init__(self, config_dir: str|pathlib.Path|None, validation_config: dict[str,typing.Any]=None, is_dynamic=False, **kwarg):
+    def __init__(self, config_dir: str|pathlib.Path|None, validation_config: dict[str,typing.Any]|None=None, is_dynamic=False, **kwarg):
         # NB: if config_dir is None, the default config will be used
 
         if config_dir is not None:
@@ -33,9 +33,9 @@ class Plane(_plane.TargetPlane):
         plane_size = _plane.Coordinate(self.config['gridCols']*self.cell_size_mm, self.config['gridRows']*self.cell_size_mm)
 
         # get targets first, so that any dynamic markers can be split off and then the rest passed to base class
-        self.targets: dict[int,_marker.Marker]                  = {}
-        self.dynamic_markers: dict[int, tuple[int,int]]         = {}        # {marker ID: (target ID, marker_N column in target file)} (keep latter around for good error reporting)
-        self._dynamic_markers_cache: dict[int, _marker.MarkerID]= None      # different format, for efficient return from get_marker_IDs()
+        self.targets: dict[int,_marker.Marker]                        = {}
+        self.dynamic_markers: dict[int, tuple[int,int]]               = {}      # {marker ID: (target ID, marker_N column in target file)} (keep latter around for good error reporting)
+        self._dynamic_markers_cache: dict[int, _marker.MarkerID]|None = None    # different format, for efficient return from get_marker_IDs()
         targets, origin = self._get_targets(config_dir, self.config, is_dynamic)
 
         # call base class

@@ -51,8 +51,8 @@ def _read_coord_file(config_dir: str|pathlib.Path|None, file: str, package: str)
     else:
         return _data_files.read_coord_file(file, package)
 
-def get_targets(config_dir: str|pathlib.Path=None, file='targetPositions.csv', package=_default_poster_package) -> pd.DataFrame|None:
+def get_targets(config_dir: str|pathlib.Path|None=None, file='targetPositions.csv', package=_default_poster_package) -> pd.DataFrame|None:
     return _read_coord_file(config_dir, file, package)
 
-def get_markers(config_dir: str|pathlib.Path=None, file='markerPositions.csv', package=_default_poster_package) -> pd.DataFrame|None:
+def get_markers(config_dir: str|pathlib.Path|None=None, file='markerPositions.csv', package=_default_poster_package) -> pd.DataFrame|None:
     return _read_coord_file(config_dir, file, package)
