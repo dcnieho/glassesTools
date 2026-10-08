@@ -260,14 +260,14 @@ class TargetPlane(Plane):
         self._load_targets(targets, pos_size_scale_fac, package_to_read_from)
 
         # call base class
-        super(TargetPlane, self).__init__(markers, marker_size, plane_size, aruco_dict_id, marker_border_bits, pos_size_scale_fac, unit, package_to_read_from, ref_image_store_path, ref_image_size, min_num_markers)
+        super().__init__(markers, marker_size, plane_size, aruco_dict_id, aruco_settings, pos_size_scale_fac, unit, package_to_read_from, ref_image_store_path, ref_image_size, min_num_markers)
 
     def set_origin(self, origin: Coordinate):
         # set origin of plane. Origin location is on current (not original) plane
         # so set_origin([5., 0.]) three times in a row shifts the origin rightward by 15 units
         for i in self.targets:
             self.targets[i].shift(-np.array(origin))
-        super(TargetPlane, self).set_origin(origin)
+        super().set_origin(origin)
 
     def _load_targets(self, targets: str|pathlib.Path|pd.DataFrame, pos_size_scale_fac: float, package_to_read_from: str|None):
         # read in target positions
@@ -287,7 +287,7 @@ class TargetPlane(Plane):
 
     def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
         # first call superclass method to generate image without targets
-        img = super(TargetPlane, self)._store_reference_image(path, im_size)
+        img = super()._store_reference_image(path, im_size)
         height,width = img.shape[:2]
 
         # add targets

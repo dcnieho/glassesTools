@@ -42,7 +42,7 @@ class Plane(_plane.TargetPlane):
         markers = config.get_markers(config_dir, self.config['markerPosFile'])
         if 'ref_image_store_path' not in kwarg:
             kwarg['ref_image_store_path'] = None
-        super(Plane, self).__init__(markers, targets, self.config['markerSide'], plane_size, self.config['arucoDictionary'], self.config['markerBorderBits'], self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], min_num_markers=self.config['minNumMarkers'], **kwarg)
+        super().__init__(markers, targets, self.config['markerSide'], plane_size, self.config['arucoDictionary'], self.config['markerBorderBits'], self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], min_num_markers=self.config['minNumMarkers'], **kwarg)
 
         # set center
         self.set_origin(origin)
@@ -77,7 +77,7 @@ class Plane(_plane.TargetPlane):
             # {marker ID: (target ID, marker_N column in target file)} -> {marker_N column in target file: [(marker_id, aruco_dict)]}
             for m in self.dynamic_markers:
                 self._dynamic_markers_cache[self.dynamic_markers[m][1]].append(_marker.MarkerID(m, self.aruco_dict_id))
-        return super(Plane, self).get_marker_IDs() | self._dynamic_markers_cache
+        return super().get_marker_IDs() | self._dynamic_markers_cache
 
     def is_dynamic(self):
         return not not self.dynamic_markers
