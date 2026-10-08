@@ -6,9 +6,19 @@ from collections import defaultdict
 
 from . import data_files, drawing, json, naming, ocv
 
+class MarkerFamilyID(typing.NamedTuple):
+    """Marker identity normalized across dictionaries belonging to the same family."""
+    m_id:             int
+    aruco_family_id:  int
+
 class MarkerID(typing.NamedTuple):
     m_id:           int
     aruco_dict_id:  int
+
+    def to_family(self) -> MarkerFamilyID:
+        from . import aruco
+        return MarkerFamilyID(self.m_id, aruco.dict_id_to_family[self.aruco_dict_id])
+
 def marker_ID_to_str(m: MarkerID):
     from . import aruco
     return f'{m.m_id} ({aruco.dict_id_to_str[m.aruco_dict_id]})'
@@ -183,13 +193,13 @@ def get_smallest_gap_end(gaps: np.ndarray, max_intermarker_gap_duration: int):
         return gapi[mini]
     return None
 
-def format_duplicate_markers_msg(markers: set[tuple[int,int]]):
+def format_duplicate_markers_msg(markers: set[MarkerFamilyID]):
     from . import aruco
     # NB: input should be dictionary families, not dicts themselves
     # organize per dictionary family
     dict_markers: dict[int,list[int]] = defaultdict(list)
-    for m,d in markers:
-        dict_markers[d].append(m)
+    for m in markers:
+        dict_markers[m.aruco_family_id].append(m.m_id)
     dict_markers = {d:sorted(dict_markers[d]) for d in dict_markers}
     out = ''
     for i,d in enumerate(dict_markers):
@@ -206,18 +216,16 @@ def format_duplicate_markers_msg(markers: set[tuple[int,int]]):
             out += f', {msg}'
     return out
 
-def format_marker_sequence_msg(marker_set: list[tuple[int,int]]):
+def format_marker_sequence_msg(marker_set: list[MarkerFamilyID]):
     from . import aruco
-    # NB: input should be dictionary families, not dicts themselves
-    # turn each dict into a string/family
     marker_set_str: list[tuple[str,bool,int]] = []
-    all_same_family_or_dict = len(set((x[0] for x in marker_set)))==1
-    marker_set.sort(key=lambda x: x[0])
+    all_same_family_or_dict = len({m.aruco_family_id for m in marker_set})==1
+    marker_set.sort(key=lambda m: m.m_id)
     if not all_same_family_or_dict:
-        marker_set.sort(key=lambda x: x[1])
+        marker_set.sort(key=lambda m: m.aruco_family_id)
     for m in marker_set:
-        d_str,is_family = aruco.family_to_str[m[1]]
-        marker_set_str.append((d_str, is_family, m[0]))
+        d_str,is_family = aruco.family_to_str[m.aruco_family_id]
+        marker_set_str.append((d_str, is_family, m.m_id))
     if all_same_family_or_dict:
         m_str = ', '.join((str(m[2]) for m in marker_set_str))
         m_str += ' from the ' + (f'{marker_set_str[0][0]} family' if marker_set_str[0][1] else f'{marker_set_str[0][0]} dict')
