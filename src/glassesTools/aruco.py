@@ -70,7 +70,8 @@ def parameter_defaults(which: str) -> dict:
 def settings_defaults() -> dict:
     return dict(detector_params=parameter_defaults('detector'),
                 refine_params=parameter_defaults('refine'),
-                refine=True
+                refine=True,
+                undistort=False
                 )
 
 corner_refinement_methods = typing.Literal[
@@ -707,14 +708,12 @@ class Manager:
         for entries in groups.values():
             for d, _, _, _, settings in entries:
                 dictionary = cv2.aruco.getPredefinedDictionary(d)
-                key = (dict_id_to_family[d], dictionary.maxCorrectionBits,
-                       freeze(settings['detector_params']))
+                key = (dict_id_to_family[d], dictionary.maxCorrectionBits, freeze(settings['detector_params']), settings['undistort'])
                 raw_groups.setdefault(key, []).append(d)
         for detector_id, entries in enumerate(compatible_groups):
             d, _, _, _, settings = entries[0]
             dictionary = cv2.aruco.getPredefinedDictionary(d)
-            raw_key = (dict_id_to_family[d], dictionary.maxCorrectionBits,
-                       freeze(settings['detector_params']))
+            raw_key = (dict_id_to_family[d], dictionary.maxCorrectionBits, freeze(settings['detector_params']), settings['undistort'])
             d = max(raw_groups[raw_key], key=get_dict_size)
             detector = Detector(d, settings)
             for _, name, setup, is_plane, _ in entries:
@@ -730,6 +729,9 @@ class Manager:
             self._detectors[detector_id] = detector
 
     def register_with_estimator(self, estimator: pose.Estimator):
+        if any(d.settings['undistort'] for d in self._detectors.values()):
+            if not estimator.cam_params.has_intrinsics():
+                raise ValueError('Running ArUco detection on undistorted images requires camera calibration')
         # this handles registration of all planes and individual markers with the estimator
         # and makes sure our wrapper function for the aruco detector gets called which handles
         # aruco detection so that each detector is run only once on a frame
@@ -754,8 +756,8 @@ class Manager:
         obj, img = self._detectors[aruco_dict_id].get_matching_image_board_points(plane_name, detect_tuple)
         if obj is None or img is None:
             return None
-        context = self.working_set.contexts[False]
-        return pose.DetectionResult(obj, img, context.camera_params, context.frame_info)
+        context = self.working_set.contexts[self._detectors[aruco_dict_id].settings['undistort']]
+        return pose.DetectionResult(obj, img, context.camera_params, context.frame_info, context.undistorted)
 
 
     def _detect_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams) -> pose.DetectionResult|None:
@@ -769,8 +771,8 @@ class Manager:
         obj, img = detector.get_individual_marker_points(mark.m_id, detect_tuple)
         if img is None:
             return None
-        context = self.working_set.contexts[False]
-        return pose.DetectionResult(obj, img, context.camera_params, context.frame_info)
+        context = self.working_set.contexts[self._detectors[detector_id].settings['undistort']]
+        return pose.DetectionResult(obj, img, context.camera_params, context.frame_info, context.undistorted)
 
 
     def _get_detector_cache(self, detector_id: int, frame_idx: int, frame: np.ndarray|None, frame_info: dict, camera_parameters: ocv.CameraParams|None):
@@ -779,16 +781,16 @@ class Manager:
             return self.working_set.detector_results.get(detector_id) if self.working_set.matches_frame(frame_idx) else None
 
         detector = self._detectors[detector_id]
-        context = self.working_set.prepare(frame_idx, frame, frame_info, camera_parameters)
+        context = self.working_set.prepare(frame_idx, frame, frame_info, camera_parameters, detector.settings['undistort'])
         if detector_id not in self.working_set.detector_results:
-            key = (detector.dictionary_id, freeze(detector.settings['detector_params']))
+            key = (detector.dictionary_id, freeze(detector.settings['detector_params']), context.undistorted)
             if key not in self.working_set.detections:
                 self.working_set.detections[key] = detector._detect_markers(context.image, detector._det)
             self.working_set.detector_results[detector_id] = detector.detect_markers(context.image, context.frame_info, context.camera_params, self.working_set.detections[key])
         return self.working_set.detector_results[detector_id]
 
     def _visualization_output(self, detector_id, detect_tuple):
-        context = self.working_set.contexts[False]
+        context = self.working_set.contexts[self._detectors[detector_id].settings['undistort']]
         if not context.undistorted:
             return detect_tuple
         planes, individual, unexpected, rejected = copy.deepcopy(detect_tuple)
@@ -1117,7 +1119,7 @@ class WorkingSet:
     def matches_frame(self, frame_idx: int) -> bool:
         return self._frame_key is not None and self._frame_key[0] == frame_idx
 
-    def prepare(self, frame_idx, image, frame_info, camera_params):
+    def prepare(self, frame_idx, image, frame_info, camera_params, undistort=False):
         colmap = camera_params.colmap_camera
         calibration = freeze((camera_params.resolution, camera_params.camera_mtx, camera_params.distort_coeffs,
                               None if colmap is None else (colmap.model_name, colmap.params)))
@@ -1128,4 +1130,25 @@ class WorkingSet:
         # always store the original image
         if False not in self.contexts:
             self.contexts[False] = ImageContext(image, dict(frame_info), camera_params, camera_params)
-        return self.contexts[False]
+        # also store an undistorted image if requested and not already present
+        if undistort and True not in self.contexts:
+            if not camera_params.has_intrinsics():
+                raise ValueError('ArUco image undistortion requires camera calibration')
+            # make a copy of the camera parameters with distortion coefficients zeroed out
+            effective = copy.copy(camera_params)
+            if camera_params.has_opencv_camera():
+                effective.distort_coeffs = np.zeros_like(camera_params.distort_coeffs)
+            effective.colmap_camera = camera_params.colmap_camera_no_distortion
+            # make undistortion mapping for the image
+            map_key = (image.shape[:2], frame_info.get('offset_x', 0), frame_info.get('offset_y', 0), calibration)
+            if self._map_cache is None or self._map_cache[0] != map_key:
+                height, width = image.shape[:2]
+                yy, xx = np.indices((height, width), dtype=np.float32)
+                pixels = np.column_stack((xx.ravel(), yy.ravel()))
+                source = transforms.distort_points(pixels, camera_params, map_key[1:3])
+                maps = source.reshape(height, width, 2).astype(np.float32)
+                self._map_cache = (map_key, cv2.convertMaps(maps, None, cv2.CV_16SC2))
+            # undistort the image
+            working_image = cv2.remap(image, *self._map_cache[1], interpolation=cv2.INTER_LINEAR)
+            self.contexts[True] = ImageContext(working_image, dict(frame_info), effective, camera_params, True)
+        return self.contexts[undistort]

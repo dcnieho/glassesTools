@@ -22,6 +22,7 @@ class DetectionResult:
     image_points        : np.ndarray | None
     camera_params       : ocv.CameraParams
     frame_info          : dict
+    points_undistorted  : bool = False
 
     def estimate_pose(self, flags=cv2.SOLVEPNP_ITERATIVE) -> tuple[int, np.ndarray | None, np.ndarray | None, float]:
         if self.object_points is None or self.image_points is None or len(self.object_points) < 4:
@@ -32,7 +33,7 @@ class DetectionResult:
         if self.object_points is None or self.image_points is None or len(self.object_points) < 4:
             return 0, None
         return estimate_homography(self.object_points, self.image_points, self.frame_info,
-                                   self.camera_params)
+                                   self.camera_params, self.points_undistorted)
 
     def estimate_pose_and_homography(self, frame_idx: int) -> "Pose":
         result = Pose(frame_idx)
@@ -706,7 +707,7 @@ def estimate_pose(object_points: np.ndarray, img_points: np.ndarray, frame_info:
             reprojection_error = np.nan
     return N_points, R_vec[0], T_vec[0], reprojection_error
 
-def estimate_homography(object_points: np.ndarray, img_points: np.ndarray, frame_info: dict, cam_params: ocv.CameraParams) -> tuple[int, np.ndarray]:
+def estimate_homography(object_points: np.ndarray, img_points: np.ndarray, frame_info: dict, cam_params: ocv.CameraParams, points_undistorted: bool = False) -> tuple[int, np.ndarray]:
     # NB: N_points also flags success of the pose estimation: it is 0 if not successful
     N_points, H = 0, None
     if object_points is None or object_points.shape[0]<4:   # minimum 4 points needed
@@ -719,7 +720,7 @@ def estimate_homography(object_points: np.ndarray, img_points: np.ndarray, frame
         ROI_offset = np.array([0., 0.], dtype=img_points.dtype)
 
     # use undistorted marker corners if possible
-    if cam_params is not None and cam_params.has_intrinsics():
+    if not points_undistorted and cam_params is not None and cam_params.has_intrinsics():
         img_points = transforms.undistort_points(img_points.reshape((-1,2)), cam_params, ROI_offset=ROI_offset).reshape((-1,1,2))
 
     H = transforms.estimate_homography(object_points, img_points)
