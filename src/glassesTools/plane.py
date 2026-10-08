@@ -22,8 +22,8 @@ class Plane:
                  plane_size             : Coordinate,                                               # in "unit" units
 
                  aruco_dict_id                                          = cv2.aruco.DICT_4X4_250,
-                 marker_border_bits                                     = 1,
-                 pos_size_scale_fac                              = 1.,                              # scale factor for marker positions in the markers input argument, and sizes in the markers file or the marker_size input
+                 aruco_settings         : dict | None                   = None,
+                 pos_size_scale_fac                                     = 1.,                              # scale factor for marker positions in the markers input argument, and sizes in the markers file or the marker_size input
                  unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
                  package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources
                  ref_image_store_path   : str|pathlib.Path              = None,
@@ -42,7 +42,8 @@ class Plane:
         # marker specs
         self.aruco_dict_id                                  = aruco_dict_id
         self.aruco_dict                                     = cv2.aruco.getPredefinedDictionary(self.aruco_dict_id)
-        self.marker_border_bits                             = marker_border_bits
+        from . import aruco
+        self.aruco_settings                                 = aruco.resolve_settings(aruco_settings)
         self.unit                                           = unit
 
         # processing specs
@@ -75,7 +76,7 @@ class Plane:
 
         self._origin = origin
 
-    def get_ref_image(self, im_size: int=None, as_RGB=False) -> np.ndarray:
+    def get_ref_image(self, im_size: int|None=None, as_RGB=False) -> np.ndarray:
         if im_size is None:
             im_size = self._ref_image_size
         if not isinstance(im_size,int):
@@ -156,9 +157,7 @@ class Plane:
     def get_plane_setup(self):
         from . import aruco
         return aruco.PlaneSetup(plane = self,
-                                aruco_detector_params = {
-                                    'markerBorderBits': self.marker_border_bits
-                                },
+                                aruco_settings = self.aruco_settings,
                                 min_num_markers = self.min_num_markers)
 
     def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
@@ -213,7 +212,7 @@ class Plane:
         for i,sz,pos in zip(ids,pix_sz,np.moveaxis(corner_points, -1, 0)):
             # make marker
             marker_image = np.zeros((sz, sz), dtype=np.uint8)
-            marker_image = self.aruco_dict.generateImageMarker(i, sz, marker_image, self.marker_border_bits)
+            marker_image = self.aruco_dict.generateImageMarker(i, sz, marker_image, self.aruco_settings['detector_params']['markerBorderBits'])
 
             # put in image
             if pos[0,1]==pos[1,1] and pos[1,0]==pos[2,0] and pos[0,0]<pos[1,0]:
@@ -246,7 +245,7 @@ class TargetPlane(Plane):
                 plane_size             : Coordinate,                                               # in "unit" units
 
                 aruco_dict_id                                          = cv2.aruco.DICT_4X4_250,
-                marker_border_bits                                     = 1,
+                aruco_settings         : dict | None                   = None,
                 pos_size_scale_fac                                     = 1.,                       # scale factor for marker positions in the markers input argument, and sizes in the markers file or the marker_size input
                 unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
                 package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources

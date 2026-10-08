@@ -3,6 +3,11 @@ import cv2
 import pathlib
 import typing
 import itertools
+import math
+import copy
+from dataclasses import dataclass
+
+from glassesTools.utils import freeze
 
 from . import annotation, drawing, marker, ocv, plane, pose, transforms
 
@@ -52,15 +57,348 @@ family_to_str = {
     9: ('DICT_ARUCO_MIP_36H12', False),
 }
 
+def parameter_defaults(which: str) -> dict:
+    cls = {'detector': cv2.aruco.DetectorParameters, 'refine': cv2.aruco.RefineParameters}[which]
+    params = cls()
+    values = {name: getattr(params, name) for name in dir(params)
+                if not name.startswith('_') and type(getattr(params, name)) in (bool, int, float)}
+    # override default corner refinement method to subpixel
+    if which == 'detector':
+        values['cornerRefinementMethod'] = cv2.aruco.CORNER_REFINE_SUBPIX
+    return values
+
+def settings_defaults() -> dict:
+    return dict(detector_params=parameter_defaults('detector'),
+                refine_params=parameter_defaults('refine'),
+                refine=True
+                )
+
+corner_refinement_methods = typing.Literal[
+        cv2.aruco.CORNER_REFINE_NONE, cv2.aruco.CORNER_REFINE_SUBPIX,
+        cv2.aruco.CORNER_REFINE_CONTOUR, cv2.aruco.CORNER_REFINE_APRILTAG]
+
+# Parameter descriptions checked against OpenCV 4.13.0:
+# https://docs.opencv.org/4.13.0/d5/dae/tutorial_aruco_detection.html
+# https://docs.opencv.org/4.13.0/d1/dcd/structcv_1_1aruco_1_1DetectorParameters.html
+# https://docs.opencv.org/4.13.0/d5/d09/structcv_1_1aruco_1_1RefineParameters.html
+# Implementation details (especially recovery limits and AprilTag preprocessing):
+# https://github.com/opencv/opencv/blob/4.13.0/modules/objdetect/src/aruco/aruco_detector.cpp
+# https://github.com/opencv/opencv/blob/4.13.0/modules/objdetect/src/aruco/apriltag/apriltag_quad_thresh.cpp
+corner_refinement_doc: dict[int, tuple[str, str]] = {
+    cv2.aruco.CORNER_REFINE_NONE: (
+        'None',
+        'Use the initially detected corners without further refinement (CORNER_REFINE_NONE).',
+    ),
+    cv2.aruco.CORNER_REFINE_SUBPIX: (
+        'Subpixel',
+        'Refine corner positions to subpixel precision (CORNER_REFINE_SUBPIX).',
+    ),
+    cv2.aruco.CORNER_REFINE_CONTOUR: (
+        'Contour',
+        'Refine corners by fitting lines to contour points (CORNER_REFINE_CONTOUR).',
+    ),
+    cv2.aruco.CORNER_REFINE_APRILTAG: (
+        'AprilTag',
+        'Use AprilTag quadrilateral detection (CORNER_REFINE_APRILTAG).',
+    ),
+}
+
+detector_parameter_doc: dict[str, tuple[str, str]] = {
+    'adaptiveThreshConstant': (
+        'Adaptive threshold constant',
+        'Offset subtracted from the local mean when thresholding the image for ArUco contours. '
+        'Measured in grayscale intensity levels; changes which pixels become foreground.',
+    ),
+    'adaptiveThreshWinSizeMin': (
+        'Minimum adaptive threshold window size',
+        'Smallest adaptive-threshold neighborhood, in pixels. OpenCV tries windows from this value '
+        'through adaptiveThreshWinSizeMax, in adaptiveThreshWinSizeStep increments. Even sizes are increased to the next odd size.',
+    ),
+    'adaptiveThreshWinSizeMax': (
+        'Maximum adaptive threshold window size',
+        'Upper limit of the adaptive-threshold window-size sweep, in pixels. '
+        'Larger windows can preserve the borders of large markers; additional sizes cost processing time.',
+    ),
+    'adaptiveThreshWinSizeStep': (
+        'Adaptive threshold window step',
+        'Pixel increment between successive adaptive-threshold window sizes. '
+        'Smaller steps test more scales and take more time.',
+    ),
+    'aprilTagCriticalRad': (
+        'AprilTag critical corner angle',
+        'AprilTag corner-angle exclusion margin, in radians. Rejects adjoining edges with angles '
+        'near 0 or pi; 0 disables this angle test.',
+    ),
+    'aprilTagDeglitch': (
+        'AprilTag noise cleanup',
+        'AprilTag binary-image cleanup: 0 disables it; nonzero enables a dilation/erosion pass intended for noisy images.',
+    ),
+    'aprilTagMaxLineFitMse': (
+        'AprilTag maximum line fitting error',
+        'Largest permitted line-fit mean squared error for AprilTag edges, in quad-image pixels squared. '
+        'Lower values demand straighter edges.',
+    ),
+    'aprilTagMaxNmaxima': (
+        'AprilTag maximum corner candidates',
+        'Maximum number of potential corners considered when fitting an AprilTag quadrilateral. '
+        'Larger values allow more combinations to be tested.',
+    ),
+    'aprilTagMinClusterPixels': (
+        'AprilTag minimum cluster size',
+        'Minimum number of boundary samples in an AprilTag candidate cluster. Smaller clusters are discarded.',
+    ),
+    'aprilTagMinWhiteBlackDiff': (
+        'AprilTag minimum contrast',
+        'Minimum local brightness contrast for AprilTag thresholding, in 8-bit grayscale levels. '
+        'Lower values allow weaker contrast.',
+    ),
+    'aprilTagQuadDecimate': (
+        'AprilTag downsampling factor',
+        'Downsampling factor for AprilTag quad extraction. Values above 1 reduce each image dimension '
+        'by this factor; 0 and 1 retain the input resolution. Decoding still uses the full-resolution input.',
+    ),
+    'aprilTagQuadSigma': (
+        'AprilTag smoothing sigma',
+        'Gaussian smoothing sigma, in pixels, before AprilTag quad extraction. 0 disables filtering; '
+        'larger positive values suppress noise but can blur small markers.',
+    ),
+    'cornerRefinementMaxIterations': (
+        'Maximum corner refinement iterations',
+        'Iteration limit for subpixel corner optimization. The accuracy threshold can terminate it earlier.',
+    ),
+    'cornerRefinementMethod': (
+        'Corner refinement method',
+        'Method used for refining detected marker corners.',
+    ),
+    'cornerRefinementMinAccuracy': (
+        'Corner refinement accuracy',
+        'Subpixel refinement stops when a corner moves less than this distance between iterations, '
+        'in pixels. Smaller values demand tighter convergence.',
+    ),
+    'cornerRefinementWinSize': (
+        'Corner refinement window size',
+        'Maximum subpixel search half-window, in pixels: 5 permits an 11 by 11 neighborhood. '
+        'The window can shrink for small markers according to relativeCornerRefinmentWinSize.',
+    ),
+    'detectInvertedMarker': (
+        'Detect inverted markers',
+        'Also accept markers with reversed black/white polarity. This concerns image intensity, '
+        'not mirrored patterns or viewing the printed marker from behind.',
+    ),
+    'errorCorrectionRate': (
+        'Error correction rate',
+        'Fraction of the dictionary bit-error correction capacity used during initial decoding, from 0 to 1. '
+        'Higher values tolerate more bit errors but can increase misidentification.',
+    ),
+    'markerBorderBits': (
+        'Marker border bits',
+        'Black border width measured in marker cells, not image pixels. Must match the printed marker.',
+    ),
+    'maxErroneousBitsInBorderRate': (
+        'Maximum border error rate',
+        'Allowance for incorrectly white cells in the black border. OpenCV multiplies this rate by '
+        'the number of inner code cells to obtain the allowed error count.',
+    ),
+    'maxMarkerPerimeterRate': (
+        'Maximum marker perimeter ratio',
+        'Upper candidate-contour perimeter limit, expressed as a multiple of the larger image dimension. '
+        'Candidates above this size are discarded.',
+    ),
+    'minCornerDistanceRate': (
+        'Minimum corner separation ratio',
+        'Required separation of adjacent candidate corners, expressed as a fraction of the contour perimeter. '
+        'Rejects quadrilaterals with corners too close together.',
+    ),
+    'minDistanceToBorder': (
+        'Minimum distance to image edge',
+        'Required clearance from every marker corner to the image edges, in pixels. '
+        'Rejects candidates too close to an edge.',
+    ),
+    'minGroupDistance': (
+        'Minimum distance within groups',
+        'Within a group of nearby contours, minimum corner separation for keeping additional candidates, '
+        'relative to marker-cell size. Larger values retain fewer close alternatives.',
+    ),
+    'minMarkerDistanceRate': (
+        'Minimum marker distance ratio',
+        'Corner-distance threshold for grouping nearby marker candidates, relative to the smaller contour perimeter. '
+        'Larger values group more candidates together.',
+    ),
+    'minMarkerLengthRatioOriginalImg': (
+        'Minimum marker length ratio',
+        'ArUco3 scale-selection parameter relative to the larger input-image dimension. '
+        'Higher values increase downsampling and speed, at the cost of detecting small markers; 0 avoids this downsampling.',
+    ),
+    'minMarkerPerimeterRate': (
+        'Minimum marker perimeter ratio',
+        'Lower candidate-contour perimeter limit, expressed as a fraction of the larger image dimension. '
+        'Smaller values admit smaller markers and more noise candidates.',
+    ),
+    'minOtsuStdDev': (
+        'Minimum standard deviation for Otsu',
+        'Minimum grayscale standard deviation for Otsu thresholding during bit decoding. '
+        'Below this contrast, all cells are assigned one value based on the patch mean.',
+    ),
+    'minSideLengthCanonicalImg': (
+        'Minimum canonical marker size',
+        'ArUco3 minimum marker size in the canonical working image, in pixels per side. '
+        'Used with minMarkerLengthRatioOriginalImg to select processing scales.',
+    ),
+    'perspectiveRemoveIgnoredMarginPerCell': (
+        'Ignored margin per decoded cell',
+        'Fraction of each rectified cell width excluded on each edge when reading its bit. '
+        'Larger margins avoid boundary contamination but leave fewer pixels for voting.',
+    ),
+    'perspectiveRemovePixelPerCell': (
+        'Pixels per decoded cell side',
+        'Pixels per cell side in the perspective-corrected decoding image, including border cells. '
+        'Higher values sample each bit more densely.',
+    ),
+    'polygonalApproxAccuracyRate': (
+        'Polygon approximation tolerance',
+        'Polygon-approximation tolerance as a fraction of candidate contour length. '
+        'Controls how closely the contour must resemble a four-corner polygon.',
+    ),
+    'relativeCornerRefinmentWinSize': (
+        'Relative corner refinement window size',
+        'Subpixel search half-window relative to the average marker-cell size. '
+        'OpenCV rounds it to pixels, with a minimum of 1 and a cap of cornerRefinementWinSize.',
+    ),
+    'useAruco3Detection': (
+        'Use ArUco3 detection',
+        'Enable accelerated ArUco3 detection using image scales. Requires subpixel corner refinement. '
+        'The canonical-size and marker-length-ratio parameters control the size/speed tradeoff.',
+    ),
+}
+
+refine_parameter_doc: dict[str, tuple[str, str]] = {
+    'checkAllOrders': (
+        'Check all corner orders',
+        'Try all four cyclic corner orders when matching a rejected quadrilateral to a missing board marker. '
+        'If disabled, use only its supplied corner order.',
+    ),
+    'errorCorrectionRate': (
+        'Recovery error correction rate',
+        'Board-recovery bit-error allowance relative to the dictionary correction capacity. '
+        'Values above 1 allow looser recovery; -1 skips code checking. '
+        'Setting this to zero effectively accepts no candidates.',
+    ),
+    'minRepDistance': (
+        'Recovery distance tolerance',
+        'Pixel tolerance for matching rejected candidates to predicted board markers, '
+        'measured using the largest corresponding-corner discrepancy. Larger values allow recovery farther from the prediction.',
+    ),
+}
+
+def settings_problems(settings: dict | None = None) -> dict[tuple[str, ...], str]:
+    return _resolve_settings(settings)[1]
+
+def resolve_settings(settings: dict | None = None) -> dict:
+    out, problems = _resolve_settings(settings)
+    if problems:
+        raise ValueError('\n'.join(dict.fromkeys(problems.values())))
+    return out
+
+def _resolve_settings(settings: dict | None) -> tuple[dict, dict[tuple[str, ...], str]]:
+    out = settings_defaults()
+    problems = {}
+    if settings is not None and not isinstance(settings, dict):
+        return out, {(): 'ArUco settings must be a dictionary'}
+
+    for key, value in (settings or {}).items():
+        if key not in out:
+            problems[(key,)] = f'Unknown ArUco setting: {key}'
+            continue
+        if isinstance(out[key], dict):
+            cls = {'detector_params': cv2.aruco.DetectorParameters,
+                   'refine_params': cv2.aruco.RefineParameters}.get(key)
+            if not isinstance(value, dict):
+                problems[(key,)] = f'The value of the ArUco setting "{key}" must be a dictionary'
+                continue
+            for name, val in value.items():
+                path = (key, name)
+                if name not in out[key]:
+                    problems[path] = (f'{name} is not a valid parameter for cv2.aruco.{cls.__name__}'
+                                      if cls is not None else f'Unknown ArUco {key} parameter: {name}')
+                    continue
+                default = out[key][name]
+                if type(default) is float and type(val) in (int, float):
+                    try:
+                        val = float(val)
+                    except OverflowError:
+                        problems[path] = f'ArUco {key}.{name} must be a finite float'
+                        continue
+                if type(val) is not type(default) or (type(val) is float and not math.isfinite(val)):
+                    problems[path] = f'ArUco {key}.{name} must be a finite {type(default).__name__}'
+                    continue
+                out[key][name] = val
+        elif type(value) is not bool:
+            problems[(key,)] = f'ArUco {key} must be a boolean'
+        else:
+            out[key] = value
+
+    def check(group, names, valid, message):
+        paths = [(group, name) for name in names]
+        # Type errors and earlier constraints take precedence over dependent checks.
+        if not valid and not any(path in problems for path in paths):
+            for path in paths:
+                problems[path] = message
+
+    d, r = out['detector_params'], out['refine_params']
+    positive = ('adaptiveThreshWinSizeMin', 'adaptiveThreshWinSizeMax', 'adaptiveThreshWinSizeStep',
+                'minMarkerPerimeterRate', 'maxMarkerPerimeterRate', 'polygonalApproxAccuracyRate',
+                'cornerRefinementWinSize', 'cornerRefinementMaxIterations', 'cornerRefinementMinAccuracy',
+                'markerBorderBits', 'perspectiveRemovePixelPerCell')
+    for name in positive:
+        check('detector_params', [name], d[name] > 0, f'ArUco detector_params.{name} must be positive')
+    check('detector_params', ['adaptiveThreshWinSizeMin'], d['adaptiveThreshWinSizeMin'] >= 3,
+          'adaptiveThreshWinSizeMin must be at least 3')
+    check('detector_params', ['adaptiveThreshWinSizeMin', 'adaptiveThreshWinSizeMax'],
+          d['adaptiveThreshWinSizeMax'] >= d['adaptiveThreshWinSizeMin'],
+          'adaptiveThreshWinSizeMax must be at least adaptiveThreshWinSizeMin')
+    check('detector_params', ['minMarkerPerimeterRate', 'maxMarkerPerimeterRate'],
+          d['maxMarkerPerimeterRate'] >= d['minMarkerPerimeterRate'],
+          'maxMarkerPerimeterRate must be at least minMarkerPerimeterRate')
+    check('detector_params', ['cornerRefinementMethod'], d['cornerRefinementMethod'] in typing.get_args(corner_refinement_methods),
+          'Unknown ArUco cornerRefinementMethod')
+    check('detector_params', ['useAruco3Detection', 'cornerRefinementMethod'],
+          not d['useAruco3Detection'] or d['cornerRefinementMethod'] == cv2.aruco.CORNER_REFINE_SUBPIX,
+          'OpenCV ArUco3 detection requires CORNER_REFINE_SUBPIX')
+    for name in ('minCornerDistanceRate', 'minDistanceToBorder', 'minMarkerDistanceRate', 'minGroupDistance',
+                 'minOtsuStdDev', 'minSideLengthCanonicalImg', 'minMarkerLengthRatioOriginalImg',
+                 'relativeCornerRefinmentWinSize', 'aprilTagQuadDecimate', 'aprilTagQuadSigma'):
+        check('detector_params', [name], d[name] >= 0, f'ArUco detector_params.{name} cannot be negative')
+    for name in ('errorCorrectionRate', 'maxErroneousBitsInBorderRate'):
+        check('detector_params', [name], 0 <= d[name] <= 1, f'ArUco detector_params.{name} must be between 0 and 1')
+    check('detector_params', ['perspectiveRemoveIgnoredMarginPerCell'], 0 <= d['perspectiveRemoveIgnoredMarginPerCell'] < .5,
+          'ArUco perspectiveRemoveIgnoredMarginPerCell must be in [0, 0.5)')
+    check('detector_params', ['useAruco3Detection', 'minSideLengthCanonicalImg', 'minMarkerLengthRatioOriginalImg'],
+          not d['useAruco3Detection'] or bool(d['minSideLengthCanonicalImg'] or d['minMarkerLengthRatioOriginalImg']),
+          'ArUco3 requires a nonzero minimum marker size')
+    check('refine_params', ['minRepDistance'], r['minRepDistance'] > 0, 'ArUco refine_params.minRepDistance must be positive')
+
+    # Round-trip valid parameters so comparisons use OpenCV's actual precision.
+    for which in ('detector', 'refine'):
+        obj = cv2.aruco.DetectorParameters() if which == 'detector' else cv2.aruco.RefineParameters()
+        key = f'{which}_params'
+        for name, value in out[key].items():
+            if (key, name) in problems:
+                continue
+            try:
+                setattr(obj, name, value)
+            except (TypeError, ValueError, OverflowError, cv2.error) as exc:
+                problems[(key, name)] = f'ArUco {key}.{name}: {exc}'
+        out[key] = {name: getattr(obj, name) for name in out[key]}
+    return out, problems
+
 class PlaneSetup(typing.TypedDict):
     plane                   : plane.Plane
-    aruco_detector_params   : dict[str,typing.Any]
-    aruco_refine_params     : dict[str,typing.Any]
     min_num_markers         : int
+    aruco_settings          : typing.NotRequired[dict[str, typing.Any]]
 class MarkerSetup(typing.TypedDict):
-    aruco_detector_params   : dict[str,typing.Any]
     detect_only             : bool
     size                    : float
+    detector_params         : typing.NotRequired[dict[str, typing.Any]]
 
 def reduce_to_families(dictionary_ids: list[int]) -> tuple[list[int],dict[int,int]]:
     # turn into families, and the largest dict necessary per family
@@ -97,7 +435,7 @@ def deploy_marker_images(output_dir: str|pathlib.Path, size: int, ArUco_dict_id:
             cv2.imwrite(output_dir / f"{m_id}.png", marker_image)
 
 class Detector:
-    def __init__(self, dictionary_id: int):
+    def __init__(self, dictionary_id: int, settings: dict | None = None):
         self.dictionary_id  = dictionary_id
         self._family        = dict_id_to_family[self.dictionary_id]
         self._is_family     = family_to_str[self._family][1]
@@ -111,8 +449,7 @@ class Detector:
         self._individual_marker_ids : set[int]                  = set()
         self._all_markers           : set[int]                  = set()
 
-        self._user_detector_params  : dict[str, typing.Any]     = {}
-        self._user_refine_params    : dict[str, typing.Any]     = {}
+        self.settings                                           = resolve_settings(settings)
 
         self._det: cv2.aruco.ArucoDetector|None                 = None
 
@@ -121,10 +458,6 @@ class Detector:
     def add_plane(self, name: str, setup: PlaneSetup):
         self._check_dict(setup['plane'].aruco_dict_id, 'plane')
         self.planes[name] = setup
-        if 'aruco_detector_params' in self.planes[name] and self.planes[name]['aruco_detector_params']:
-            self._update_parameters('detector', self.planes[name]['aruco_detector_params'])
-        if 'aruco_refine_params' in self.planes[name] and self.planes[name]['aruco_refine_params']:
-            self._update_parameters('refine'  , self.planes[name]['aruco_refine_params'])
         self._boards[name]= self.planes[name]['plane'].get_aruco_board()
 
         markers = self.planes[name]['plane'].get_marker_IDs()
@@ -138,8 +471,6 @@ class Detector:
     def add_individual_marker(self, mark: marker.MarkerID, setup: MarkerSetup):
         self._check_dict(mark.aruco_dict_id, 'individual marker')
         self.individual_markers[mark.m_id] = setup
-        if 'aruco_detector_params' in self.individual_markers[mark.m_id] and self.individual_markers[mark.m_id]['aruco_detector_params']:
-            self._update_parameters('detector', self.individual_markers[mark.m_id]['aruco_detector_params'])
         self._all_markers.add(mark.m_id)
         self._individual_marker_ids.add(mark.m_id)
         # get marker points in world
@@ -163,72 +494,46 @@ class Detector:
         elif dict_id!=self.dictionary_id:
             raise ValueError(f'The dictionary for this new {what}, {dict_id_to_str[dict_id]}, does not match the dictionary used for this detector ({dict_id_to_str[self.dictionary_id]}).')
 
-    def _update_parameters(self, which: str, new_params: dict):
-        if which=='detector':
-            param_dict = self._user_detector_params
-            cls = cv2.aruco.DetectorParameters
-        elif 'refine':
-            param_dict = self._user_refine_params
-            cls = cv2.aruco.RefineParameters
-        else:
-            raise ValueError(f'parameter type "{which}" not understood')
-        for p in new_params:
-            if not hasattr(cls, p):
-                raise AttributeError(f'{p} is not a valid parameter for cv2.aruco.{cls.__name__}')
-            if p in param_dict and new_params[p]!=param_dict[p]:
-                fam_str,is_family = family_to_str[dict_id_to_family[self.dictionary_id]]
-                dict_str = f'{fam_str} family' if is_family else f'{dict_id_to_str[self.dictionary_id]} dictionary'
-                raise ValueError(f'You have already set the parameter {p} to {param_dict[p]} and are now trying to set it to {new_params[p]}, in the detector for the {dict_str}. Resolve this conflict by checking this setting for all planes and individual markers using the {dict_str}.')
-            param_dict[p] = new_params[p]
-
     def create_detector(self):
-        # set detector parameters
-        detector_params                       = cv2.aruco.DetectorParameters()
-        detector_params.cornerRefinementMethod= cv2.aruco.CORNER_REFINE_SUBPIX    # good default, user can override
-        refine_params                         = cv2.aruco.RefineParameters()
-        for p in self._user_detector_params:
-            setattr(detector_params, p, self._user_detector_params[p])
-        for p in self._user_refine_params:
-            setattr(refine_params, p, self._user_refine_params[p])
+        # set detector parameters in an OpenCV settings object
+        detector_params = cv2.aruco.DetectorParameters()
+        refine_params   = cv2.aruco.RefineParameters()
+        for name, value in self.settings['detector_params'].items():
+            setattr(detector_params, name, value)
+        for name, value in self.settings['refine_params'].items():
+            setattr(refine_params, name, value)
+        # create a detector with the requested settings
+        self._det = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(self.dictionary_id), detector_params, refine_params)
 
-        self._det = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(self.dictionary_id),
-                                            detector_params, refine_params)
-
-    def detect_markers(self, image: cv2.UMat, frame_info: dict, camera_params: ocv.CameraParams) -> tuple[dict[str,dict[str]],dict[str],dict[str],list[np.ndarray]]:
-        img_points, ids, rejected_img_points = self._detect_markers(image, self._det)
-
-        # For each plane, refine detected markers (eliminates markers not part of the plane, adds missing markers to the poster)
-        out_planes: dict[str] = {}
+    def detect_markers(self, image: cv2.UMat, frame_info: dict, camera_params: ocv.CameraParams, raw_detection=None) -> tuple:
+        img_points, ids, rejected = raw_detection if raw_detection is not None else self._detect_markers(image, self._det)
+        rejected = tuple(rejected)
+        out_planes = {}
         for p in self.planes:
-            if ids is not None:
-                pl_img_points, pl_ids = filter_detections(img_points, ids, self._plane_marker_ids[p])
-                ok, corners_consistent, ids_consistent, rejected_indices = filter_board_duplicates(
-                    self._boards[p], pl_img_points, pl_ids, frame_info, camera_params)
-                if ok:
-                    if rejected_indices:
-                        rejected_img_points += tuple([img_points[i] for i in rejected_indices])
-                    pl_img_points = corners_consistent
-                    pl_ids = ids_consistent
-
-                recovered_ids = None
-                if len(pl_ids)>self.planes[p]['min_num_markers']:
-                    pl_img_points, pl_ids, rejected_img_points, recovered_ids = \
-                        self._refine_detection(image, pl_img_points, pl_ids, rejected_img_points,
-                                            self._det, self._boards[p], frame_info, camera_params)
-
-                out_planes[p] = dict(zip(['img_points', 'ids', 'recovered_ids'],(pl_img_points, pl_ids, recovered_ids)))
-            else:
+            # get the detections for this plane (that is, filter on expected marker IDs)
+            pl_img_points, pl_ids = filter_detections(img_points, ids, self._plane_marker_ids[p])
+            if pl_ids is None or not len(pl_ids):
                 out_planes[p] = None
+                continue
 
-        # For individual markers, only keep the ones known
-        out_individual: dict[str] = {}
-        out_individual['img_points'],out_individual['ids'] = self._filter_detections(img_points, ids, self._individual_marker_ids)
+            # filter out any duplicate detections of the same marker.
+            ok, kept, kept_ids, rejected_indices = filter_board_duplicates(
+                self._boards[p], pl_img_points, pl_ids, frame_info, camera_params)
+            if ok:
+                rejected += tuple(pl_img_points[i] for i in rejected_indices)
+                pl_img_points, pl_ids = kept, kept_ids
+            recovered_ids = None
 
-        # collect unexpected markers
-        unexpected_markers: dict[str] = {}
-        unexpected_markers['img_points'],unexpected_markers['ids'] = self._filter_detections(img_points, ids, self._all_markers, keep_expected=False)
+            # Preserve the existing recovery threshold independently of the on/off switch.
+            if self.settings['refine'] and len(pl_ids) >= self.planes[p]['min_num_markers']:
+                pl_img_points, pl_ids, rejected, recovered_ids = self._refine_detection(
+                    image, pl_img_points, pl_ids, rejected, self._det, self._boards[p], frame_info, camera_params)
+                rejected = tuple(rejected)
 
-        self._last_detect_output = (out_planes, out_individual, unexpected_markers, rejected_img_points)
+            out_planes[p] = dict(img_points=pl_img_points, ids=pl_ids, recovered_ids=recovered_ids)
+        out_individual = dict(zip(('img_points', 'ids'), filter_detections(img_points, ids, self._individual_marker_ids)))
+        unexpected = dict(zip(('img_points', 'ids'), filter_detections(img_points, ids, self._all_markers, keep_expected=False)))
+        self._last_detect_output = (out_planes, out_individual, unexpected, rejected)
         return self._last_detect_output
 
     def _detect_markers(self, image: cv2.UMat, det: cv2.aruco.ArucoDetector):
@@ -284,10 +589,11 @@ class Detector:
             drawing.arucoDetectedMarkers(frame, detect_tuple[2]['img_points'], detect_tuple[2]['ids'], border_color=unexpected_marker_color, sub_pixel_fac=sub_pixel_fac)
 
 class Manager:
-    # takes single planes and individual markers, and for each information about when they should be
-    # detected, and consolidates them into a minimal set of detectors
-    # with all planes/individual markers associated to one of these detectors
+    # takes single planes, individual markers and detector settings, and consolidates them into a minimal
+    # set of detectors with all planes/individual markers associated to one of these detectors
+    # also handles information for each about when they should be detected (called intervals below)
     def __init__(self):
+        self.working_set = WorkingSet()
         # planes to be detected
         self.planes                 : dict[str, PlaneSetup] = {}
         self.plane_proc_intervals   : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None] = {}
@@ -295,11 +601,10 @@ class Manager:
         # individual markers to be detected
         self.individual_markers                 : dict[marker.MarkerID, MarkerSetup] = {}
         self.individual_markers_proc_intervals  : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None] = {}
+        self._individual_to_detector            : dict[marker.MarkerID, int] = {}
 
         # consolidated into set of detectors, and associated planes+individual markers for each
         self._detectors             : dict[int, Detector]                   = {}
-        self._det_cache             : dict[int, tuple[int,tuple]]           = {}
-        self._last_viz_frame_idx    : dict[int,int]                         = {}
 
         # colors for drawing (in BGR order)
         self._plane_marker_color            = (  0,255,  0)
@@ -349,7 +654,7 @@ class Manager:
                     # N.B.: other markers should be registered by caller as individual markers
                     continue
                 if (overlap := all_markers.intersection(markers[ms])):
-                    t_err_msg = f'{err_msg} for plane "{p}", duplicated markers: {marker.format_duplicate_markers_msg({(m.m_id, dict_id_to_family[m.aruco_dict_id]) for m in overlap})}'
+                    t_err_msg = f'{err_msg} for plane "{p}", duplicated markers: {marker.format_duplicate_markers_msg({m.to_family() for m in overlap})}'
                     if allow_duplicated_markers:
                         print(f'Warning: {t_err_msg}')
                     else:
@@ -364,31 +669,65 @@ class Manager:
                     raise RuntimeError(t_err_msg)
             all_markers.add(m)
 
-        # see for which marker dicts we need detectors to service all these
-        # also determine mapping of requested ArUco dicts to these detectors
-        needed_dicts, dict_mapping = reduce_to_families({m.aruco_dict_id for m in all_markers})
+        family_marker_ids: dict[int, set[int]] = {}
+        for m in all_markers:
+            family_marker_ids.setdefault(dict_id_to_family[m.aruco_dict_id], set()).add(m.m_id)
 
-        # organize planes and individual markers into the dict that will be used for their detection
-        planes_organized        : dict[int,list[str]]             = {d:[] for d in needed_dicts}
-        indiv_markers_organized : dict[int,list[marker.MarkerID]] = {d:[] for d in needed_dicts}
-        for p in self.planes:
-            det_dict = dict_mapping[self.planes[p]['plane'].aruco_dict_id]
-            planes_organized[det_dict].append(p)
-        for m in self.individual_markers:
-            det_dict = dict_mapping[m.aruco_dict_id]
-            indiv_markers_organized[det_dict].append(m)
+        registrations = [(self.planes[p]['plane'].aruco_dict_id, p, self.planes[p], True) for p in self.planes]
+        registrations += [(m.aruco_dict_id, m, self.individual_markers[m], False) for m in self.individual_markers]
+        groups = {}
+        for dictionary_id, name, setup, is_plane in registrations:
+            settings = resolve_settings(setup.get('aruco_settings') if is_plane else
+                                        {'detector_params': setup.get('detector_params', {})})
+            dictionary = cv2.aruco.getPredefinedDictionary(dictionary_id)
+            key = (dict_id_to_family[dictionary_id], dictionary.maxCorrectionBits, freeze(settings))
+            groups.setdefault(key, []).append((dictionary_id, name, setup, is_plane, settings))
 
-        # make the needed detectors
+        compatible_groups = []
+        for entries in groups.values():
+            bins = []
+            for entry in entries:
+                _, name, setup, is_plane, _ = entry
+                for group in bins:
+                    if is_plane or all(e[3] or e[1].m_id != name.m_id or
+                                       (e[2].get('size'), e[2].get('detect_only', False)) ==
+                                       (setup.get('size'), setup.get('detect_only', False)) for e in group):
+                        group.append(entry)
+                        break
+                else:
+                    bins.append([entry])
+            compatible_groups.extend(bins)
+
         self._detectors.clear()
         self._plane_to_detector.clear()
-        for d in needed_dicts:
-            self._detectors[d] = Detector(d)
-            for p in planes_organized[d]:
-                self._detectors[d].add_plane(p, self.planes[p])
-                self._plane_to_detector[p] = d
-            for m in indiv_markers_organized[d]:
-                self._detectors[d].add_individual_marker(m, self.individual_markers[m])
-            self._detectors[d].create_detector()
+        self._individual_to_detector.clear()
+        self.working_set.clear()
+        # Choose one raw dictionary per compatible detection group, even when refinement differs.
+        raw_groups = {}
+        for entries in groups.values():
+            for d, _, _, _, settings in entries:
+                dictionary = cv2.aruco.getPredefinedDictionary(d)
+                key = (dict_id_to_family[d], dictionary.maxCorrectionBits,
+                       freeze(settings['detector_params']))
+                raw_groups.setdefault(key, []).append(d)
+        for detector_id, entries in enumerate(compatible_groups):
+            d, _, _, _, settings = entries[0]
+            dictionary = cv2.aruco.getPredefinedDictionary(d)
+            raw_key = (dict_id_to_family[d], dictionary.maxCorrectionBits,
+                       freeze(settings['detector_params']))
+            d = max(raw_groups[raw_key], key=get_dict_size)
+            detector = Detector(d, settings)
+            for _, name, setup, is_plane, _ in entries:
+                if is_plane:
+                    detector.add_plane(name, setup)
+                    self._plane_to_detector[name] = detector_id
+                else:
+                    detector.add_individual_marker(name, setup)
+                    self._individual_to_detector[name] = detector_id
+            # Known IDs from other detectors in this family must not be drawn as unexpected.
+            detector._all_markers.update(family_marker_ids[dict_id_to_family[d]])
+            detector.create_detector()
+            self._detectors[detector_id] = detector
 
     def register_with_estimator(self, estimator: pose.Estimator):
         # this handles registration of all planes and individual markers with the estimator
@@ -405,53 +744,82 @@ class Manager:
                                             self.individual_markers_proc_intervals[m],
                                             lambda k, fi, fr, finf, _: self._visualize_individual_marker(k, fi, fr, finf))
 
-    def _detect_plane(self, plane_name: str, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams):
+    def _detect_plane(self, plane_name: str, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams) -> pose.DetectionResult|None:
         if plane_name not in self._plane_to_detector:
             raise ValueError(f'The plane {plane_name} is not known')
         aruco_dict_id = self._plane_to_detector[plane_name]
         detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, frame, frame_info, camera_parameters)
         if not detect_tuple[0] or plane_name not in detect_tuple[0] or not detect_tuple[0][plane_name]:
-            return None, None
-        return self._detectors[aruco_dict_id].get_matching_image_board_points(plane_name, detect_tuple)
+            return None
+        obj, img = self._detectors[aruco_dict_id].get_matching_image_board_points(plane_name, detect_tuple)
+        if obj is None or img is None:
+            return None
+        context = self.working_set.contexts[False]
+        return pose.DetectionResult(obj, img, context.camera_params, context.frame_info)
 
-    def _detect_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams):
+
+    def _detect_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams) -> pose.DetectionResult|None:
         if mark not in self.individual_markers:
             raise ValueError(f'The individual marker {marker.marker_ID_to_str(mark)} is not known')
-        detect_tuple = self._get_detector_cache(mark.aruco_dict_id, frame_idx, frame, frame_info, camera_parameters)
+        detector_id = self._individual_to_detector[mark]
+        detect_tuple = self._get_detector_cache(detector_id, frame_idx, frame, frame_info, camera_parameters)
         if not detect_tuple[1] or detect_tuple[1]['ids'] is None or mark.m_id not in detect_tuple[1]['ids']:
-            return None, None
-        return self._detectors[mark.aruco_dict_id].get_individual_marker_points(mark.m_id, detect_tuple)
+            return None
+        detector = self._detectors[detector_id]
+        obj, img = detector.get_individual_marker_points(mark.m_id, detect_tuple)
+        if img is None:
+            return None
+        context = self.working_set.contexts[False]
+        return pose.DetectionResult(obj, img, context.camera_params, context.frame_info)
 
-    def _get_detector_cache(self, aruco_dict_id: int, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams):
-        if aruco_dict_id not in self._det_cache or self._det_cache[aruco_dict_id][0]!=frame_idx:
-            if frame is None:
-                return None
-            detect_tuple = self._detectors[aruco_dict_id].detect_markers(frame, frame_info, camera_parameters)
-            self._det_cache[aruco_dict_id] = (frame_idx, detect_tuple)
-        return self._det_cache[aruco_dict_id][1]
+
+    def _get_detector_cache(self, detector_id: int, frame_idx: int, frame: np.ndarray|None, frame_info: dict, camera_parameters: ocv.CameraParams|None):
+        if frame is None:
+            # Visualization only reads the current frame; it must not resurrect stale results.
+            return self.working_set.detector_results.get(detector_id) if self.working_set.matches_frame(frame_idx) else None
+
+        detector = self._detectors[detector_id]
+        context = self.working_set.prepare(frame_idx, frame, frame_info, camera_parameters)
+        if detector_id not in self.working_set.detector_results:
+            key = (detector.dictionary_id, freeze(detector.settings['detector_params']))
+            if key not in self.working_set.detections:
+                self.working_set.detections[key] = detector._detect_markers(context.image, detector._det)
+            self.working_set.detector_results[detector_id] = detector.detect_markers(context.image, context.frame_info, context.camera_params, self.working_set.detections[key])
+        return self.working_set.detector_results[detector_id]
+
+    def _visualization_output(self, detector_id, detect_tuple):
+        context = self.working_set.contexts[False]
+        if not context.undistorted:
+            return detect_tuple
+        planes, individual, unexpected, rejected = copy.deepcopy(detect_tuple)
+        for points in [*planes.values(), individual, unexpected]:
+            if points:
+                points['img_points'] = context.original_corners(points['img_points'])
+        return planes, individual, unexpected, context.original_corners(rejected)
 
     def _visualize_plane(self, plane_name: str, frame_idx: int, frame: np.ndarray, frame_info: dict):
         if plane_name not in self._plane_to_detector:
             raise ValueError(f'The plane {plane_name} is not known')
         aruco_dict_id = self._plane_to_detector[plane_name]
-        if aruco_dict_id in self._last_viz_frame_idx and self._last_viz_frame_idx[aruco_dict_id]==frame_idx:
+        if aruco_dict_id in self.working_set.visualized:
             # nothing to do, already drawn
             return
         detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, None, frame_info, None)
         if detect_tuple is not None:
-            frame = self._detectors[aruco_dict_id].visualize(frame, detect_tuple, plane_marker_color=self._plane_marker_color, recovered_plane_marker_color=self._recovered_plane_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
-            self._last_viz_frame_idx[aruco_dict_id] = frame_idx
+            frame = self._detectors[aruco_dict_id].visualize(frame, self._visualization_output(aruco_dict_id, detect_tuple), plane_marker_color=self._plane_marker_color, recovered_plane_marker_color=self._recovered_plane_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
+            self.working_set.visualized.add(aruco_dict_id)
 
     def _visualize_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray, frame_info: dict):
         if mark not in self.individual_markers:
             raise ValueError(f'The individual marker {marker.marker_ID_to_str(mark)} is not known')
-        if mark.aruco_dict_id in self._last_viz_frame_idx and self._last_viz_frame_idx[mark.aruco_dict_id]==frame_idx:
+        detector_id = self._individual_to_detector[mark]
+        if detector_id in self.working_set.visualized:
             # nothing to do, already drawn
             return
-        detect_tuple = self._get_detector_cache(mark.aruco_dict_id, frame_idx, None, frame_info, None)
+        detect_tuple = self._get_detector_cache(detector_id, frame_idx, None, frame_info, None)
         if detect_tuple is not None:
-            frame = self._detectors[mark.aruco_dict_id].visualize(frame, detect_tuple, plane_marker_color=self._plane_marker_color, recovered_plane_marker_color=self._recovered_plane_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
-            self._last_viz_frame_idx[mark.aruco_dict_id] = frame_idx
+            frame = self._detectors[detector_id].visualize(frame, self._visualization_output(detector_id, detect_tuple), plane_marker_color=self._plane_marker_color, recovered_plane_marker_color=self._recovered_plane_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
+            self.working_set.visualized.add(detector_id)
 
 
 def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_dict: cv2.aruco.Dictionary):
@@ -461,18 +829,17 @@ def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_di
     return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
 
 def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, frame_info: dict, camera_parameters: ocv.CameraParams):
-    # if there is an ROI_offset  set in frame_info, take it into account when refining
-    if (has_offset := 'offset_x' in frame_info and 'offset_y' in frame_info):
-        offset = np.array([frame_info['offset_x'], frame_info['offset_y']], dtype=detected_corners[0].dtype if detected_corners else np.float32)
-        detected_corners = [c+offset for c in detected_corners]
-        rejected_corners = [c+offset for c in rejected_corners]
-
-    # do refine
+    # Corners must remain in the image's coordinates for OpenCV's pixel sampling.
+    # Shift the principal point for a sensor ROI, rather than shifting the corners.
+    camera_matrix = None
+    distortion = None
+    if camera_parameters.has_opencv_camera():
+        camera_matrix = camera_parameters.camera_mtx.copy()
+        camera_matrix[:2, 2] -= [frame_info.get('offset_x', 0), frame_info.get('offset_y', 0)]
+        distortion = camera_parameters.distort_coeffs
     img_points, ids, rejected_img_points, _ = det.refineDetectedMarkers(
-            image = image, board = board,
-            detectedCorners = detected_corners, detectedIds = detected_ids, rejectedCorners = rejected_corners,
-            cameraMatrix = camera_parameters.camera_mtx, distCoeffs = camera_parameters.distort_coeffs
-            )
+        image=image, board=board, detectedCorners=detected_corners, detectedIds=detected_ids,
+        rejectedCorners=rejected_corners, cameraMatrix=camera_matrix, distCoeffs=distortion)
     if img_points and img_points[0].shape[0]==4:
         # there are versions out there where there is a bug in output shape of each set of corners, fix up
         img_points = [np.reshape(c,(1,4,2)) for c in img_points]
@@ -483,11 +850,6 @@ def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_c
     recovered_ids = None
     if detected_ids is not None and ids is not None:
         recovered_ids = np.array(list(set(ids.flatten())-set(detected_ids.flatten()))).reshape((-1,1))
-
-    # Remove the offset from the refined corners before returning
-    if has_offset:
-        img_points = [c-offset for c in img_points]
-        rejected_img_points = [c-offset for c in rejected_img_points]
 
     return img_points, ids, rejected_img_points, recovered_ids
 
@@ -501,7 +863,7 @@ def filter_detections(img_points: list[np.ndarray], ids: np.ndarray, expected_id
         return tuple(), None
     to_remove = np.where([x not in expected_ids for x in ids.flatten()])[0]
     ids = np.delete(ids, to_remove, axis=0)
-    img_points = tuple(v for i,v in enumerate(img_points) if i not in to_remove)
+    img_points = tuple(v.copy() for i,v in enumerate(img_points) if i not in to_remove)
     return img_points, ids
 
 
@@ -578,7 +940,7 @@ def _estimate_board_pose(
 ) -> tuple[bool, np.ndarray | None, np.ndarray | None]:
     """INTERNAL: Estimate pose using all detections. Returns (ok, rvec, tvec)."""
     objP, imgP = board.matchImagePoints(corners_list, ids)
-    if len(objP) == 0:
+    if objP is None or len(objP) == 0:
         return False, None, None
     retval, rvec, tvec, _ = pose.estimate_pose(objP, imgP, frame_info, camera_params)
     if retval <= 0:
@@ -592,7 +954,7 @@ def filter_board_duplicates(
     frame_info: dict,
     camera_params: ocv.CameraParams,
     *,
-    min_markers: int = 2,
+    min_markers: int = 3,
     max_combinations: int | None = 5000,
     test_corner_rotations: bool = True
 ) -> tuple[bool, list[np.ndarray], np.ndarray, list[int]]:
@@ -714,3 +1076,56 @@ def filter_board_duplicates(
     ids_consistent = ids_arr[best_indices].reshape(-1, 1).astype(ids.dtype, copy=False)
 
     return True, corners_consistent, ids_consistent, list(set(range(len(ids)))-set(best_indices))
+
+
+@dataclass
+class ImageContext:
+    image: np.ndarray
+    frame_info: dict
+    camera_params: ocv.CameraParams             # camera parameters for the image (which may be undistorted, in which case distortion will be zeroed)
+    original_camera_params: ocv.CameraParams    # original camera parameters for the image, regardless of whether it was undistorted
+    undistorted: bool = False
+
+    def original_corners(self, corners):
+        if not self.undistorted or corners is None:
+            return corners
+        offset = [self.frame_info.get('offset_x', 0), self.frame_info.get('offset_y', 0)]
+        return tuple(transforms.distort_points(c.reshape(-1, 2), self.original_camera_params, offset).reshape(c.shape).astype(np.float32) for c in corners)
+
+
+class WorkingSet:
+    """One frame's images/detections, plus a cached calibration/ROI remap."""
+    def __init__(self):
+        self._frame_key = None
+        self.contexts = {}                   # Raw and undistorted image contexts.
+        self.detections = {}                 # Raw detections shared by compatible configurations.
+        self.detector_results: dict[int, tuple] = {}  # Filtered/refined results per detector wrapper.
+        self.visualized: set[int] = set()    # Detector wrappers already drawn on this frame.
+        self._map_cache = None
+
+    def _reset_frame(self):
+        self._frame_key = None
+        self.contexts.clear()
+        self.detections.clear()
+        self.detector_results.clear()
+        self.visualized.clear()
+
+    def clear(self):
+        self._reset_frame()
+        self._map_cache = None
+
+    def matches_frame(self, frame_idx: int) -> bool:
+        return self._frame_key is not None and self._frame_key[0] == frame_idx
+
+    def prepare(self, frame_idx, image, frame_info, camera_params):
+        colmap = camera_params.colmap_camera
+        calibration = freeze((camera_params.resolution, camera_params.camera_mtx, camera_params.distort_coeffs,
+                              None if colmap is None else (colmap.model_name, colmap.params)))
+        frame_key = (frame_idx, id(image), freeze(frame_info), calibration)
+        if frame_key != self._frame_key:
+            self._reset_frame()
+            self._frame_key = frame_key
+        # always store the original image
+        if False not in self.contexts:
+            self.contexts[False] = ImageContext(image, dict(frame_info), camera_params, camera_params)
+        return self.contexts[False]

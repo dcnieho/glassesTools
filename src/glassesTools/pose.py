@@ -3,6 +3,7 @@ import cv2
 import numpy as np
 import typing
 import enum
+from dataclasses import dataclass
 from scipy.spatial.transform import Rotation, Slerp
 
 from . import annotation, data_files, drawing, intervals, marker, ocv, timestamps, transforms, _has_GUI
@@ -13,6 +14,32 @@ else:
     class video_player:
         @property
         def GUI(self) -> typing.Any: ...
+
+@dataclass
+class DetectionResult:
+    """Class to hold matched object and image points, along with context needed to interpret them."""
+    object_points       : np.ndarray | None
+    image_points        : np.ndarray | None
+    camera_params       : ocv.CameraParams
+    frame_info          : dict
+
+    def estimate_pose(self, flags=cv2.SOLVEPNP_ITERATIVE) -> tuple[int, np.ndarray | None, np.ndarray | None, float]:
+        if self.object_points is None or self.image_points is None or len(self.object_points) < 4:
+            return 0, None, None, -1.
+        return estimate_pose(self.object_points, self.image_points, self.frame_info, self.camera_params, flags)
+
+    def estimate_homography(self) -> tuple[int, np.ndarray | None]:
+        if self.object_points is None or self.image_points is None or len(self.object_points) < 4:
+            return 0, None
+        return estimate_homography(self.object_points, self.image_points, self.frame_info,
+                                   self.camera_params)
+
+    def estimate_pose_and_homography(self, frame_idx: int) -> "Pose":
+        result = Pose(frame_idx)
+        result.pose_N_points, result.pose_R_vec, result.pose_T_vec, result.pose_reprojection_error = self.estimate_pose()
+        result.homography_N_points, result.homography_mat = self.estimate_homography()
+        return result
+
 
 class Pose:
     # description of tsv file used for storage
@@ -385,6 +412,21 @@ class Status(enum.Enum):
 
 _T  = typing.TypeVar("_T")
 
+class _FrameCache(typing.NamedTuple):
+    status: Status
+    plane_poses: dict[str, Pose]|None = None
+    individual_marker_poses: dict[typing.Any, marker.Pose]|None = None
+    extra_processing: dict[str, tuple[int, typing.Any]]|None = None
+    frame: np.ndarray|None = None
+    frame_idx: int|None = None
+    timestamp: float|None = None
+    frame_info: dict[str,typing.Any]|None = None
+
+    def as_result(self) -> tuple[Status, dict[str, Pose]|None, dict[typing.Any, marker.Pose]|None, dict[str, tuple[int, typing.Any]]|None, tuple[np.ndarray|None, int|None, float|None, dict[str,typing.Any]|None]]:
+        return (self.status, self.plane_poses, self.individual_marker_poses, self.extra_processing,
+                (self.frame, self.frame_idx, self.timestamp, self.frame_info))
+
+
 class Estimator:
     def __init__(self, video_file: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path|timestamps.VideoTimestamps, camera_calibration_file: str|pathlib.Path|ocv.CameraParams):
         self.video_ts   = frame_timestamp_file if isinstance(frame_timestamp_file,timestamps.VideoTimestamps) else timestamps.VideoTimestamps(frame_timestamp_file)
@@ -393,41 +435,41 @@ class Estimator:
         # check video uses the full sensor size or ROI offsets are available. If not, the camera calibration is not valid for the video.
         self.video.check_cam_params(self.cam_params)
 
-        self.plane_functions    : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], tuple[np.ndarray,np.ndarray]]] = {}
-        self.plane_intervals    : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]]     = {}
-        self.plane_visualizers  : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None]= {}
+        self.plane_functions    : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], DetectionResult|None]] = {}
+        self.plane_intervals    : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]]                                            = {}
+        self.plane_visualizers  : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None]             = {}
 
-        self.individual_marker_functions    : dict[_T, typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], tuple[np.ndarray,np.ndarray|None]]] = {}
-        self.individual_marker_intervals    : dict[_T, tuple[annotation.EventType, list[int]|list[list[int]]]]      = {}
-        self.individual_marker_visualizers  : dict[_T, typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None]  = {}
+        self.individual_marker_functions    : dict[_T, typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], DetectionResult|None]] = {}
+        self.individual_marker_intervals    : dict[_T, tuple[annotation.EventType, list[int]|list[list[int]]]]                                           = {}
+        self.individual_marker_visualizers  : dict[_T, typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None]             = {}
 
         self.extra_proc_functions   : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams,typing.Any], tuple]] = {}
-        self.extra_proc_intervals   : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None]= {}
-        self.extra_proc_parameters  : dict[str, dict[str,typing.Any]]                                       = {}
-        self.extra_proc_visualizers : dict[str, typing.Callable[[str,np.ndarray,dict[str,typing.Any],int,typing.Any|None], None]|None]= {}
+        self.extra_proc_intervals   : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None]                                   = {}
+        self.extra_proc_parameters  : dict[str, dict[str,typing.Any]]                                                                          = {}
+        self.extra_proc_visualizers : dict[str, typing.Callable[[str,np.ndarray,dict[str,typing.Any],int,typing.Any|None], None]|None]         = {}
 
-        self._cache: tuple[Status, dict[str, Pose], dict[_T, marker.Pose], dict[str, tuple[int, typing.Any]], tuple[np.ndarray, int, float, dict[str,typing.Any]]] = None  # self._cache[4][1] is frame number
+        self._cache                 : _FrameCache|None              = None
 
-        self.gui                    : video_player.GUI          = None
-        self.has_gui                                            = False
-        self.stop_gui_on_delete                                 = True
-        self.allow_early_exit                                   = True
-        self.progress_updater       : typing.Callable[[], None] = None
+        self.gui                    : video_player.GUI|None         = None
+        self.has_gui                                                = False
+        self.stop_gui_on_delete                                     = True
+        self.allow_early_exit                                       = True
+        self.progress_updater       : typing.Callable[[], None]|None= None
 
-        self.do_visualize                                       = False
-        self.sub_pixel_fac                                      = 8
-        self.plane_axis_arm_length                              = 25.
-        self.individual_marker_axis_arm_length                  = 25.
-        self.show_extra_processing_output                       = True
+        self.do_visualize                                           = False
+        self.sub_pixel_fac                                          = 8
+        self.plane_axis_arm_length                                  = 25.
+        self.individual_marker_axis_arm_length                      = 25.
+        self.show_extra_processing_output                           = True
 
-        self._first_frame                                       = True
+        self._first_frame                                           = True
 
     def __del__(self):
         if self.has_gui and self.stop_gui_on_delete:
             self.gui.stop()
 
     def add_plane(self, plane: str,
-                  plane_function: typing.Callable[[str,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray]|None],
+                  plane_function: typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], DetectionResult|None],
                   processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None=None,
                   plane_visualizer: typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None=None):
         if not self._first_frame:
@@ -439,7 +481,7 @@ class Estimator:
         self.plane_visualizers[plane]   = plane_visualizer
 
     def add_individual_marker(self, key: _T,
-                              individual_marker_function: typing.Callable[[_T,int,np.ndarray,ocv.CameraParams], tuple[np.ndarray,np.ndarray|None|None]],
+                              individual_marker_function: typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], DetectionResult|None],
                               processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None=None,
                               individual_marker_visualizer: typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None=None):
         if not self._first_frame:
@@ -465,7 +507,7 @@ class Estimator:
         self.extra_proc_parameters[name]= func_parameters
         self.extra_proc_visualizers[name]= visualizer
 
-    def attach_gui(self, gui: video_player.GUI|None, episodes: dict[str, list[int]] = None, window_id: int = None, stop_gui_on_delete: bool = True):
+    def attach_gui(self, gui: video_player.GUI|None, episodes: dict[str, list[int]]|None=None, window_id: int|None=None, stop_gui_on_delete: bool = True):
         self.gui                = gui
         self.has_gui            = self.gui is not None
         self.stop_gui_on_delete = stop_gui_on_delete
@@ -489,31 +531,12 @@ class Estimator:
                int(self.video.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)), \
                    self.video.get_prop(cv2.CAP_PROP_FPS)
 
-    def estimate_pose(self, frame_info: dict, object_points: np.ndarray, img_points: np.ndarray, flags=cv2.SOLVEPNP_ITERATIVE) -> tuple[int, np.ndarray, np.ndarray, float]:
-        return estimate_pose(object_points, img_points, frame_info, self.cam_params, flags)
-
-    def estimate_homography(self, frame_info: dict, object_points: np.ndarray, img_points: np.ndarray) -> tuple[int, np.ndarray]:
-        return estimate_homography(object_points, img_points, frame_info, self.cam_params)
-
-    # higher level functions for detecting + pose estimation
-    def estimate_pose_and_homography(self, frame_idx: int, frame_info: dict, object_points: np.ndarray, img_points: np.ndarray) -> tuple[Pose, dict[str]]:
-        pose = Pose(frame_idx)
-        if object_points is not None and img_points is not None and img_points.shape[0]>=4: # at least four image points needed
-            # get camera pose
-            pose.pose_N_points, pose.pose_R_vec, pose.pose_T_vec, pose.pose_reprojection_error = \
-                self.estimate_pose(frame_info, object_points, img_points)
-
-            # also get homography (direct image plane to plane in world transform)
-            pose.homography_N_points, pose.homography_mat = \
-                self.estimate_homography(frame_info, object_points, img_points)
-        return pose
-
-    def process_one_frame(self, wanted_frame_idx:int = None) -> tuple[Status, dict[str, Pose], dict[str, marker.Pose], dict[str, tuple[int, typing.Any]], tuple[np.ndarray, int, float, dict[str, typing.Any]]]:
+    def process_one_frame(self, wanted_frame_idx:int|None = None) -> tuple[Status, dict[str, Pose]|None, dict[typing.Any, marker.Pose]|None, dict[str, tuple[int, typing.Any]]|None, tuple[np.ndarray|None, int|None, float|None, dict[str,typing.Any]|None]]:
         if self._first_frame and self.has_gui:
             self.gui.set_playing(True)
 
-        if wanted_frame_idx is not None and self._cache is not None and self._cache[4][1]==wanted_frame_idx:
-            return self._cache
+        if wanted_frame_idx is not None and self._cache is not None and self._cache.frame_idx==wanted_frame_idx:
+            return self._cache.as_result()
 
         should_exit, frame, frame_idx, frame_ts, frame_info = self.video.read_frame(report_gap=True, wanted_frame_idx=wanted_frame_idx)
 
@@ -523,8 +546,8 @@ class Estimator:
                 (not self.individual_marker_intervals or intervals.beyond_last_interval(frame_idx, self.individual_marker_intervals)) and \
                 (not self.extra_proc_intervals        or intervals.beyond_last_interval(frame_idx, self.extra_proc_intervals))
             )):
-            self._cache = Status.Finished, None, None, None, (None, None, None, None)
-            return self._cache
+            self._cache = _FrameCache(Status.Finished)
+            return self._cache.as_result()
         if self.progress_updater:
             self.progress_updater()
 
@@ -537,8 +560,8 @@ class Estimator:
             for r,_ in requests:
                 # only requests we need to handle
                 if r=='exit':
-                    self._cache = Status.Finished, None, None, None, (None, None, None, None)
-                    return self._cache
+                    self._cache = _FrameCache(Status.Finished)
+                    return self._cache.as_result()
                 if r=='close':
                     self.has_gui = False
                     self.gui.stop()
@@ -555,36 +578,36 @@ class Estimator:
             if self.has_gui:
                 # do update timeline of the viewers
                 self.gui.update_image(None, frame_ts/1000., frame_idx)
-            self._cache = Status.Skip, None, None, None, (frame, frame_idx, frame_ts, frame_info)
-            return self._cache
+            self._cache = _FrameCache(Status.Skip, frame=frame, frame_idx=frame_idx, timestamp=frame_ts, frame_info=frame_info)
+            return self._cache.as_result()
 
         pose_out                : dict[str, Pose]                   = {}
         individual_marker_out   : dict[_T , marker.Pose]            = {}
         extra_processing_out    : dict[str, tuple[int, typing.Any]] = {}
         ROI_offset = [frame_info['offset_x'], frame_info['offset_y']] if 'offset_x' in frame_info and 'offset_y' in frame_info else [0., 0.]
-        plane_points: dict[str, tuple[np.ndarray,np.ndarray]] = {}
+        plane_points: dict[str, DetectionResult] = {}
         if planes_for_this_frame:
             # detect fiducials
             for p in planes_for_this_frame:
                 det_output = self.plane_functions[p](p, frame_idx, frame, frame_info, self.cam_params)
-                if det_output[0] is not None:
+                if det_output is not None and det_output.object_points is not None:
                     plane_points[p] = det_output
             # determine pose
             for p in plane_points:
-                pose_out[p] = self.estimate_pose_and_homography(frame_idx, frame_info, *plane_points[p])
+                pose_out[p] = plane_points[p].estimate_pose_and_homography(frame_idx)
 
-        indiv_marker_points: dict[_T, tuple[np.ndarray,np.ndarray]] = {}
+        indiv_marker_points: dict[_T, DetectionResult] = {}
         if indiv_markers_for_this_frame:
             # detect fiducials
             for i in indiv_markers_for_this_frame:
                 det_output = self.individual_marker_functions[i](i, frame_idx, frame, frame_info, self.cam_params)
-                if det_output[1] is not None:   # object points may not be available (e.g. when marker size is not set), so check for image points
+                if det_output is not None and det_output.image_points is not None:   # object points may not be available (e.g. when marker size is not set), so check for image points
                     indiv_marker_points[i] = det_output
             # determine pose, if wanted
             for i in indiv_marker_points:
                 mpose = marker.Pose(frame_idx)
-                if indiv_marker_points[i][0] is not None:   # object points may not be available (e.g. when marker size is not set). If so, skip pose estimation
-                    _, mpose.R_vec, mpose.T_vec, _ = self.estimate_pose(frame_info, *indiv_marker_points[i], flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                if indiv_marker_points[i].object_points is not None:   # object points may not be available (e.g. when marker size is not set). If so, skip pose estimation
+                    _, mpose.R_vec, mpose.T_vec, _ = indiv_marker_points[i].estimate_pose(flags=cv2.SOLVEPNP_IPPE_SQUARE)
                 individual_marker_out[i] = mpose
 
         for e in extra_processing_for_this_frame:
@@ -600,13 +623,13 @@ class Estimator:
                     plane_visualizer = self.plane_visualizers[p]
                     if plane_visualizer is None:
                         continue
-                    plane_visualizer(p, frame_idx, frame, frame_info, plane_points[p][0] if p in plane_points else None)
+                    plane_visualizer(p, frame_idx, frame, frame_info, plane_points[p].object_points if p in plane_points else None)
             if indiv_markers_for_this_frame:
                 for i in indiv_markers_for_this_frame:
                     individual_marker_visualizer = self.individual_marker_visualizers[i]
                     if individual_marker_visualizer is None:
                         continue
-                    individual_marker_visualizer(i, frame_idx, frame, frame_info, indiv_marker_points[i][0] if i in indiv_marker_points else None)
+                    individual_marker_visualizer(i, frame_idx, frame, frame_info, indiv_marker_points[i].object_points if i in indiv_marker_points else None)
             for e in extra_processing_for_this_frame:
                 extra_proc_visualizer = self.extra_proc_visualizers[e]
                 if self.show_extra_processing_output and extra_proc_visualizer is not None:
@@ -625,8 +648,10 @@ class Estimator:
         if self.has_gui:
             self.gui.update_image(frame, frame_ts/1000., frame_idx)
 
-        self._cache = Status.Ok, pose_out, individual_marker_out, extra_processing_out, (frame, frame_idx, frame_ts, frame_info)
-        return self._cache
+        self._cache = _FrameCache(Status.Ok, plane_poses=pose_out, individual_marker_poses=individual_marker_out,
+                                  extra_processing=extra_processing_out, frame=frame, frame_idx=frame_idx,
+                                  timestamp=frame_ts, frame_info=frame_info)
+        return self._cache.as_result()
 
     def process_video(self) -> tuple[dict[str, list[Pose]], dict[_T, list[marker.Pose]], dict[str, list[tuple[int, typing.Any]]]]:
         poses_out               : dict[str, list[Pose]]                     = {p:[] for p in self.plane_functions}
@@ -660,6 +685,8 @@ def estimate_pose(object_points: np.ndarray, img_points: np.ndarray, frame_info:
     if cam_params.has_opencv_camera():
         N_solutions, R_vec, T_vec, reprojection_error = \
             cv2.solvePnPGeneric(object_points, img_points, cam_params.camera_mtx, cam_params.distort_coeffs, np.empty(1), np.empty(1), flags=flags)
+        if not N_solutions:
+            return 0, None, None, -1.
         N_points = object_points.shape[0] if N_solutions else 0
         reprojection_error = reprojection_error[0][0]
     else:
@@ -667,7 +694,10 @@ def estimate_pose(object_points: np.ndarray, img_points: np.ndarray, frame_info:
         # undistort points and project to a identity camera space, so we can use opencv functionality
         points_w  = transforms.unproject_points(img_points, cam_params)
         points_cam= transforms.project_points(points_w, ocv.CameraParams(cam_params.resolution, np.identity(3), np.zeros((5,1))))
-        N_points, R_vec, T_vec, _ = cv2.solvePnPGeneric(object_points, points_cam.reshape((-1,1,2)), np.identity(3), np.zeros((5,1)), np.empty(1), np.empty(1), flags=flags)
+        N_solutions, R_vec, T_vec, _ = cv2.solvePnPGeneric(object_points, points_cam.reshape((-1,1,2)), np.identity(3), np.zeros((5,1)), np.empty(1), np.empty(1), flags=flags)
+        if not N_solutions:
+            return 0, None, None, -1.
+        N_points = object_points.shape[0]
         # need to compute reprojection error ourselves, output of solvePnPGeneric is meaningless due to arbitrary camera point units
         if N_points:
             proj_points = transforms.project_points(object_points,cam_params, rot_vec=R_vec[0], trans_vec=T_vec[0])

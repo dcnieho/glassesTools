@@ -1,5 +1,6 @@
 
 import pathlib
+import copy
 import typing
 import math
 import pandas as pd
@@ -42,7 +43,9 @@ class Plane(_plane.TargetPlane):
         markers = config.get_markers(config_dir, self.config['markerPosFile'])
         if 'ref_image_store_path' not in kwarg:
             kwarg['ref_image_store_path'] = None
-        super().__init__(markers, targets, self.config['markerSide'], plane_size, self.config['arucoDictionary'], self.config['markerBorderBits'], self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], min_num_markers=self.config['minNumMarkers'], **kwarg)
+        settings = copy.deepcopy(kwarg.pop('aruco_settings', None) or {})
+        settings.setdefault('detector_params', {}).setdefault('markerBorderBits', self.config['markerBorderBits'])
+        super().__init__(markers, targets, self.config['markerSide'], plane_size, self.config['arucoDictionary'], settings, self.cell_size_mm, "mm", ref_image_size=self.config['referencePosterSize'], min_num_markers=self.config['minNumMarkers'], **kwarg)
 
         # set center
         self.set_origin(origin)
@@ -83,8 +86,5 @@ class Plane(_plane.TargetPlane):
         return not not self.dynamic_markers
 
     def get_dynamic_marker_setup(self):
-        return aruco.MarkerSetup(aruco_detector_params = {
-                                    'markerBorderBits': self.marker_border_bits
-                                },
-                                detect_only = True
-                             )
+        return aruco.MarkerSetup(detector_params = self.aruco_settings['detector_params'],
+                                 detect_only = True)

@@ -112,3 +112,14 @@ def trim_str(text: str, length=None, till_newline=True, newline_ellipsis=False):
     if length:
         text = (text[:length-2] + '..') if len(text) > length else text
     return text
+
+
+def freeze(value):
+    # convert data structures to hashable equivalents for use as dict keys
+    if isinstance(value, dict):
+        return tuple((k, freeze(v)) for k, v in sorted(value.items()))
+    if isinstance(value, np.ndarray):
+        return value.shape, value.dtype.str, value.tobytes()
+    if isinstance(value, (list, tuple)):
+        return tuple(freeze(v) for v in value)
+    return value
