@@ -26,33 +26,33 @@ class Pose:
 
     def __init__(self,
                  frame_idx              : int,
-                 timestamp              : float     = None,
-                 timestamp_ori          : float     = None,
-                 frame_idx_ori          : int       = None,
-                 timestamp_VOR          : float     = None,
-                 frame_idx_VOR          : int       = None,
+                 timestamp              : float|None= None,
+                 timestamp_ori          : float|None= None,
+                 frame_idx_ori          : int|None  = None,
+                 timestamp_VOR          : float|None= None,
+                 frame_idx_VOR          : int|None  = None,
                  pose_N_points          : int       = 0,
                  pose_reprojection_error: float     = -1.,
                  pose_R_vec             : np.ndarray= None,
                  pose_T_vec             : np.ndarray= None,
                  homography_N_points    : int       = 0,
                  homography_mat         : np.ndarray= None):
-        self.timestamp              : float       = timestamp
-        self.frame_idx              : int         = frame_idx
+        self.timestamp              = timestamp
+        self.frame_idx              = frame_idx
         # optional timestamps and frame indices. These mirror gaze data fields so
         # sampled pose rows can stay aligned with synced gaze samples.
-        self.timestamp_ori          : float       = timestamp_ori
-        self.frame_idx_ori          : int         = frame_idx_ori
-        self.timestamp_VOR          : float       = timestamp_VOR
-        self.frame_idx_VOR          : int         = frame_idx_VOR
+        self.timestamp_ori          = timestamp_ori
+        self.frame_idx_ori          = frame_idx_ori
+        self.timestamp_VOR          = timestamp_VOR
+        self.frame_idx_VOR          = frame_idx_VOR
         # pose
-        self.pose_N_points          : int         = pose_N_points       # number of image points (4 per marker if based on ArUco markers) this pose estimate is based on. 0 if failed or otherwise not available
-        self.pose_reprojection_error: float       = pose_reprojection_error
-        self.pose_R_vec             : np.ndarray  = pose_R_vec
-        self.pose_T_vec             : np.ndarray  = pose_T_vec
+        self.pose_N_points          = pose_N_points       # number of image points (4 per marker if based on ArUco markers) this pose estimate is based on. 0 if failed or otherwise not available
+        self.pose_reprojection_error= pose_reprojection_error
+        self.pose_R_vec             = pose_R_vec
+        self.pose_T_vec             = pose_T_vec
         # homography
-        self.homography_N_points    : int         = homography_N_points # number of image points (4 per marker if based on ArUco markers) this homongraphy estimate is based on. 0 if failed or otherwise not available
-        self.homography_mat         : np.ndarray  = homography_mat.reshape(3,3) if homography_mat is not None else homography_mat
+        self.homography_N_points    = homography_N_points # number of image points (4 per marker if based on ArUco markers) this homongraphy estimate is based on. 0 if failed or otherwise not available
+        self.homography_mat         = homography_mat.reshape(3,3) if homography_mat is not None else homography_mat
 
         # internals
         self._RMat              = None
@@ -158,9 +158,9 @@ class Pose:
             return np.full((3,), np.nan)
 
         if self._plane_normal is None:
+            if self._RMat is None:
+                self._RMat = cv2.Rodrigues(self.pose_R_vec)[0]
             if self._RtMat is None:
-                if self._RMat is None:
-                    self._RMat = cv2.Rodrigues(self.pose_R_vec)[0]
                 self._RtMat = np.hstack((self._RMat, self.pose_T_vec.reshape(3,1)))
 
             # get plane normal
