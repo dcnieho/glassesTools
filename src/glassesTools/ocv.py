@@ -6,7 +6,7 @@ import bisect
 import warnings
 import pycolmap
 import copy
-from typing import Any
+from typing import Any, NamedTuple
 
 from . import naming, process_pool
 
@@ -20,7 +20,7 @@ class CameraParams:
                  # extrinsics
                  rotation_vec: np.ndarray = None, position: np.ndarray = None,
                  # colmap camera dict
-                 colmap_camera_dict: dict[str,Any] = None):
+                 colmap_camera_dict: dict[str,Any]|None = None):
 
         # info about camera
         self.resolution     : np.ndarray = resolution.flatten() if resolution is not None else None
@@ -129,6 +129,17 @@ class FrameInfoHandler:
             return np.array([self.data['width']]), np.array([self.data['height']])
         return self.data['width'].unique(), self.data['height'].unique()
 
+class _FrameCache(NamedTuple):
+    should_exit : bool
+    frame       : np.ndarray | None     = None
+    frame_idx   : int | None            = None
+    timestamp   : float | None          = None
+    frame_info  : dict[str, Any] | None = None
+
+    def as_result(self) -> tuple[bool, np.ndarray | None, int | None, float | None, dict[str, Any]]:
+        return self.should_exit, self.frame, self.frame_idx, self.timestamp, self.frame_info or {}
+
+
 class CV2VideoReader:
     def __init__(self, file: str|pathlib.Path, timestamps: list|np.ndarray|pd.DataFrame):
         self.file = pathlib.Path(file)
@@ -145,7 +156,7 @@ class CV2VideoReader:
         self.nframes = len(self._ts)
         self.frame_idx = -1
         self._last_good_ts = (-1, -1., -1.)  # frame_idx, ts from opencv, ts from file
-        self._cache: tuple[bool, np.ndarray, int, float, dict[str,Any]] = None # self._cache[2] is frame index
+        self._cache: _FrameCache | None = None
 
         # check if there is a file with info about each frame (such as size, and offset on the sensor if an ROI is used) and if so, read it and check it matches the number of frames in the video
         frame_info_file = self.file.parent / (self.file.stem+naming.frame_info_suffix)
@@ -186,7 +197,7 @@ class CV2VideoReader:
             raise ValueError(f"The resolution of the video does not match that set in the camera parameters ({cam_params.resolution[0]}x{cam_params.resolution[1]}). The video has resolution {vid_width}x{vid_height}. In this situation, a frame info file should be provided (expected name {self.file.stem+'_frame_info.tsv'}) containing info about where the ROI was on the camera sensor. This file was not found or did not contain the expected information (columns 'offset_x', 'offset_y', 'width' and 'height'). Please check your files.")
 
     # NB: we seek by spooling, because I found seeking through setting cv2.CAP_PROP_POS_MSEC unreliable
-    def read_frame(self, report_gap=False, wanted_frame_idx:int|None=None) -> tuple[bool, np.ndarray, int, float, dict[str,Any]]:
+    def read_frame(self, report_gap=False, wanted_frame_idx:int|None=None) -> tuple[bool, np.ndarray | None, int | None, float | None, dict[str, Any]]:
         if wanted_frame_idx!=None:
             if wanted_frame_idx<0 or wanted_frame_idx>=self.nframes:
                 raise ValueError(f'wanted_frame_idx ({wanted_frame_idx}) out of bounds ([0-{self.nframes-1}])')
@@ -198,9 +209,9 @@ class CV2VideoReader:
             # this condition can only occur if we've already read something and thus have a cache, so this check should never trigger
             if self._cache is None:
                 raise RuntimeError(f'No cache, unexpected failure mode, contact developer')
-            return self._cache
-        elif self._cache is not None and self._cache[2]==wanted_frame_idx:
-            return self._cache
+            return self._cache.as_result()
+        elif self._cache is not None and self._cache.frame_idx==wanted_frame_idx:
+            return self._cache.as_result()
 
         while True:
             ret, frame = self._cap.read()
@@ -214,8 +225,8 @@ class CV2VideoReader:
             # check if we're done. Can't trust ret==False to indicate we're at end of video, as
             # it may also return False for some corrupted frames that we can just read past
             if not ret and (self.frame_idx==0 or self.frame_idx/self.nframes>.99):
-                self._cache = True, None, None, None, {}
-                return self._cache
+                self._cache = _FrameCache(True)
+                return self._cache.as_result()
 
             # keep going
             ts_from_list = self._ts[self.frame_idx]
@@ -236,10 +247,10 @@ class CV2VideoReader:
             if self.frame_idx==wanted_frame_idx:
                 if not ret or frame is None:
                     # we might not have a valid frame, but we're not done yet
-                    self._cache = False, None,  self.frame_idx, ts_from_list, {}
+                    self._cache = _FrameCache(False, None, self.frame_idx, ts_from_list)
                 else:
-                    self._cache = False, frame, self.frame_idx, ts_from_list, self.frame_info.get_frame_info(self.frame_idx)
-                return self._cache
+                    self._cache = _FrameCache(False, frame, self.frame_idx, ts_from_list, self.frame_info.get_frame_info(self.frame_idx))
+                return self._cache.as_result()
 
     def _find_closest_idx(self, time: float, times: np.ndarray) -> int:
         idx = bisect.bisect(times, time)
