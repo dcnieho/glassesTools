@@ -186,7 +186,7 @@ class CV2VideoReader:
             raise ValueError(f"The resolution of the video does not match that set in the camera parameters ({cam_params.resolution[0]}x{cam_params.resolution[1]}). The video has resolution {vid_width}x{vid_height}. In this situation, a frame info file should be provided (expected name {self.file.stem+'_frame_info.tsv'}) containing info about where the ROI was on the camera sensor. This file was not found or did not contain the expected information (columns 'offset_x', 'offset_y', 'width' and 'height'). Please check your files.")
 
     # NB: we seek by spooling, because I found seeking through setting cv2.CAP_PROP_POS_MSEC unreliable
-    def read_frame(self, report_gap=False, wanted_frame_idx:int=None) -> tuple[bool, np.ndarray, int, float, dict[str,Any]]:
+    def read_frame(self, report_gap=False, wanted_frame_idx:int|None=None) -> tuple[bool, np.ndarray, int, float, dict[str,Any]]:
         if wanted_frame_idx!=None:
             if wanted_frame_idx<0 or wanted_frame_idx>=self.nframes:
                 raise ValueError(f'wanted_frame_idx ({wanted_frame_idx}) out of bounds ([0-{self.nframes-1}])')
