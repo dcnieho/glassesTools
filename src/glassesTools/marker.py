@@ -22,7 +22,7 @@ def _deserialize_marker_id(m: dict[str,str|int]):
 json.register_type(json.TypeEntry(MarkerID, '__config.MarkerID__', _serialize_marker_id, _deserialize_marker_id))
 
 class Marker:
-    def __init__(self, key: int, center: np.ndarray, corners: list[np.ndarray]=None, color: str=None, rot: float=0.):
+    def __init__(self, key: int, center: np.ndarray, corners: list[np.ndarray]|None=None, color: str|None=None, rot: float=0.):
         self.key = key
         self.center = center
         self.corners = corners
@@ -64,11 +64,11 @@ class Pose:
 
     def __init__(self,
                  frame_idx  : int,
-                 R_vec      : np.ndarray= None,
-                 T_vec      : np.ndarray= None):
-        self.frame_idx  : int         = frame_idx
-        self.R_vec      : np.ndarray  = R_vec
-        self.T_vec      : np.ndarray  = T_vec
+                 R_vec      : np.ndarray|None= None,
+                 T_vec      : np.ndarray|None= None):
+        self.frame_idx = frame_idx
+        self.R_vec     = R_vec
+        self.T_vec     = T_vec
 
     def pose_successful(self):
         return self.R_vec is not None and self.T_vec is not None
@@ -79,7 +79,7 @@ class Pose:
         drawing.openCVFrameAxis(frame, camera_params, self.R_vec, self.T_vec, arm_length, 3, sub_pixel_fac, ROI_offset=ROI_offset)
 
 
-def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]=None) -> dict[int,Pose]:
+def read_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]|None=None) -> dict[int,Pose]:
     return data_files.read_file(fileName,
                                 Pose, True, True, False, False,
                                 episodes=episodes)[0]
