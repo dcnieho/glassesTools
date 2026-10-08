@@ -19,7 +19,7 @@ def _read_glassesValidator_config_file(file):
 
 _default_poster_package = '.'.join(__package__.split('.')[:-1]+['default_poster'])
 
-def get_validation_setup(config_dir: str|pathlib.Path=None, config_file: str='validationSetup.txt') -> dict[str,typing.Any]:
+def get_validation_setup(config_dir: str|pathlib.Path|None=None, config_file: str='validationSetup.txt') -> dict[str,typing.Any]:
     if config_dir is not None:
         with (pathlib.Path(config_dir) / config_file).open() as f:
             validation_config = _read_glassesValidator_config_file(f)
