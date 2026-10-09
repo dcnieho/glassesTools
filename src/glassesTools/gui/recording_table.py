@@ -88,7 +88,7 @@ class RecordingTable:
             imgui.TableFlags_.no_borders_in_body_until_resize
         )
 
-    def build_columns(self, extra_columns: list[ColumnSpec] = None):
+    def build_columns(self, extra_columns: list[ColumnSpec]|None = None):
         col_names = ifa6.ICON_FA_EYE+" Eye Tracker", ifa6.ICON_FA_SIGNATURE+" Name", ifa6.ICON_FA_USER_TIE+" Participant", ifa6.ICON_FA_CLIPBOARD+" Project", ifa6.ICON_FA_STOPWATCH+" Duration", ifa6.ICON_FA_CLOCK+" Recording Start", ifa6.ICON_FA_FOLDER+" Working Directory", ifa6.ICON_FA_FOLDER+" Source Directory", ifa6.ICON_FA_TAGS+" Firmware Version", ifa6.ICON_FA_BARCODE+" Glasses Serial", ifa6.ICON_FA_BARCODE+" Recording Unit Serial", ifa6.ICON_FA_TAGS+" Recording Software Version", ifa6.ICON_FA_BARCODE+" Scene Camera Serial", ifa6.ICON_FA_CAMERA+" Video File"
         if self.has_selected_recordings:
             col_names = (ifa6.ICON_FA_SQUARE_CHECK+" Selector",)+col_names
@@ -256,6 +256,10 @@ class RecordingTable:
                     for iid in self.recordings:
                         if iid not in self.sorted_recordings_ids:
                             self.selected_recordings[iid] = False
+
+                if (imgui.is_window_focused(imgui.FocusedFlags_.root_and_child_windows | imgui.FocusedFlags_.dock_hierarchy) and not imgui.get_io().want_text_input and imgui.get_io().key_ctrl and imgui.is_key_pressed(imgui.Key.a, repeat=False)):
+                    # ctrl+A pressed, select all visible recordings
+                    utils.set_all(self.selected_recordings, True, subset=self.sorted_recordings_ids)
 
                 # Headers
                 if has_angled_headers:
