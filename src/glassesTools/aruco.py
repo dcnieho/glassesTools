@@ -507,7 +507,7 @@ class Detector:
         self._det = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(self.dictionary_id), detector_params, refine_params)
 
     def detect_markers(self, image: cv2.UMat, frame_info: dict, camera_params: ocv.CameraParams, raw_detection=None) -> tuple:
-        img_points, ids, rejected = raw_detection if raw_detection is not None else self._detect_markers(image, self._det)
+        img_points, ids, rejected = raw_detection if raw_detection is not None else self._detect_markers(image)
         rejected = tuple(rejected)
         out_planes = {}
         for p in self.planes:
@@ -527,8 +527,7 @@ class Detector:
 
             # Preserve the existing recovery threshold independently of the on/off switch.
             if self.settings['refine'] and len(pl_ids) >= self.planes[p]['min_num_markers']:
-                pl_img_points, pl_ids, rejected, recovered_ids = self._refine_detection(
-                    image, pl_img_points, pl_ids, rejected, self._det, self._boards[p], frame_info, camera_params)
+                pl_img_points, pl_ids, rejected, recovered_ids = self._refine_detection(image, pl_img_points, pl_ids, rejected, self._boards[p], frame_info, camera_params)
                 rejected = tuple(rejected)
 
             out_planes[p] = dict(img_points=pl_img_points, ids=pl_ids, recovered_ids=recovered_ids)
@@ -537,14 +536,14 @@ class Detector:
         self._last_detect_output = (out_planes, out_individual, unexpected, rejected)
         return self._last_detect_output
 
-    def _detect_markers(self, image: cv2.UMat, det: cv2.aruco.ArucoDetector):
-        img_points, ids, rejected_img_points = det.detectMarkers(image)
+    def _detect_markers(self, image: cv2.UMat):
+        img_points, ids, rejected_img_points = self._det.detectMarkers(image)
         if np.any(ids==None):
             ids = None
         return img_points, ids, rejected_img_points
 
-    def _refine_detection(self, image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, frame_info: dict, camera_params: ocv.CameraParams):
-        return refine_detection(image, detected_corners, detected_ids, rejected_corners, det, board, frame_info, camera_params)
+    def _refine_detection(self, image: cv2.UMat, detected_corners, detected_ids, rejected_corners, board: cv2.aruco.Board, frame_info: dict, camera_params: ocv.CameraParams):
+        return refine_detection(image, detected_corners, detected_ids, rejected_corners, self._det, board, frame_info, camera_params)
 
     def _filter_detections(self, img_points: list[np.ndarray], ids: np.ndarray, expected_ids: list[np.ndarray], keep_expected=True):
         return filter_detections(img_points, ids, expected_ids, keep_expected)
@@ -785,7 +784,7 @@ class Manager:
         if detector_id not in self.working_set.detector_results:
             key = (detector.dictionary_id, freeze(detector.settings['detector_params']), context.undistorted)
             if key not in self.working_set.detections:
-                self.working_set.detections[key] = detector._detect_markers(context.image, detector._det)
+                self.working_set.detections[key] = detector._detect_markers(context.image)
             self.working_set.detector_results[detector_id] = detector.detect_markers(context.image, context.frame_info, context.camera_params, self.working_set.detections[key])
         return self.working_set.detector_results[detector_id]
 
