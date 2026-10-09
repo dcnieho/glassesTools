@@ -433,7 +433,7 @@ def deploy_marker_images(output_dir: str|pathlib.Path, size: int, ArUco_dict_id:
     for m_id in range(get_dict_size(ArUco_dict_id)):
         marker_image = get_marker_image(size, m_id, ArUco_dict_id, marker_border_bits)
         if marker_image is not None:
-            cv2.imwrite(output_dir / f"{m_id}.png", marker_image)
+            cv2.imwrite(pathlib.Path(output_dir) / f"{m_id}.png", marker_image)
 
 class Detector:
     def __init__(self, dictionary_id: int, settings: dict | None = None):
