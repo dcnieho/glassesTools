@@ -71,7 +71,19 @@ def settings_defaults() -> dict:
     return dict(detector_params=parameter_defaults('detector'),
                 refine_params=parameter_defaults('refine'),
                 refine=True,
-                undistort=False
+                undistort=False,
+                pose_consistency=dict(
+                    enabled=False,
+                    max_reprojection_error_fraction=.10,
+                    min_reprojection_error_px=2.,
+                    max_reprojection_error_px=6.,
+                    fast_path_min_spread_fraction=.05,
+                    max_subsets=500,
+                    max_marker_tilt_angle_deg=80.,
+                    temporal_enabled=True,
+                    temporal_history_size=5,
+                    max_translation_speed_m_s=3.,
+                    max_rotation_speed_deg_s=400.)
                 )
 
 corner_refinement_methods = typing.Literal[
@@ -345,7 +357,7 @@ def _resolve_settings(settings: dict | None) -> tuple[dict, dict[tuple[str, ...]
             for path in paths:
                 problems[path] = message
 
-    d, r = out['detector_params'], out['refine_params']
+    d, r, c = out['detector_params'], out['refine_params'], out['pose_consistency']
     positive = ('adaptiveThreshWinSizeMin', 'adaptiveThreshWinSizeMax', 'adaptiveThreshWinSizeStep',
                 'minMarkerPerimeterRate', 'maxMarkerPerimeterRate', 'polygonalApproxAccuracyRate',
                 'cornerRefinementWinSize', 'cornerRefinementMaxIterations', 'cornerRefinementMinAccuracy',
@@ -377,8 +389,29 @@ def _resolve_settings(settings: dict | None) -> tuple[dict, dict[tuple[str, ...]
           not d['useAruco3Detection'] or bool(d['minSideLengthCanonicalImg'] or d['minMarkerLengthRatioOriginalImg']),
           'ArUco3 requires a nonzero minimum marker size')
     check('refine_params', ['minRepDistance'], r['minRepDistance'] > 0, 'ArUco refine_params.minRepDistance must be positive')
+    check('pose_consistency', ['max_reprojection_error_fraction'], 0 < c['max_reprojection_error_fraction'] <= 1,
+          'ArUco pose consistency max_reprojection_error_fraction must be in (0, 1]')
+    check('pose_consistency', ['min_reprojection_error_px'], c['min_reprojection_error_px'] > 0,
+          'ArUco pose consistency min_reprojection_error_px must be positive')
+    check('pose_consistency', ['max_reprojection_error_px', 'min_reprojection_error_px'],
+          c['max_reprojection_error_px'] >= c['min_reprojection_error_px'],
+          'ArUco pose consistency max_reprojection_error_px must be at least min_reprojection_error_px')
+    check('pose_consistency', ['fast_path_min_spread_fraction'],
+          0 <= c['fast_path_min_spread_fraction'] <= 1,
+          'ArUco pose consistency fast_path_min_spread_fraction must be in [0, 1]')
+    check('pose_consistency', ['max_subsets'], type(c['max_subsets']) is int and c['max_subsets'] >= 1,
+          'ArUco pose consistency max_subsets must be a positive integer')
+    check('pose_consistency', ['max_marker_tilt_angle_deg'], 0 <= c['max_marker_tilt_angle_deg'] < 90,
+          'ArUco pose consistency max_marker_tilt_angle_deg must be in [0, 90) degrees')
+    check('pose_consistency', ['temporal_history_size'],
+          type(c['temporal_history_size']) is int and c['temporal_history_size'] >= 1,
+          'ArUco pose consistency temporal_history_size must be a positive integer')
+    check('pose_consistency', ['max_translation_speed_m_s'], c['max_translation_speed_m_s'] > 0,
+          'ArUco pose consistency max_translation_speed_m_s must be positive')
+    check('pose_consistency', ['max_rotation_speed_deg_s'], c['max_rotation_speed_deg_s'] > 0,
+          'ArUco pose consistency max_rotation_speed_deg_s must be positive')
 
-    # Round-trip valid parameters so comparisons use OpenCV's actual precision.
+    # Round-trip valid parameters so comparisons use OpenCV's actual precision (float32, not double in case of floats).
     for which in ('detector', 'refine'):
         obj = cv2.aruco.DetectorParameters() if which == 'detector' else cv2.aruco.RefineParameters()
         key = f'{which}_params'
@@ -391,6 +424,301 @@ def _resolve_settings(settings: dict | None) -> tuple[dict, dict[tuple[str, ...]
                 problems[(key, name)] = f'ArUco {key}.{name}: {exc}'
         out[key] = {name: getattr(obj, name) for name in out[key]}
     return out, problems
+
+
+def _project_points(object_points, rvec, tvec, frame_info, camera_params):
+    return transforms.project_points(np.asarray(object_points).reshape(-1, 3), camera_params, rot_vec=rvec, trans_vec=tvec, ROI_offset=[frame_info.get('offset_x', 0), frame_info.get('offset_y', 0)])
+
+def _residuals(object_points, image_points, rvec, tvec, frame_info, camera_params, shape):
+    projected_points = _project_points(object_points, rvec, tvec, frame_info, camera_params)
+    return np.asarray(projected_points).reshape(shape) - np.asarray(image_points).reshape(shape)
+
+def _reprojection_error_distance(object_points, image_points, rvec, tvec, frame_info, camera_params):
+    residuals = _residuals(object_points, image_points, rvec, tvec, frame_info, camera_params, (-1, 4, 2))
+    return np.linalg.norm(residuals, axis=2).max(axis=1)
+
+def _reprojection_error_rms(object_points, image_points, rvec, tvec, frame_info, camera_params):
+    residuals = _residuals(object_points, image_points, rvec, tvec, frame_info, camera_params, (-1, 2))
+    return float(np.sqrt(np.mean(residuals ** 2)))
+
+def _pose_candidates(object_points, image_points, frame_info, camera_params):
+    obj = np.asarray(object_points, dtype=np.float64).reshape(-1, 3)
+    img = np.asarray(image_points, dtype=np.float64).reshape(-1, 2)
+    if len(obj) < 4 or not np.isfinite(obj).all() or not np.isfinite(img).all():
+        return []
+    offset = np.array([frame_info.get('offset_x', 0), frame_info.get('offset_y', 0)])
+    if camera_params.has_opencv_camera():
+        solve_img, K, D = img + offset, camera_params.camera_mtx, camera_params.distort_coeffs
+    elif camera_params.has_colmap_camera():
+        rays = transforms.unproject_points(img, camera_params, offset)
+        solve_img, K, D = rays[:, :2] / rays[:, 2:], np.eye(3), np.zeros(5)
+    else:
+        raise ValueError('ArUco pose consistency checking requires camera calibration')
+    # determine if all markers are coplanar
+    centered = obj - obj.mean(axis=0)
+    singular = np.linalg.svd(centered, compute_uv=False)
+    if singular[1] <= max(singular[0], 1.) * 1.e-10:
+        return []
+    planar = singular[2] <= singular[0] * 1.e-6
+    # Use IPPE and iterative PnP for planar markers, SQPNP for nonplanar markers.
+    flags = [cv2.SOLVEPNP_IPPE, cv2.SOLVEPNP_ITERATIVE] if planar else [cv2.SOLVEPNP_SQPNP]
+    solutions = []
+    for flag in flags:
+        try:
+            count, rvecs, tvecs, _ = cv2.solvePnPGeneric(obj, solve_img.reshape(-1, 1, 2), K, D, flags=flag)
+        except cv2.error:
+            continue
+        for rvec, tvec in zip(rvecs, tvecs):
+            if np.isfinite(rvec).all() and np.isfinite(tvec).all():
+                rms_reprojection_error = _reprojection_error_rms(obj, img, rvec, tvec, frame_info, camera_params)
+                solutions.append((len(obj), rvec, tvec, rms_reprojection_error))
+    return solutions
+
+def _marker_errors(object_corners, image_corners, rvec, tvec, frame_info, camera_params, min_facing_cosine):
+    obj = np.asarray(object_corners, dtype=np.float64).reshape(-1, 4, 3)
+    img = np.asarray(image_corners, dtype=np.float64).reshape(-1, 4, 2)
+    # check orientation of marker relative to camera: if the marker is facing away or too tilted, it is rejected
+    R = cv2.Rodrigues(rvec)[0]
+    cam = obj @ R.T + np.asarray(tvec).reshape(1, 1, 3)
+    # ArUco corners are TL, TR, BR, BL as viewed from the printed front.
+    normals = np.cross(cam[:, 3] - cam[:, 0], cam[:, 1] - cam[:, 0])
+    to_camera = -cam.mean(axis=1)
+    denom = np.linalg.norm(normals, axis=1) * np.linalg.norm(to_camera, axis=1)
+    facing = np.einsum('ij,ij->i', normals, to_camera) / np.maximum(denom, np.finfo(float).tiny)
+    valid = (cam[:, :, 2] > 0).all(axis=1) & (denom > 0) & (facing >= min_facing_cosine)
+    # Get error for worst corner. This enforces that every corner must agree: partial-marker inliers are deliberately not accepted.
+    errors = _reprojection_error_distance(obj, img, rvec, tvec, frame_info, camera_params)
+    return np.where(valid & np.isfinite(errors), errors, np.inf)
+
+def _marker_reprojection_limits(image_corners, settings):
+    # determine the maximum reprojection error for each marker based on its size in the image, with limits
+    img = np.asarray(image_corners, dtype=np.float64).reshape(-1, 4, 2)
+    edge_lengths = np.linalg.norm(np.roll(img, -1, axis=1) - img, axis=2)
+    marker_sizes = np.median(edge_lengths, axis=1)
+    return np.clip(settings['max_reprojection_error_fraction'] * marker_sizes, settings['min_reprojection_error_px'], settings['max_reprojection_error_px'])
+
+def _marker_spread_fraction(selected_centers, layout_centers):
+    # determine the fraction of the board layout that is covered by the selected markers, in each axis
+    all_span = np.ptp(layout_centers, axis=0)
+    active_axes = all_span > np.finfo(float).eps
+    if not active_axes.any():
+        return 0.
+    selected_span = np.ptp(selected_centers, axis=0)
+    ratios = np.clip(selected_span[active_axes] / all_span[active_axes], 0., 1.)
+    return float(np.prod(ratios))
+
+def _spatially_spread_subsets(groups, centers, subset_size, max_subsets=None):
+    # generate subsets of groups that are spatially spread out, up to the requested size
+    # a group is a list of indices of detections that share the same marker ID (one detection per marker is selected for each subset). N multiple detections are expected to contain N-1 false positives, since markers on our boards are unique.
+    if max_subsets is not None and max_subsets <= 0:
+        return
+    count = len(groups)
+    size = min(count, max(1, subset_size))
+    group_subsets = set()
+    for start in range(count):
+        chosen = [start]
+        while len(chosen) < size:
+            remaining = (i for i in range(count) if i not in chosen)
+            next_group = max(remaining, key=lambda i: (min(float(np.sum((centers[i] - centers[j]) ** 2)) for j in chosen), -i))
+            chosen.append(next_group)
+        group_subsets.add(tuple(sorted(chosen)))
+    ordered = sorted(group_subsets, key=lambda subset: (-_marker_spread_fraction(centers[list(subset)], centers), subset))
+    yielded = 0
+    for subset in ordered:
+        if max_subsets is not None and yielded >= max_subsets:
+            return
+        base = [groups[group][0] for group in subset]
+        yield base
+        yielded += 1
+        for position, group in enumerate(subset):
+            for alternative in groups[group][1:]:
+                if max_subsets is not None and yielded >= max_subsets:
+                    return
+                variant = base.copy()
+                variant[position] = alternative
+                yield variant
+                yielded += 1
+    for group in range(count):
+        for detection in groups[group]:
+            if max_subsets is not None and yielded >= max_subsets:
+                return
+            yield [detection]
+            yielded += 1
+
+def _rotation_distance_deg(rotation_a, rotation_b):
+    # get overall rotation difference in degrees between two rotation matrices
+    relative = rotation_a @ rotation_b.T
+    cosine = np.clip((np.trace(relative) - 1.) / 2., -1., 1.)
+    return math.degrees(math.acos(float(cosine)))
+
+def _pose_history_entry(rvec, tvec, timestamp_ms, unit_to_meters):
+    rotation = cv2.Rodrigues(rvec)[0]
+    position_m = -rotation.T @ np.asarray(tvec).reshape(3) * unit_to_meters
+    return float(timestamp_ms), position_m, rotation
+
+def _temporal_pose_score(rvec, tvec, timestamp_ms, history, unit_to_meters, settings):
+    # compute a score based on the median translation and rotation speeds over the recent pose history, normalized by the maximum allowed speeds
+    if not settings['temporal_enabled'] or timestamp_ms is None or not history:
+        return 0.
+    current = _pose_history_entry(rvec, tvec, timestamp_ms, unit_to_meters)
+    recent = history[-settings['temporal_history_size']:]
+    translation_speeds, rotation_speeds = [], []
+    for previous in recent:
+        elapsed = (current[0] - previous[0]) / 1000.
+        if elapsed <= 0:
+            continue
+        translation_speeds.append(float(np.linalg.norm(current[1] - previous[1])) / elapsed)
+        rotation_speeds   .append(_rotation_distance_deg(current[2], previous[2]) / elapsed)
+    if not translation_speeds:
+        return 0.
+    return max(float(np.median(translation_speeds)) / settings['max_translation_speed_m_s'],
+               float(np.median(rotation_speeds))    / settings['max_rotation_speed_deg_s'])
+
+def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, min_markers=3, history=(), unit_to_meters=1.) -> tuple[list[int], tuple[int, None, None, float] | tuple[int, np.ndarray, np.ndarray, float]]:
+    # check whether pose is consistent with the board geometry and recent pose history, and physically plausible. In the process, markers that may be misdetected are filtered out.
+    # Returns the set of selected markers, and the best pose and its reprojection error.
+    # The inner tuple represents the best pose and its reprojection error, and contains:
+    #   0: number of corners used in the best pose. It is 0 on failure.
+    #   1: rotation vector of the best pose
+    #   2: translation vector of the best pose
+    #   3: RMS reprojection error of the best pose: how far the pose's projected corners differ from the detected corners, in pixels.
+    if not camera_params.has_intrinsics():
+        raise ValueError('ArUco pose consistency checking requires camera calibration')
+    failed = (0, None, None, -1.)
+    if ids is None or not len(ids):
+        return [], failed
+    # Build board geometry for each detection and group detections by marker ID.
+    ids = np.asarray(ids).flatten()
+    board_map = {int(m_id): np.asarray(obj) for m_id, obj in zip(board.getIds(), board.getObjPoints())}
+    layout_centers = np.asarray([points.mean(axis=0)[:2] for points in board_map.values()])
+    obj = np.asarray([board_map[int(mid)] for mid in ids]).reshape(-1, 4, 3)
+    centers = obj.mean(axis=1)[:, :2]
+    img = np.asarray([np.asarray(c).reshape(4, 2) for c in corners])
+    # Group detections by marker ID. groups should mostly have one detection per marker since markers on our boards are unique, but multiple detections are possible in case of false positives.
+    groups = {int(m_id): np.flatnonzero(ids == m_id).tolist() for m_id in np.unique(ids)}
+    # precompure scoring limits for marker orientation and reprojection error
+    min_facing_cosine = math.cos(math.radians(settings['max_marker_tilt_angle_deg']))
+    reprojection_limits = _marker_reprojection_limits(img, settings)
+    timestamp_ms = frame_info.get('timestamp_ms')
+    # init search
+    best_indices, best_pose, best_error, best_spread, best_temporal_score = [], failed, np.inf, 0., np.inf
+
+    # Score each pose by marker-level reprojection, orientation, and temporal consistency.
+    def score(solution):
+        # Get reprojection error for each marker and reject markers that are facing away or too tilted.
+        errors = _marker_errors(obj, img, solution[1], solution[2], frame_info, camera_params, min_facing_cosine)
+        normalized_errors = errors / reprojection_limits
+        selected = [min(indices, key=lambda i: normalized_errors[i]) for indices in groups.values()]
+        selected = sorted(i for i in selected if normalized_errors[i] <= 1.)
+        # Reject poses that are inconsistent with the recent pose history, or that use too few markers.
+        temporal_score = _temporal_pose_score(solution[1], solution[2], timestamp_ms, history, unit_to_meters, settings)
+        if len(selected) < min_markers or temporal_score > 1.:
+            return [], np.inf, 0., np.inf
+        # Compute the spatial spread of the selected markers relative to the board layout. This is used to prefer poses that cover more of the board.
+        spread = _marker_spread_fraction(centers[selected], layout_centers)
+        mean_normalized_marker_error = float(np.mean(normalized_errors[selected]))
+        return (selected, mean_normalized_marker_error, spread, temporal_score)
+
+    # Rank candidates by marker count, board coverage, reprojection error, and motion.
+    def record(selected, error, spread, temporal_score, candidate, force=False):
+        nonlocal best_indices, best_pose, best_error, best_spread, best_temporal_score
+        rank = (len(selected), spread, -error, -temporal_score)
+        best_rank = (len(best_indices), best_spread, -best_error, -best_temporal_score)
+        if not force and rank <= best_rank:
+            return
+        best_indices, best_error, best_spread, best_temporal_score = selected, error, spread, temporal_score
+        rms = _reprojection_error_rms(obj[selected], img[selected], candidate[1], candidate[2], frame_info, camera_params)
+        best_pose = (len(selected) * 4, candidate[1], candidate[2], rms)
+
+    # Fit candidate subsets, then refit each pose using its consensus markers.
+    def consider(indices):
+        candidates = _pose_candidates(obj[indices], img[indices], frame_info, camera_params)
+        for candidate in candidates:
+            selected, error, spread, temporal_score = score(candidate)
+            if len(selected) < min_markers:
+                continue
+            # Refit only the consensus, then recheck both geometry and membership.
+            for _ in range(3):
+                refits = _pose_candidates(obj[selected], img[selected], frame_info, camera_params)
+                acceptable = []
+                for fitted in refits:
+                    next_indices, next_error, next_spread, next_temporal_score = score(fitted)
+                    if len(next_indices) >= min_markers:
+                        acceptable.append((next_indices, next_error, next_spread, next_temporal_score, fitted))
+                if not acceptable:
+                    break
+                next_indices, next_error, next_spread, next_temporal_score, fitted = min(acceptable, key=lambda x: (-len(x[0]), -x[2], x[1], x[3]))
+                unchanged = next_indices == selected
+                selected, error, spread, temporal_score, candidate = next_indices, next_error, next_spread, next_temporal_score, fitted
+                if unchanged:
+                    break
+            record(selected, error, spread, temporal_score, candidate)
+
+    # To keep this fast, if all marker detections are unique (so no markers detected multiple times), just fit the pose and check its quality. If the pose is acceptable, return it. If not, then try refitting the pose using only the consensus markers. If that fails, then search all subsets of detections up to a limit.
+    fast_candidate = None
+    if len(groups) == len(ids): # all markers detected only once
+        # this likely returns multiple poses, choose the best
+        initial_candidates = _pose_candidates(obj, img, frame_info, camera_params)
+        for candidate in initial_candidates:
+            # potentially prune markers
+            selected, error, spread, temporal_score = score(candidate)
+            if len(selected) < min_markers:
+                # not enough marker left, not a viable pose
+                continue
+            sufficient_spread = spread >= settings['fast_path_min_spread_fraction']
+            if len(selected) == len(groups) and sufficient_spread:
+                # no markers were pruned, and the spread is sufficient, so this is a good candidate
+                candidate_rank = (len(selected), spread, -error, -temporal_score)
+                # store as best estimate if it is better than any previous candidate
+                if fast_candidate is None or candidate_rank > fast_candidate[0]:
+                    fast_candidate = (candidate_rank, selected, error, spread, temporal_score, candidate)
+                continue
+            if len(selected) == len(groups):
+                # spread is insufficient, but we can still record it as a candidate in case no better candidates are found
+                record(selected, error, spread, temporal_score, candidate)
+                continue
+            # try refitting the pose using only the markers left after pruning
+            record(selected, error, spread, temporal_score, candidate)
+            for refitted in _pose_candidates(obj[selected], img[selected], frame_info, camera_params):
+                refitted_indices, refitted_error, refitted_spread, refitted_temporal_score = score(refitted)
+                if refitted_indices != selected:
+                    # further markers were pruned, this indicates we are not converging and should delve into a deeper search. Ignore this pose
+                    continue
+                record(refitted_indices, refitted_error, refitted_spread, refitted_temporal_score, refitted, force=True)
+                if refitted_spread >= settings['fast_path_min_spread_fraction']:
+                    # the refitted pose is acceptable and has sufficient spread to be passed, so we can return it without searching all subsets
+                    candidate_rank = (len(refitted_indices), refitted_spread, -refitted_error, -refitted_temporal_score)
+                    if fast_candidate is None or candidate_rank > fast_candidate[0]:
+                        fast_candidate = (candidate_rank, refitted_indices, refitted_error, refitted_spread, refitted_temporal_score, refitted)
+        # check if the fast path yielded a good pose
+        if fast_candidate is not None:
+            # Return the best full or refitted consensus with adequate spread.
+            record(*fast_candidate[1:], force=True)
+            return best_indices, best_pose
+
+    # Search all subsets when affordable; otherwise sample spatially spread subsets.
+    combinations = math.prod(len(g) + 1 for g in groups.values()) - 1
+    budget = settings['max_subsets']
+    if combinations <= budget:
+        choices = itertools.product(*[[-1] + g for g in groups.values()])
+        subsets = sorted(([i for i in choice if i != -1] for choice in choices), key=len, reverse=True)
+    else:
+        group_list = list(groups.values())
+        group_centers = np.asarray([centers[indices[0]] for indices in group_list])
+        subsets = _spatially_spread_subsets(group_list, group_centers, max(2, min_markers), budget)
+    seen = {tuple(range(len(ids)))} if len(groups) == len(ids) else set()
+    for subset in subsets:
+        if not subset:
+            continue
+        key = tuple(sorted(subset))
+        if key in seen:
+            continue
+        seen.add(key)
+        consider(list(key))
+        if (len(best_indices) == len(groups) and best_spread >= settings['fast_path_min_spread_fraction']):
+            break
+    return best_indices, best_pose
+
 
 class PlaneSetup(typing.TypedDict):
     plane                   : plane.Plane
@@ -449,6 +777,8 @@ class Detector:
         self._plane_marker_ids      : dict[str,set[int]]        = {}
         self._individual_marker_ids : set[int]                  = set()
         self._all_markers           : set[int]                  = set()
+        self._pose_history          : dict[str, list[tuple]]    = {}
+        self._plane_unit_to_meters  : dict[str, float]          = {}
 
         self.settings                                           = resolve_settings(settings)
 
@@ -458,6 +788,12 @@ class Detector:
 
     def add_plane(self, name: str, setup: PlaneSetup):
         self._check_dict(setup['plane'].aruco_dict_id, 'plane')
+        unit = (setup['plane'].unit or '').strip().lower()
+        unit_to_meters = {'m': 1., 'cm': .01, 'mm': .001}.get(unit)
+        consistency = self.settings['pose_consistency']
+        if consistency['enabled'] and consistency['temporal_enabled'] and unit_to_meters is None:
+            raise ValueError('Temporal ArUco pose consistency requires the plane unit to be m, cm, or mm')
+        self._plane_unit_to_meters[name] = unit_to_meters or 1.
         self.planes[name] = setup
         self._boards[name]= self.planes[name]['plane'].get_aruco_board()
 
@@ -510,6 +846,8 @@ class Detector:
         img_points, ids, rejected = raw_detection if raw_detection is not None else self._detect_markers(image)
         rejected = tuple(rejected)
         out_planes = {}
+        consistency = self.settings['pose_consistency']
+        pose_cache = {}
         for p in self.planes:
             # get the detections for this plane (that is, filter on expected marker IDs)
             pl_img_points, pl_ids = filter_detections(img_points, ids, self._plane_marker_ids[p])
@@ -517,12 +855,28 @@ class Detector:
                 out_planes[p] = None
                 continue
 
-            # filter out any duplicate detections of the same marker.
-            ok, kept, kept_ids, rejected_indices = filter_board_duplicates(
-                self._boards[p], pl_img_points, pl_ids, frame_info, camera_params)
-            if ok:
-                rejected += tuple(pl_img_points[i] for i in rejected_indices)
-                pl_img_points, pl_ids = kept, kept_ids
+            timestamp_ms = frame_info.get('timestamp_ms')
+            history = self._pose_history.setdefault(p, [])
+            try:
+                timestamp_ms = float(timestamp_ms)
+            except (TypeError, ValueError):
+                timestamp_ms = None
+            if timestamp_ms is None or not math.isfinite(timestamp_ms) or (history and timestamp_ms <= history[-1][0]):
+                history.clear()
+                timestamp_ms = None if timestamp_ms is None or not math.isfinite(timestamp_ms) else timestamp_ms
+            accepted_pose = None
+
+            # If consistency checking is enabled, we will filter out any detections that do not yield a consistent pose with the other detections. This also filters out duplicate detections.
+            # If consistency checking is disabled, we will filter out any duplicate detections of the same marker.
+            if consistency['enabled']:
+                selected, accepted_pose = self._consistent_pose(self._boards[p], pl_img_points, pl_ids, frame_info, camera_params, self.planes[p]['min_num_markers'], pose_cache, history, self._plane_unit_to_meters[p])
+                rejected += tuple(c for i, c in enumerate(pl_img_points) if i not in selected)
+                pl_img_points, pl_ids = [pl_img_points[i] for i in selected], pl_ids[selected]
+            else:
+                ok, kept, kept_ids, rejected_indices = filter_board_duplicates(self._boards[p], pl_img_points, pl_ids, frame_info, camera_params)
+                if ok:
+                    rejected += tuple(pl_img_points[i] for i in rejected_indices)
+                    pl_img_points, pl_ids = kept, kept_ids
             recovered_ids = None
 
             # Preserve the existing recovery threshold independently of the on/off switch.
@@ -530,11 +884,29 @@ class Detector:
                 pl_img_points, pl_ids, rejected, recovered_ids = self._refine_detection(image, pl_img_points, pl_ids, rejected, self._boards[p], frame_info, camera_params)
                 rejected = tuple(rejected)
 
+                # Validate the refined set, including newly recovered markers if any
+                if consistency['enabled']:
+                    selected, accepted_pose = self._consistent_pose(self._boards[p], pl_img_points, pl_ids, frame_info, camera_params, self.planes[p]['min_num_markers'], pose_cache, history, self._plane_unit_to_meters[p])
+                    rejected += tuple(c for i, c in enumerate(pl_img_points) if i not in selected)
+                    pl_img_points, pl_ids = [pl_img_points[i] for i in selected], pl_ids[selected]
+                    if recovered_ids is not None:
+                        recovered_ids = recovered_ids[np.isin(recovered_ids.flatten(), pl_ids.flatten())]
+
+            if (consistency['enabled'] and consistency['temporal_enabled'] and timestamp_ms is not None and accepted_pose is not None and accepted_pose[1] is not None):
+                history.append(_pose_history_entry(accepted_pose[1], accepted_pose[2], timestamp_ms, self._plane_unit_to_meters[p]))
+                del history[:-consistency['temporal_history_size']]
+
             out_planes[p] = dict(img_points=pl_img_points, ids=pl_ids, recovered_ids=recovered_ids)
         out_individual = dict(zip(('img_points', 'ids'), filter_detections(img_points, ids, self._individual_marker_ids)))
         unexpected = dict(zip(('img_points', 'ids'), filter_detections(img_points, ids, self._all_markers, keep_expected=False)))
         self._last_detect_output = (out_planes, out_individual, unexpected, rejected)
         return self._last_detect_output
+
+    def _consistent_pose(self, board, corners, ids, frame_info, camera_params, min_num_markers, cache, history=(), unit_to_meters=1.):
+        key = freeze((board.getObjPoints(), board.getIds(), corners, ids, frame_info.get('timestamp_ms'), history, self.settings['pose_consistency'], min_num_markers, unit_to_meters, self.settings['undistort']))
+        if key not in cache:
+            cache[key] = _consistent_pose(board, corners, ids, frame_info, camera_params, self.settings['pose_consistency'], min_num_markers, history, unit_to_meters)
+        return copy.deepcopy(cache[key])
 
     def _detect_markers(self, image: cv2.UMat):
         img_points, ids, rejected_img_points = self._det.detectMarkers(image)
@@ -728,9 +1100,9 @@ class Manager:
             self._detectors[detector_id] = detector
 
     def register_with_estimator(self, estimator: pose.Estimator):
-        if any(d.settings['undistort'] for d in self._detectors.values()):
+        if any(d.settings['undistort'] or d.settings['pose_consistency']['enabled'] for d in self._detectors.values()):
             if not estimator.cam_params.has_intrinsics():
-                raise ValueError('Running ArUco detection on undistorted images requires camera calibration')
+                raise ValueError('Running ArUco detection on undistorted images and checking of pose consistency require camera calibration')
         # this handles registration of all planes and individual markers with the estimator
         # and makes sure our wrapper function for the aruco detector gets called which handles
         # aruco detection so that each detector is run only once on a frame

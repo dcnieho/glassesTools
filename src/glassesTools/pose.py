@@ -540,6 +540,9 @@ class Estimator:
             return self._cache.as_result()
 
         should_exit, frame, frame_idx, frame_ts, frame_info = self.video.read_frame(report_gap=True, wanted_frame_idx=wanted_frame_idx)
+        frame_info = dict(frame_info or {})
+        if frame_ts is not None:
+            frame_info['timestamp_ms'] = float(frame_ts)
 
         if should_exit or (self.allow_early_exit and \
             (
