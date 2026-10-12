@@ -81,6 +81,7 @@ def settings_defaults() -> dict:
                     max_subsets=500,
                     max_marker_tilt_angle_deg=80.,
                     temporal_enabled=True,
+                    temporal_invert_pose=True,
                     temporal_history_size=5,
                     max_translation_speed_m_s=3.,
                     max_rotation_speed_deg_s=400.)
@@ -551,16 +552,20 @@ def _rotation_distance_deg(rotation_a, rotation_b):
     cosine = np.clip((np.trace(relative) - 1.) / 2., -1., 1.)
     return math.degrees(math.acos(float(cosine)))
 
-def _pose_history_entry(rvec, tvec, timestamp_ms, unit_to_meters):
+def _pose_history_entry(rvec, tvec, timestamp_ms, unit_to_meters, invert_pose=True):
     rotation = cv2.Rodrigues(rvec)[0]
-    position_m = -rotation.T @ np.asarray(tvec).reshape(3) * unit_to_meters
+    translation = np.asarray(tvec).reshape(3)
+    if invert_pose:
+        translation = -rotation.T @ translation
+        rotation = rotation.T
+    position_m = translation * unit_to_meters
     return float(timestamp_ms), position_m, rotation
 
 def _temporal_pose_score(rvec, tvec, timestamp_ms, history, unit_to_meters, settings):
     # compute a score based on the median translation and rotation speeds over the recent pose history, normalized by the maximum allowed speeds
     if not settings['temporal_enabled'] or timestamp_ms is None or not history:
         return 0.
-    current = _pose_history_entry(rvec, tvec, timestamp_ms, unit_to_meters)
+    current = _pose_history_entry(rvec, tvec, timestamp_ms, unit_to_meters, settings.get('temporal_invert_pose', True))
     recent = history[-settings['temporal_history_size']:]
     translation_speeds, rotation_speeds = [], []
     for previous in recent:
@@ -893,7 +898,7 @@ class Detector:
                         recovered_ids = recovered_ids[np.isin(recovered_ids.flatten(), pl_ids.flatten())]
 
             if (consistency['enabled'] and consistency['temporal_enabled'] and timestamp_ms is not None and accepted_pose is not None and accepted_pose[1] is not None):
-                history.append(_pose_history_entry(accepted_pose[1], accepted_pose[2], timestamp_ms, self._plane_unit_to_meters[p]))
+                history.append(_pose_history_entry(accepted_pose[1], accepted_pose[2], timestamp_ms, self._plane_unit_to_meters[p], consistency.get('temporal_invert_pose', True)))
                 del history[:-consistency['temporal_history_size']]
 
             out_planes[p] = dict(img_points=pl_img_points, ids=pl_ids, recovered_ids=recovered_ids)
