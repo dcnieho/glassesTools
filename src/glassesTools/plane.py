@@ -8,12 +8,13 @@ import typing
 
 
 from . import data_files, drawing, marker, transforms
+from .marker_assembly import MarkerAssembly as _MarkerAssembly
 
 class Coordinate(typing.NamedTuple):
     x: float = 0.
     y: float = 0.
 
-class Plane:
+class Plane(_MarkerAssembly):
     default_ref_image_name = 'reference_image.png'
 
     def __init__(self,
@@ -37,7 +38,6 @@ class Plane:
         self._all_marker_ids    : list[int]                 = []
         self.plane_size                                     = plane_size
         self.bbox               : list[float]               = [0., 0., self.plane_size.x, self.plane_size.y]
-        self._origin            : Coordinate                = Coordinate(0., 0.)
 
         # marker specs
         self.aruco_dict_id                                  = aruco_dict_id
@@ -51,6 +51,13 @@ class Plane:
 
         # prep markers
         self._load_markers(markers, pos_size_scale_fac, package_to_read_from)
+        super().__init__(
+            marker_corners={key: np.asarray(value.corners) for key, value in self.markers.items()},
+            aruco_dict_id=self.aruco_dict_id,
+            aruco_settings=self.aruco_settings,
+            min_num_markers=self.min_num_markers,
+            unit=self.unit,
+        )
 
         # get reference image of plane
         if ref_image_store_path:
@@ -64,7 +71,7 @@ class Plane:
 
     def set_origin(self, origin: Coordinate):
         # change from current origin
-        offset = np.array(origin)-self._origin
+        offset = np.array(origin)-self._origin[:2]
 
         for i in self.markers:
             self.markers[i].shift(-offset)
@@ -74,7 +81,7 @@ class Plane:
         self.bbox[1] -= offset[1]
         self.bbox[3] -= offset[1]
 
-        self._origin = origin
+        super().set_origin(np.array([origin.x, origin.y, 0.]))
 
     def get_ref_image(self, im_size: int|None=None, as_RGB=False) -> np.ndarray:
         if im_size is None:
@@ -142,23 +149,16 @@ class Plane:
             self.markers[idx] = marker.Marker(idx, c, corners=[tl, tr, br, bl], rot=rot)
 
     def get_marker_IDs(self) -> dict[str|int,list[marker.MarkerID]]:
-        return {'plane': [marker.MarkerID(m_id, self.aruco_dict_id) for m_id in self._all_marker_ids]}
+        return {'assembly': [marker.MarkerID(m_id, self.aruco_dict_id) for m_id in self._all_marker_ids]}
 
     def get_aruco_board(self) -> cv2.aruco.Board:
-        from . import aruco
-        board_corner_points = []
-        ids = []
-        for key in self.markers:
-            ids.append(key)
-            marker_corner_points = np.vstack(self.markers[key].corners).astype('float32')
-            board_corner_points.append(marker_corner_points)
-        return aruco.create_board(board_corner_points, ids, self.aruco_dict)
+        return super().get_aruco_board()
 
-    def get_plane_setup(self):
+    def get_assembly_setup(self):
         from . import aruco
-        return aruco.PlaneSetup(plane = self,
-                                aruco_settings = self.aruco_settings,
-                                min_num_markers = self.min_num_markers)
+        setup = super().get_assembly_setup()
+        setup.is_planar = True
+        return setup
 
     def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
         # get image with markers

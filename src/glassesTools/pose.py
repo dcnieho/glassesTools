@@ -447,7 +447,7 @@ _T  = typing.TypeVar("_T")
 
 class _FrameCache(typing.NamedTuple):
     status: Status
-    plane_poses: dict[str, Pose]|None = None
+    marker_assembly_poses: dict[str, Pose]|None = None
     individual_marker_poses: dict[typing.Any, marker.Pose]|None = None
     extra_processing: dict[str, tuple[int, typing.Any]]|None = None
     frame: np.ndarray|None = None
@@ -456,8 +456,7 @@ class _FrameCache(typing.NamedTuple):
     frame_info: dict[str,typing.Any]|None = None
 
     def as_result(self) -> tuple[Status, dict[str, Pose]|None, dict[typing.Any, marker.Pose]|None, dict[str, tuple[int, typing.Any]]|None, tuple[np.ndarray|None, int|None, float|None, dict[str,typing.Any]|None]]:
-        return (self.status, self.plane_poses, self.individual_marker_poses, self.extra_processing,
-                (self.frame, self.frame_idx, self.timestamp, self.frame_info))
+        return (self.status, self.marker_assembly_poses, self.individual_marker_poses, self.extra_processing, (self.frame, self.frame_idx, self.timestamp, self.frame_info))
 
 
 class Estimator:
@@ -468,9 +467,10 @@ class Estimator:
         # check video uses the full sensor size or ROI offsets are available. If not, the camera calibration is not valid for the video.
         self.video.check_cam_params(self.cam_params)
 
-        self.plane_functions    : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], DetectionResult|None]] = {}
-        self.plane_intervals    : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]]                                            = {}
-        self.plane_visualizers  : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None]             = {}
+        self.assembly_functions   : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], DetectionResult|None]] = {}
+        self.assembly_intervals   : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]]                                            = {}
+        self.assembly_visualizers : dict[str, typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None]             = {}
+        self._plane_assemblies    : set[str] = set()
 
         self.individual_marker_functions    : dict[_T, typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], DetectionResult|None]] = {}
         self.individual_marker_intervals    : dict[_T, tuple[annotation.EventType, list[int]|list[list[int]]]]                                           = {}
@@ -505,13 +505,22 @@ class Estimator:
                   plane_function: typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], DetectionResult|None],
                   processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None=None,
                   plane_visualizer: typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None=None):
+        self.add_assembly(plane, plane_function, processing_intervals, plane_visualizer, is_plane=True)
+
+    def add_assembly(self, name: str,
+                  assembly_function: typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], DetectionResult|None],
+                  processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None=None,
+                  assembly_visualizer: typing.Callable[[str,int,np.ndarray,dict[str,typing.Any],np.ndarray|None], None]|None=None,
+                  is_plane: bool=False):
         if not self._first_frame:
-            raise RuntimeError(f'You cannot register planes once video processing has started')
-        if plane in self.plane_functions:
-            raise ValueError(f'Cannot register the plane "{plane}", it is already registered')
-        self.plane_functions[plane]     = plane_function
-        self.plane_intervals[plane]     = processing_intervals
-        self.plane_visualizers[plane]   = plane_visualizer
+            raise RuntimeError('You cannot register marker assemblies once video processing has started')
+        if name in self.assembly_functions:
+            raise ValueError(f'Cannot register the marker assembly "{name}", it is already registered')
+        self.assembly_functions[name] = assembly_function
+        self.assembly_intervals[name] = processing_intervals
+        self.assembly_visualizers[name] = assembly_visualizer
+        if is_plane:
+            self._plane_assemblies.add(name)
 
     def add_individual_marker(self, key: _T,
                               individual_marker_function: typing.Callable[[_T,int,np.ndarray,dict[str,typing.Any],ocv.CameraParams], DetectionResult|None],
@@ -578,7 +587,7 @@ class Estimator:
 
         if should_exit or (self.allow_early_exit and \
             (
-                (not self.plane_intervals             or intervals.beyond_last_interval(frame_idx, self.plane_intervals)) and \
+                (not self.assembly_intervals          or intervals.beyond_last_interval(frame_idx, self.assembly_intervals)) and \
                 (not self.individual_marker_intervals or intervals.beyond_last_interval(frame_idx, self.individual_marker_intervals)) and \
                 (not self.extra_proc_intervals        or intervals.beyond_last_interval(frame_idx, self.extra_proc_intervals))
             )):
@@ -606,10 +615,10 @@ class Estimator:
         # NB: have to spool through like this, setting specific frame to read
         # with cap.set(cv2.CAP_PROP_POS_FRAMES) doesn't seem to work reliably
         # for VFR video files
-        planes_for_this_frame = [p for p in self.plane_functions if intervals.is_in_interval(frame_idx, self.plane_intervals[p])]
+        assemblies_for_this_frame = [p for p in self.assembly_functions if intervals.is_in_interval(frame_idx, self.assembly_intervals[p])]
         indiv_markers_for_this_frame = [i for i in self.individual_marker_functions if intervals.is_in_interval(frame_idx, self.individual_marker_intervals[i])]
         extra_processing_for_this_frame = [e for e in self.extra_proc_functions if intervals.is_in_interval(frame_idx, self.extra_proc_intervals[e])]
-        if frame is None or (not planes_for_this_frame and not indiv_markers_for_this_frame and not extra_processing_for_this_frame):
+        if frame is None or (not assemblies_for_this_frame and not indiv_markers_for_this_frame and not extra_processing_for_this_frame):
             # we don't have a valid frame or nothing to do, continue to next
             if self.has_gui:
                 # do update timeline of the viewers
@@ -621,16 +630,19 @@ class Estimator:
         individual_marker_out   : dict[_T , marker.Pose]            = {}
         extra_processing_out    : dict[str, tuple[int, typing.Any]] = {}
         ROI_offset = [frame_info['offset_x'], frame_info['offset_y']] if 'offset_x' in frame_info and 'offset_y' in frame_info else [0., 0.]
-        plane_points: dict[str, DetectionResult] = {}
-        if planes_for_this_frame:
+        assembly_points: dict[str, DetectionResult] = {}
+        if assemblies_for_this_frame:
             # detect fiducials
-            for p in planes_for_this_frame:
-                det_output = self.plane_functions[p](p, frame_idx, frame, frame_info, self.cam_params)
+            for p in assemblies_for_this_frame:
+                det_output = self.assembly_functions[p](p, frame_idx, frame, frame_info, self.cam_params)
                 if det_output is not None and det_output.object_points is not None:
-                    plane_points[p] = det_output
+                    assembly_points[p] = det_output
             # determine pose
-            for p in plane_points:
-                pose_out[p] = plane_points[p].estimate_pose_and_homography(frame_idx)
+            for p in assembly_points:
+                if p in self._plane_assemblies:
+                    pose_out[p] = assembly_points[p].estimate_pose_and_homography(frame_idx)
+                else:
+                    pose_out[p] = assembly_points[p].estimate_pose(frame_idx)
 
         indiv_marker_points: dict[_T, DetectionResult] = {}
         if indiv_markers_for_this_frame:
@@ -641,10 +653,9 @@ class Estimator:
                     indiv_marker_points[i] = det_output
             # determine pose, if wanted
             for i in indiv_marker_points:
-                mpose = marker.Pose(frame_idx)
-                if indiv_marker_points[i].object_points is not None:   # object points may not be available (e.g. when marker size is not set). If so, skip pose estimation
-                    _, mpose.R_vec, mpose.T_vec, _ = indiv_marker_points[i].estimate_pose(flags=cv2.SOLVEPNP_IPPE_SQUARE)
-                individual_marker_out[i] = mpose
+                # N.B.: Missing object points (e.g. when marker size is not set) produce a failed marker pose.
+                pose_estimate = indiv_marker_points[i].estimate_pose(frame_idx, flags=cv2.SOLVEPNP_IPPE_SQUARE)
+                individual_marker_out[i] = marker.Pose(frame_idx, pose_estimate.pose_R_vec, pose_estimate.pose_T_vec)
 
         for e in extra_processing_for_this_frame:
             eproc = self.extra_proc_functions[e](e, frame_idx, frame, frame_info, self.cam_params, **self.extra_proc_parameters[e])
@@ -654,12 +665,12 @@ class Estimator:
         # now that all processing is done, handle visualization, if any
         if self.do_visualize:
             # first draw all detection output
-            if planes_for_this_frame:
-                for p in planes_for_this_frame:
-                    plane_visualizer = self.plane_visualizers[p]
-                    if plane_visualizer is None:
+            if assemblies_for_this_frame:
+                for p in assemblies_for_this_frame:
+                    assembly_visualizer = self.assembly_visualizers[p]
+                    if assembly_visualizer is None:
                         continue
-                    plane_visualizer(p, frame_idx, frame, frame_info, plane_points[p].object_points if p in plane_points else None)
+                    assembly_visualizer(p, frame_idx, frame, frame_info, assembly_points[p].object_points if p in assembly_points else None)
             if indiv_markers_for_this_frame:
                 for i in indiv_markers_for_this_frame:
                     individual_marker_visualizer = self.individual_marker_visualizers[i]
@@ -684,13 +695,13 @@ class Estimator:
         if self.has_gui:
             self.gui.update_image(frame, frame_ts/1000., frame_idx)
 
-        self._cache = _FrameCache(Status.Ok, plane_poses=pose_out, individual_marker_poses=individual_marker_out,
+        self._cache = _FrameCache(Status.Ok, marker_assembly_poses=pose_out, individual_marker_poses=individual_marker_out,
                                   extra_processing=extra_processing_out, frame=frame, frame_idx=frame_idx,
                                   timestamp=frame_ts, frame_info=frame_info)
         return self._cache.as_result()
 
     def process_video(self) -> tuple[dict[str, list[Pose]], dict[_T, list[marker.Pose]], dict[str, list[tuple[int, typing.Any]]]]:
-        poses_out               : dict[str, list[Pose]]                     = {p:[] for p in self.plane_functions}
+        poses_out               : dict[str, list[Pose]]                     = {p:[] for p in self.assembly_functions}
         individual_markers_out  : dict[_T, list[marker.Pose]]               = {i:[] for i in self.individual_marker_functions}
         extra_processing_out    : dict[str, list[tuple[int, typing.Any]]]   = {e:[] for e in self.extra_proc_functions}
         while True:

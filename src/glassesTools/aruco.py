@@ -5,11 +5,11 @@ import typing
 import itertools
 import math
 import copy
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from glassesTools.utils import freeze
 
-from . import annotation, drawing, marker, ocv, plane, pose, transforms
+from . import annotation, drawing, marker, ocv, pose, transforms
 
 default_dict = cv2.aruco.DICT_4X4_250
 
@@ -499,13 +499,25 @@ def _marker_reprojection_limits(image_corners, settings):
     return np.clip(settings['max_reprojection_error_fraction'] * marker_sizes, settings['min_reprojection_error_px'], settings['max_reprojection_error_px'])
 
 def _marker_spread_fraction(selected_centers, layout_centers):
-    # determine the fraction of the board layout that is covered by the selected markers, in each axis
-    all_span = np.ptp(layout_centers, axis=0)
-    active_axes = all_span > np.finfo(float).eps
-    if not active_axes.any():
+    # for planes: determine the fraction of the plane layout that is covered by the selected markers, in each axis
+    # for 3D layouts: determine the fraction of the layout volume that is covered by the selected markers, in each axis
+    layout_centers = np.asarray(layout_centers, dtype=float)
+    selected_centers = np.asarray(selected_centers, dtype=float)
+    centered_layout = layout_centers - layout_centers.mean(axis=0)
+    _, singular_values, _ = np.linalg.svd(centered_layout, full_matrices=False)
+    if not len(singular_values) or singular_values[0] <= np.finfo(float).eps:
         return 0.
-    selected_span = np.ptp(selected_centers, axis=0)
-    ratios = np.clip(selected_span[active_axes] / all_span[active_axes], 0., 1.)
+    rank = singular_values > singular_values[0] * 1.e-6
+    world_span = np.ptp(layout_centers, axis=0)
+    world_axes = world_span > max(singular_values[0], 1.) * 1.e-10
+    if np.count_nonzero(world_axes) != np.count_nonzero(rank):
+        # planes should have Z==0, and 3D layouts should have all axes nonzero. If the layout is not full 3D or aligned with the world coordinate axes, we cannot compute a meaningful spread fraction.
+        raise ValueError('Marker layout must either be full 3D or a plane aligned to the X-Y plane in world coordinates')
+    all_span = world_span[world_axes]
+    selected_span = np.ptp(selected_centers, axis=0)[world_axes]
+    if not len(all_span):
+        return 0.
+    ratios = np.clip(selected_span / all_span, 0., 1.)
     return float(np.prod(ratios))
 
 def _spatially_spread_subsets(groups, centers, subset_size, max_subsets=None):
@@ -595,9 +607,9 @@ def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, m
     # Build board geometry for each detection and group detections by marker ID.
     ids = np.asarray(ids).flatten()
     board_map = {int(m_id): np.asarray(obj) for m_id, obj in zip(board.getIds(), board.getObjPoints())}
-    layout_centers = np.asarray([points.mean(axis=0)[:2] for points in board_map.values()])
+    layout_centers = np.asarray([points.mean(axis=0) for points in board_map.values()])
     obj = np.asarray([board_map[int(mid)] for mid in ids]).reshape(-1, 4, 3)
-    centers = obj.mean(axis=1)[:, :2]
+    centers = obj.mean(axis=1)
     img = np.asarray([np.asarray(c).reshape(4, 2) for c in corners])
     # Group detections by marker ID. groups should mostly have one detection per marker since markers on our boards are unique, but multiple detections are possible in case of false positives.
     groups = {int(m_id): np.flatnonzero(ids == m_id).tolist() for m_id in np.unique(ids)}
@@ -725,14 +737,24 @@ def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, m
     return best_indices, best_pose
 
 
-class PlaneSetup(typing.TypedDict):
-    plane                   : plane.Plane
-    min_num_markers         : int
-    aruco_settings          : typing.NotRequired[dict[str, typing.Any]]
-class MarkerSetup(typing.TypedDict):
-    detect_only             : bool
-    size                    : float
-    detector_params         : typing.NotRequired[dict[str, typing.Any]]
+@dataclass
+class MarkerSetup:
+    detect_only: bool
+    size: float | None = None
+    detector_params: dict[str, typing.Any] | None = None
+
+@dataclass
+class AssemblySetup:
+    aruco_board: cv2.aruco.Board
+    aruco_dict_id: int
+    marker_ids: dict[str|int, list[marker.MarkerID]]
+    min_num_markers: int
+    aruco_settings: dict[str, typing.Any]
+    unit: str | None = None
+    is_planar: bool = False
+    is_dynamic: bool = False
+    dynamic_marker_ids: list[marker.MarkerID] = field(default_factory=list)
+    dynamic_marker_setup: MarkerSetup | None = None
 
 def reduce_to_families(dictionary_ids: list[int]) -> tuple[list[int],dict[int,int]]:
     # turn into families, and the largest dict necessary per family
@@ -774,16 +796,15 @@ class Detector:
         self._family        = dict_id_to_family[self.dictionary_id]
         self._is_family     = family_to_str[self._family][1]
 
-        self.planes             : dict[str, PlaneSetup]         = {}
-        self._boards            : dict[str, cv2.aruco.Board]    = {}
+        self.assemblies         : dict[str, AssemblySetup]      = {}
         self.individual_markers : dict[int, MarkerSetup]        = {}
         self._indiv_marker_points:dict[int, np.ndarray]         = {}
 
-        self._plane_marker_ids      : dict[str,set[int]]        = {}
+        self._assembly_marker_ids   : dict[str,set[int]]        = {}
         self._individual_marker_ids : set[int]                  = set()
         self._all_markers           : set[int]                  = set()
         self._pose_history          : dict[str, list[tuple]]    = {}
-        self._plane_unit_to_meters  : dict[str, float]          = {}
+        self._assembly_unit_to_meters: dict[str, float]         = {}
 
         self.settings                                           = resolve_settings(settings)
 
@@ -791,24 +812,18 @@ class Detector:
 
         self._last_detect_output : tuple[dict[str,dict[str]],dict[str],dict[str],list[np.ndarray]] = {}
 
-    def add_plane(self, name: str, setup: PlaneSetup):
-        self._check_dict(setup['plane'].aruco_dict_id, 'plane')
-        unit = (setup['plane'].unit or '').strip().lower()
+    def add_assembly(self, name: str, setup: AssemblySetup, assembly_kind: str = 'assembly'):
+        self._check_dict(setup.aruco_dict_id, assembly_kind)
+        unit = (setup.unit or '').strip().lower()
         unit_to_meters = {'m': 1., 'cm': .01, 'mm': .001}.get(unit)
         consistency = self.settings['pose_consistency']
         if consistency['enabled'] and consistency['temporal_enabled'] and unit_to_meters is None:
-            raise ValueError('Temporal ArUco pose consistency requires the plane unit to be m, cm, or mm')
-        self._plane_unit_to_meters[name] = unit_to_meters or 1.
-        self.planes[name] = setup
-        self._boards[name]= self.planes[name]['plane'].get_aruco_board()
-
-        markers = self.planes[name]['plane'].get_marker_IDs()
-        for ms in markers:
-            if ms!='plane':
-                continue
-            m_ids = {m.m_id for m in markers[ms]}
-            self._all_markers.update(m_ids)
-            self._plane_marker_ids[name] = m_ids
+            raise ValueError('Temporal ArUco pose consistency requires the assembly unit to be m, cm, or mm')
+        self._assembly_unit_to_meters[name] = unit_to_meters or 1.
+        self.assemblies[name] = setup
+        marker_ids = {m.m_id for m in setup.marker_ids['assembly']}
+        self._all_markers.update(marker_ids)
+        self._assembly_marker_ids[name] = marker_ids
 
     def add_individual_marker(self, mark: marker.MarkerID, setup: MarkerSetup):
         self._check_dict(mark.aruco_dict_id, 'individual marker')
@@ -816,14 +831,14 @@ class Detector:
         self._all_markers.add(mark.m_id)
         self._individual_marker_ids.add(mark.m_id)
         # get marker points in world
-        marker_size = self.individual_markers[mark.m_id].get('size',None) if not self.individual_markers[mark.m_id].get('detect_only',False) else None
-        if not marker_size or marker_size<0.:
+        marker_setup = self.individual_markers[mark.m_id]
+        if marker_setup.size is None or marker_setup.size<0.:
             marker_points = None
         else:
-            marker_points =  np.array([[-marker_size/2,  marker_size/2, 0],
-                                       [ marker_size/2,  marker_size/2, 0],
-                                       [ marker_size/2, -marker_size/2, 0],
-                                       [-marker_size/2, -marker_size/2, 0]])
+            marker_points =  np.array([[-marker_setup.size/2,  marker_setup.size/2, 0],
+                                       [ marker_setup.size/2,  marker_setup.size/2, 0],
+                                       [ marker_setup.size/2, -marker_setup.size/2, 0],
+                                       [-marker_setup.size/2, -marker_setup.size/2, 0]])
         self._indiv_marker_points[mark.m_id] = marker_points
 
     def _check_dict(self, dict_id: int, what: str):
@@ -853,9 +868,9 @@ class Detector:
         out_planes = {}
         consistency = self.settings['pose_consistency']
         pose_cache = {}
-        for p in self.planes:
+        for p in self.assemblies:
             # get the detections for this plane (that is, filter on expected marker IDs)
-            pl_img_points, pl_ids = filter_detections(img_points, ids, self._plane_marker_ids[p])
+            pl_img_points, pl_ids = filter_detections(img_points, ids, self._assembly_marker_ids[p])
             if pl_ids is None or not len(pl_ids):
                 out_planes[p] = None
                 continue
@@ -874,31 +889,31 @@ class Detector:
             # If consistency checking is enabled, we will filter out any detections that do not yield a consistent pose with the other detections. This also filters out duplicate detections.
             # If consistency checking is disabled, we will filter out any duplicate detections of the same marker.
             if consistency['enabled']:
-                selected, accepted_pose = self._consistent_pose(self._boards[p], pl_img_points, pl_ids, frame_info, camera_params, self.planes[p]['min_num_markers'], pose_cache, history, self._plane_unit_to_meters[p])
+                selected, accepted_pose = self._consistent_pose(self.assemblies[p].aruco_board, pl_img_points, pl_ids, frame_info, camera_params, self.assemblies[p].min_num_markers, pose_cache, history, self._assembly_unit_to_meters[p])
                 rejected += tuple(c for i, c in enumerate(pl_img_points) if i not in selected)
                 pl_img_points, pl_ids = [pl_img_points[i] for i in selected], pl_ids[selected]
             else:
-                ok, kept, kept_ids, rejected_indices = filter_board_duplicates(self._boards[p], pl_img_points, pl_ids, frame_info, camera_params)
+                ok, kept, kept_ids, rejected_indices = filter_board_duplicates(self.assemblies[p].aruco_board, pl_img_points, pl_ids, frame_info, camera_params)
                 if ok:
                     rejected += tuple(pl_img_points[i] for i in rejected_indices)
                     pl_img_points, pl_ids = kept, kept_ids
             recovered_ids = None
 
             # Preserve the existing recovery threshold independently of the on/off switch.
-            if self.settings['refine'] and len(pl_ids) >= self.planes[p]['min_num_markers']:
-                pl_img_points, pl_ids, rejected, recovered_ids = self._refine_detection(image, pl_img_points, pl_ids, rejected, self._boards[p], frame_info, camera_params)
+            if self.settings['refine'] and len(pl_ids) >= self.assemblies[p].min_num_markers:
+                pl_img_points, pl_ids, rejected, recovered_ids = self._refine_detection(image, pl_img_points, pl_ids, rejected, self.assemblies[p].aruco_board, frame_info, camera_params)
                 rejected = tuple(rejected)
 
                 # Validate the refined set, including newly recovered markers if any
                 if consistency['enabled']:
-                    selected, accepted_pose = self._consistent_pose(self._boards[p], pl_img_points, pl_ids, frame_info, camera_params, self.planes[p]['min_num_markers'], pose_cache, history, self._plane_unit_to_meters[p])
+                    selected, accepted_pose = self._consistent_pose(self.assemblies[p].aruco_board, pl_img_points, pl_ids, frame_info, camera_params, self.assemblies[p].min_num_markers, pose_cache, history, self._assembly_unit_to_meters[p])
                     rejected += tuple(c for i, c in enumerate(pl_img_points) if i not in selected)
                     pl_img_points, pl_ids = [pl_img_points[i] for i in selected], pl_ids[selected]
                     if recovered_ids is not None:
                         recovered_ids = recovered_ids[np.isin(recovered_ids.flatten(), pl_ids.flatten())]
 
             if (consistency['enabled'] and consistency['temporal_enabled'] and timestamp_ms is not None and accepted_pose is not None and accepted_pose[1] is not None):
-                history.append(_pose_history_entry(accepted_pose[1], accepted_pose[2], timestamp_ms, self._plane_unit_to_meters[p], consistency.get('temporal_invert_pose', True)))
+                history.append(_pose_history_entry(accepted_pose[1], accepted_pose[2], timestamp_ms, self._assembly_unit_to_meters[p], consistency.get('temporal_invert_pose', True)))
                 del history[:-consistency['temporal_history_size']]
 
             out_planes[p] = dict(img_points=pl_img_points, ids=pl_ids, recovered_ids=recovered_ids)
@@ -925,13 +940,14 @@ class Detector:
     def _filter_detections(self, img_points: list[np.ndarray], ids: np.ndarray, expected_ids: list[np.ndarray], keep_expected=True):
         return filter_detections(img_points, ids, expected_ids, keep_expected)
 
-    def get_matching_image_board_points(self, plane_name: str, detect_tuple=None):
+    def get_matching_image_assembly_points(self, assembly_name: str, detect_tuple=None):
         if detect_tuple is None:
             detect_tuple = self._last_detect_output
-        if plane_name not in detect_tuple[0] or not detect_tuple[0][plane_name] or detect_tuple[0][plane_name]['ids'] is None or not detect_tuple[0][plane_name]['img_points']:
+        if assembly_name not in detect_tuple[0] or not detect_tuple[0][assembly_name] or detect_tuple[0][assembly_name]['ids'] is None or not detect_tuple[0][assembly_name]['img_points']:
             return None, None
-        objP, imgP = self._boards[plane_name].matchImagePoints(detect_tuple[0][plane_name]['img_points'], detect_tuple[0][plane_name]['ids'])
-        if imgP is None or int(imgP.shape[0]/4)<self.planes[plane_name]['min_num_markers']:
+        setup = self.assemblies[assembly_name]
+        objP, imgP = setup.aruco_board.matchImagePoints(detect_tuple[0][assembly_name]['img_points'], detect_tuple[0][assembly_name]['ids'])
+        if imgP is None or int(imgP.shape[0]/4)<setup.min_num_markers:
             return None, None
         return objP, imgP
 
@@ -943,7 +959,7 @@ class Detector:
         img_points = detect_tuple[1]['img_points'][detect_tuple[1]['ids'].flatten().tolist().index(marker_id)]
         return self._indiv_marker_points[marker_id], img_points
 
-    def visualize(self, frame, detect_tuple=None, sub_pixel_fac=8, plane_marker_color=(0,255,0), recovered_plane_marker_color=(255,255,0), individual_marker_color=(255,0,255), unexpected_marker_color=(150,253,253), rejected_marker_color=None):
+    def visualize(self, frame, detect_tuple=None, sub_pixel_fac=8, assembly_marker_color=(0,255,0), recovered_assembly_marker_color=(255,255,0), individual_marker_color=(255,0,255), unexpected_marker_color=(150,253,253), rejected_marker_color=None):
         if detect_tuple is None:
             detect_tuple = self._last_detect_output
 
@@ -952,49 +968,53 @@ class Detector:
             cv2.aruco.drawDetectedMarkers(frame, detect_tuple[3], None, borderColor=rejected_marker_color)
 
         # draw detected markers on the frame
-        if plane_marker_color is not None:
+        if assembly_marker_color is not None:
             for p in detect_tuple[0]:
                 special_highlight = []
                 if not detect_tuple[0][p] or 'ids' not in detect_tuple[0][p] or len(detect_tuple[0][p]['ids'])==0:
                     continue
-                if recovered_plane_marker_color is not None and detect_tuple[0][p]['recovered_ids'] is not None and len(detect_tuple[0][p]['recovered_ids'])>0:
-                    special_highlight = [detect_tuple[0][p]['recovered_ids'],recovered_plane_marker_color]
-                drawing.arucoDetectedMarkers(frame, detect_tuple[0][p]['img_points'], detect_tuple[0][p]['ids'], border_color=plane_marker_color, sub_pixel_fac=sub_pixel_fac, special_highlight=special_highlight)
+                if recovered_assembly_marker_color is not None and detect_tuple[0][p]['recovered_ids'] is not None and len(detect_tuple[0][p]['recovered_ids'])>0:
+                    special_highlight = [detect_tuple[0][p]['recovered_ids'],recovered_assembly_marker_color]
+                drawing.arucoDetectedMarkers(frame, detect_tuple[0][p]['img_points'], detect_tuple[0][p]['ids'], border_color=assembly_marker_color, sub_pixel_fac=sub_pixel_fac, special_highlight=special_highlight)
         if individual_marker_color is not None and detect_tuple[1]['ids'] is not None and len(detect_tuple[1]['ids']>0):
             drawing.arucoDetectedMarkers(frame, detect_tuple[1]['img_points'], detect_tuple[1]['ids'], border_color=individual_marker_color, sub_pixel_fac=sub_pixel_fac)
         if unexpected_marker_color is not None and detect_tuple[2]['ids'] is not None and len(detect_tuple[2]['ids']>0):
             drawing.arucoDetectedMarkers(frame, detect_tuple[2]['img_points'], detect_tuple[2]['ids'], border_color=unexpected_marker_color, sub_pixel_fac=sub_pixel_fac)
 
 class Manager:
-    # takes single planes, individual markers and detector settings, and consolidates them into a minimal
-    # set of detectors with all planes/individual markers associated to one of these detectors
+    # Consolidates marker assemblies, individual markers and detector settings into a minimal
+    # set of detectors while preserving each assembly's processing intervals.
     # also handles information for each about when they should be detected (called intervals below)
     def __init__(self):
         self.working_set = WorkingSet()
-        # planes to be detected
-        self.planes                 : dict[str, PlaneSetup] = {}
-        self.plane_proc_intervals   : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None] = {}
-        self._plane_to_detector     : dict[str, int]        = {}
+        # assemblies to be detected
+        self.assemblies             : dict[str, AssemblySetup] = {}
+        self.assembly_proc_intervals: dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None] = {}
+        self._assembly_to_detector  : dict[str, int]        = {}
+        self._planar_assembly_names : set[str]              = set() # keep track of which assemblies are planar
         # individual markers to be detected
         self.individual_markers                 : dict[marker.MarkerID, MarkerSetup] = {}
-        self.individual_markers_proc_intervals  : dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None] = {}
+        self.individual_markers_proc_intervals  : dict[marker.MarkerID, tuple[annotation.EventType, list[int]|list[list[int]]]|None] = {}
         self._individual_to_detector            : dict[marker.MarkerID, int] = {}
 
         # consolidated into set of detectors, and associated planes+individual markers for each
         self._detectors             : dict[int, Detector]                   = {}
 
         # colors for drawing (in BGR order)
-        self._plane_marker_color            = (  0,255,  0)
-        self._recovered_plane_marker_color  = (255,255,  0)
-        self._individual_marker_color       = (255,  0,255)
-        self._unexpected_marker_color       = (128,255,255)
-        self._rejected_marker_color         = None # by default not drawn. If wanted, (0,0,255) is a good color
+        self._assembly_marker_color             = (  0,255,  0)
+        self._recovered_assembly_marker_color   = (255,255,  0)
+        self._individual_marker_color           = (255,  0,255)
+        self._unexpected_marker_color           = (128,255,255)
+        self._rejected_marker_color             = None # by default not drawn. If wanted, (0,0,255) is a good color
 
-    def add_plane(self, plane: str, planes_setup: PlaneSetup, processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None = None):
-        if plane in self.planes:
-            raise ValueError(f'Cannot register the plane "{plane}", it is already registered')
-        self.planes[plane]                  = planes_setup
-        self.plane_proc_intervals[plane]    = processing_intervals
+    def add_assembly(self, name: str, setup: AssemblySetup,
+                     processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None = None):
+        if name in self.assemblies:
+            raise ValueError(f'Cannot register the marker assembly "{name}", it is already registered')
+        self.assemblies[name] = setup
+        self.assembly_proc_intervals[name] = processing_intervals
+        if setup.is_planar:
+            self._planar_assembly_names.add(name)
 
     def add_individual_marker(self, mark: marker.MarkerID, marker_setup: MarkerSetup, processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None = None):
         if mark in self.individual_markers:
@@ -1002,14 +1022,14 @@ class Manager:
         self.individual_markers[mark]                = marker_setup
         self.individual_markers_proc_intervals[mark] = processing_intervals
 
-    def set_visualization_colors(self, plane_marker_color=(0,255,0), recovered_plane_marker_color=(0,255,255), individual_marker_color=(255,0,255), unexpected_marker_color=(255,255,128), rejected_marker_color=None):
+    def set_visualization_colors(self, assembly_marker_color=(0,255,0), recovered_assembly_marker_color=(0,255,255), individual_marker_color=(255,0,255), unexpected_marker_color=(255,255,128), rejected_marker_color=None):
         # user should provide colors in RGB, internally we store as BGR
-        if plane_marker_color is not None:
-            plane_marker_color = plane_marker_color[::-1]
-        self._plane_marker_color = plane_marker_color
-        if recovered_plane_marker_color is not None:
-            recovered_plane_marker_color = recovered_plane_marker_color[::-1]
-        self._recovered_plane_marker_color = recovered_plane_marker_color
+        if assembly_marker_color is not None:
+            assembly_marker_color = assembly_marker_color[::-1]
+        self._assembly_marker_color = assembly_marker_color
+        if recovered_assembly_marker_color is not None:
+            recovered_assembly_marker_color = recovered_assembly_marker_color[::-1]
+        self._recovered_assembly_marker_color = recovered_assembly_marker_color
         if individual_marker_color is not None:
             individual_marker_color = individual_marker_color[::-1]
         self._individual_marker_color = individual_marker_color
@@ -1023,20 +1043,16 @@ class Manager:
     def consolidate_setup(self, allow_duplicated_markers: bool = False):
         # get list of all ArUco dicts and markers we're dealing with
         all_markers: set[marker.MarkerID] = set()
-        err_msg = 'Markers are not unique across planes and individual markers'
-        for p in self.planes:
-            markers = self.planes[p]['plane'].get_marker_IDs()
-            for ms in markers:
-                if ms!='plane':
-                    # N.B.: other markers should be registered by caller as individual markers
-                    continue
-                if (overlap := all_markers.intersection(markers[ms])):
-                    t_err_msg = f'{err_msg} for plane "{p}", duplicated markers: {marker.format_duplicate_markers_msg({m.to_family() for m in overlap})}'
-                    if allow_duplicated_markers:
-                        print(f'Warning: {t_err_msg}')
-                    else:
-                        raise RuntimeError(t_err_msg)
-                all_markers.update(markers[ms])
+        err_msg = 'Markers are not unique across marker assemblies and individual markers'
+        for name, setup in self.assemblies.items():
+            markers = set(setup.marker_ids['assembly'])
+            if (overlap := all_markers.intersection(markers)):
+                t_err_msg = f'{err_msg} for marker assembly "{name}", duplicated markers: {marker.format_duplicate_markers_msg({m.to_family() for m in overlap})}'
+                if allow_duplicated_markers:
+                    print(f'Warning: {t_err_msg}')
+                else:
+                    raise RuntimeError(t_err_msg)
+            all_markers.update(markers)
         for m in self.individual_markers:
             if m in all_markers:
                 t_err_msg = f'{err_msg}: individual marker "{m}" is also used elsewhere'
@@ -1050,25 +1066,24 @@ class Manager:
         for m in all_markers:
             family_marker_ids.setdefault(dict_id_to_family[m.aruco_dict_id], set()).add(m.m_id)
 
-        registrations = [(self.planes[p]['plane'].aruco_dict_id, p, self.planes[p], True) for p in self.planes]
+        registrations = [(setup.aruco_dict_id, name, setup, True) for name, setup in self.assemblies.items()]
         registrations += [(m.aruco_dict_id, m, self.individual_markers[m], False) for m in self.individual_markers]
         groups = {}
-        for dictionary_id, name, setup, is_plane in registrations:
-            settings = resolve_settings(setup.get('aruco_settings') if is_plane else
-                                        {'detector_params': setup.get('detector_params', {})})
+        for dictionary_id, name, setup, is_assembly in registrations:
+            settings = resolve_settings(setup.aruco_settings if is_assembly else {'detector_params': setup.detector_params or {}})
             dictionary = cv2.aruco.getPredefinedDictionary(dictionary_id)
             key = (dict_id_to_family[dictionary_id], dictionary.maxCorrectionBits, freeze(settings))
-            groups.setdefault(key, []).append((dictionary_id, name, setup, is_plane, settings))
+            groups.setdefault(key, []).append((dictionary_id, name, setup, is_assembly, settings))
 
         compatible_groups = []
         for entries in groups.values():
             bins = []
             for entry in entries:
-                _, name, setup, is_plane, _ = entry
+                _, name, setup, is_assembly, _ = entry
                 for group in bins:
-                    if is_plane or all(e[3] or e[1].m_id != name.m_id or
-                                       (e[2].get('size'), e[2].get('detect_only', False)) ==
-                                       (setup.get('size'), setup.get('detect_only', False)) for e in group):
+                    if is_assembly or all(e[3] or e[1].m_id != name.m_id or
+                                       (e[2].size, e[2].detect_only) ==
+                                       (setup.size, setup.detect_only) for e in group):
                         group.append(entry)
                         break
                 else:
@@ -1076,7 +1091,7 @@ class Manager:
             compatible_groups.extend(bins)
 
         self._detectors.clear()
-        self._plane_to_detector.clear()
+        self._assembly_to_detector.clear()
         self._individual_to_detector.clear()
         self.working_set.clear()
         # Choose one raw dictionary per compatible detection group, even when refinement differs.
@@ -1092,10 +1107,10 @@ class Manager:
             raw_key = (dict_id_to_family[d], dictionary.maxCorrectionBits, freeze(settings['detector_params']), settings['undistort'])
             d = max(raw_groups[raw_key], key=get_dict_size)
             detector = Detector(d, settings)
-            for _, name, setup, is_plane, _ in entries:
-                if is_plane:
-                    detector.add_plane(name, setup)
-                    self._plane_to_detector[name] = detector_id
+            for _, name, setup, is_assembly, _ in entries:
+                if is_assembly:
+                    detector.add_assembly(name, setup, 'plane' if name in self._planar_assembly_names else 'assembly')
+                    self._assembly_to_detector[name] = detector_id
                 else:
                     detector.add_individual_marker(name, setup)
                     self._individual_to_detector[name] = detector_id
@@ -1108,28 +1123,29 @@ class Manager:
         if any(d.settings['undistort'] or d.settings['pose_consistency']['enabled'] for d in self._detectors.values()):
             if not estimator.cam_params.has_intrinsics():
                 raise ValueError('Running ArUco detection on undistorted images and checking of pose consistency require camera calibration')
-        # this handles registration of all planes and individual markers with the estimator
-        # and makes sure our wrapper function for the aruco detector gets called which handles
-        # aruco detection so that each detector is run only once on a frame
-        for p in self.planes:
-            estimator.add_plane(p,
-                                lambda pn, fi, fr, finf, cp: self._detect_plane(pn, fi, fr, finf, cp),
-                                self.plane_proc_intervals[p],
-                                lambda pn, fi, fr, finf, _: self._visualize_plane(pn, fi, fr, finf))
+        # Register assemblies and individual markers with the estimator; the wrapper
+        # ensures each ArUco detector is run only once per frame.
+        for name in self.assemblies:
+            assembly_function = lambda bn, fi, fr, finf, cp: self._detect_assembly(bn, fi, fr, finf, cp)
+            visualizer = lambda bn, fi, fr, finf, _: self._visualize_assembly(bn, fi, fr, finf)
+            if name in self._planar_assembly_names:
+                estimator.add_plane(name, assembly_function, self.assembly_proc_intervals[name], visualizer)
+            else:
+                estimator.add_assembly(name, assembly_function, self.assembly_proc_intervals[name], visualizer)
         for m in self.individual_markers:
             estimator.add_individual_marker(m,
                                             lambda k, fi, fr, finf, cp: self._detect_individual_marker(k, fi, fr, finf, cp),
                                             self.individual_markers_proc_intervals[m],
                                             lambda k, fi, fr, finf, _: self._visualize_individual_marker(k, fi, fr, finf))
 
-    def _detect_plane(self, plane_name: str, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams) -> pose.DetectionResult|None:
-        if plane_name not in self._plane_to_detector:
-            raise ValueError(f'The plane {plane_name} is not known')
-        aruco_dict_id = self._plane_to_detector[plane_name]
+    def _detect_assembly(self, assembly_name: str, frame_idx: int, frame: np.ndarray, frame_info: dict, camera_parameters: ocv.CameraParams) -> pose.DetectionResult|None:
+        if assembly_name not in self._assembly_to_detector:
+            raise ValueError(f'The marker assembly {assembly_name} is not known')
+        aruco_dict_id = self._assembly_to_detector[assembly_name]
         detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, frame, frame_info, camera_parameters)
-        if not detect_tuple[0] or plane_name not in detect_tuple[0] or not detect_tuple[0][plane_name]:
+        if not detect_tuple[0] or assembly_name not in detect_tuple[0] or not detect_tuple[0][assembly_name]:
             return None
-        obj, img = self._detectors[aruco_dict_id].get_matching_image_board_points(plane_name, detect_tuple)
+        obj, img = self._detectors[aruco_dict_id].get_matching_image_assembly_points(assembly_name, detect_tuple)
         if obj is None or img is None:
             return None
         context = self.working_set.contexts[self._detectors[aruco_dict_id].settings['undistort']]
@@ -1169,22 +1185,22 @@ class Manager:
         context = self.working_set.contexts[self._detectors[detector_id].settings['undistort']]
         if not context.undistorted:
             return detect_tuple
-        planes, individual, unexpected, rejected = copy.deepcopy(detect_tuple)
-        for points in [*planes.values(), individual, unexpected]:
+        assemblies, individual, unexpected, rejected = copy.deepcopy(detect_tuple)
+        for points in [*assemblies.values(), individual, unexpected]:
             if points:
                 points['img_points'] = context.original_corners(points['img_points'])
-        return planes, individual, unexpected, context.original_corners(rejected)
+        return assemblies, individual, unexpected, context.original_corners(rejected)
 
-    def _visualize_plane(self, plane_name: str, frame_idx: int, frame: np.ndarray, frame_info: dict):
-        if plane_name not in self._plane_to_detector:
-            raise ValueError(f'The plane {plane_name} is not known')
-        aruco_dict_id = self._plane_to_detector[plane_name]
+    def _visualize_assembly(self, assembly_name: str, frame_idx: int, frame: np.ndarray, frame_info: dict):
+        if assembly_name not in self._assembly_to_detector:
+            raise ValueError(f'The marker assembly {assembly_name} is not known')
+        aruco_dict_id = self._assembly_to_detector[assembly_name]
         if aruco_dict_id in self.working_set.visualized:
             # nothing to do, already drawn
             return
         detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, None, frame_info, None)
         if detect_tuple is not None:
-            frame = self._detectors[aruco_dict_id].visualize(frame, self._visualization_output(aruco_dict_id, detect_tuple), plane_marker_color=self._plane_marker_color, recovered_plane_marker_color=self._recovered_plane_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
+            frame = self._detectors[aruco_dict_id].visualize(frame, self._visualization_output(aruco_dict_id, detect_tuple), assembly_marker_color=self._assembly_marker_color, recovered_assembly_marker_color=self._recovered_assembly_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
             self.working_set.visualized.add(aruco_dict_id)
 
     def _visualize_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray, frame_info: dict):
@@ -1196,15 +1212,22 @@ class Manager:
             return
         detect_tuple = self._get_detector_cache(detector_id, frame_idx, None, frame_info, None)
         if detect_tuple is not None:
-            frame = self._detectors[detector_id].visualize(frame, self._visualization_output(detector_id, detect_tuple), plane_marker_color=self._plane_marker_color, recovered_plane_marker_color=self._recovered_plane_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
+            frame = self._detectors[detector_id].visualize(frame, self._visualization_output(detector_id, detect_tuple), assembly_marker_color=self._assembly_marker_color, recovered_assembly_marker_color=self._recovered_assembly_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
             self.working_set.visualized.add(detector_id)
 
 
-def create_board(board_corner_points: list[np.ndarray], ids: list[int], ArUco_dict: cv2.aruco.Dictionary):
-    board_corner_points = np.dstack(board_corner_points)        # list of 2D arrays -> 3D array
-    board_corner_points = np.rollaxis(board_corner_points,-1)   # 4x2xN -> Nx4x2
-    board_corner_points = np.pad(board_corner_points,((0,0),(0,0),(0,1)),'constant', constant_values=(0.,0.)) # Nx4x2 -> Nx4x3 (at Z=0 to all points)
-    return cv2.aruco.Board(board_corner_points, ArUco_dict, np.array(ids))
+def create_assembly_geometry(marker_corners: list[np.ndarray], ids: list[int], aruco_dict: cv2.aruco.Dictionary):
+    marker_corners = np.asarray(marker_corners, dtype=np.float32)
+    if marker_corners.ndim != 3 or marker_corners.shape[1] != 4 or marker_corners.shape[2] not in (2, 3):
+        raise ValueError('Marker corners must have shape (N, 4, 2) or (N, 4, 3)')
+    if len(ids) != len(marker_corners):
+        raise ValueError('The number of marker IDs must match the number of corner sets')
+    if not np.isfinite(marker_corners).all():
+        raise ValueError('Marker corners must contain only finite coordinates')
+    if marker_corners.shape[2] == 2:
+        # Nx4x2 -> Nx4x3 (at Z=0 to all points)
+        marker_corners = np.pad(marker_corners, ((0, 0), (0, 0), (0, 1)))
+    return cv2.aruco.Board(marker_corners, aruco_dict, np.asarray(ids))
 
 def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, frame_info: dict, camera_parameters: ocv.CameraParams):
     # Corners must remain in the image's coordinates for OpenCV's pixel sampling.
