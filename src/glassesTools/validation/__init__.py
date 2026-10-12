@@ -34,9 +34,9 @@ class Plane(_plane.TargetPlane):
         plane_size = _plane.Coordinate(self.config['gridCols']*self.cell_size_mm, self.config['gridRows']*self.cell_size_mm)
 
         # get targets first, so that any dynamic markers can be split off and then the rest passed to base class
-        self.targets: dict[int,_marker.Marker]                        = {}
-        self.dynamic_markers: dict[int, tuple[int,int]]               = {}      # {marker ID: (target ID, marker_N column in target file)} (keep latter around for good error reporting)
-        self._dynamic_markers_cache: dict[int, _marker.MarkerID]|None = None    # different format, for efficient return from get_marker_IDs()
+        self.targets: dict[int,_marker.Marker]                              = {}
+        self.dynamic_markers: dict[int, tuple[int,int]]                     = {}    # {marker ID: (target ID, marker_N column in target file)} (keep latter around for good error reporting)
+        self._dynamic_markers_cache: dict[int, list[_marker.MarkerID]]|None = None  # different format, for efficient return from get_marker_IDs()
         targets, origin = self._get_targets(config_dir, self.config, is_dynamic)
 
         # call base class
@@ -52,17 +52,15 @@ class Plane(_plane.TargetPlane):
 
     def _get_targets(self, config_dir, validationSetup, is_dynamic) -> tuple[pd.DataFrame, _plane.Coordinate]:
         """ poster space: (0,0) is origin (might be center target), (-,-) bottom left """
-
         # read in target positions
         targets = config.get_targets(config_dir, validationSetup['targetPosFile'])
         if targets is not None:
             targets_center = targets[['x','y']] * self.cell_size_mm
+            origin = _plane.Coordinate(*targets_center.loc[validationSetup['centerTarget']].values)  # NB: need origin in scaled space
             if is_dynamic:
+                # load with dynamic markers, if any
                 # split of columns indicating markers that signal appearance of a target
                 markers = pd.concat([targets.pop(c) for c in targets.columns if c.startswith('marker_')], axis=1)
-            origin = _plane.Coordinate(*targets_center.loc[validationSetup['centerTarget']].values)  # NB: need origin in scaled space
-            # load with dynamic markers, if any
-            if is_dynamic:
                 marker_columns = {c:int(c.removeprefix('marker_')) for c in markers}
                 def _store_markers(r: pd.Series):
                     for c in marker_columns:
@@ -85,6 +83,6 @@ class Plane(_plane.TargetPlane):
     def is_dynamic(self):
         return not not self.dynamic_markers
 
-    def get_dynamic_marker_setup(self):
+    def get_dynamic_marker_setup(self) -> aruco.MarkerSetup | None:
         return aruco.MarkerSetup(detector_params = self.aruco_settings['detector_params'],
                                  detect_only = True)
