@@ -1497,8 +1497,7 @@ class WorkingSet:
 
     def prepare(self, frame_idx, image, frame_info, camera_params, undistort=False):
         colmap = camera_params.colmap_camera
-        calibration = freeze((camera_params.resolution, camera_params.camera_mtx, camera_params.distort_coeffs,
-                              None if colmap is None else (colmap.model_name, colmap.params)))
+        calibration = freeze((camera_params.resolution, camera_params.camera_mtx, camera_params.distort_coeffs, None if colmap is None else (colmap.model_name, colmap.params)))
         frame_key = (frame_idx, id(image), freeze(frame_info), calibration)
         if frame_key != self._frame_key:
             self._reset_frame()
