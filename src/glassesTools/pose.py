@@ -24,20 +24,20 @@ class DetectionResult:
     frame_info          : dict
     points_undistorted  : bool = False
 
-    def estimate_pose(self, flags=cv2.SOLVEPNP_ITERATIVE) -> tuple[int, np.ndarray | None, np.ndarray | None, float]:
+    def estimate_pose(self, frame_idx: int, flags=cv2.SOLVEPNP_ITERATIVE) -> "Pose":
+        result = Pose(frame_idx)
         if self.object_points is None or self.image_points is None or len(self.object_points) < 4:
-            return 0, None, None, -1.
-        return estimate_pose(self.object_points, self.image_points, self.frame_info, self.camera_params, flags)
+            return result
+        result.pose_N_points, result.pose_R_vec, result.pose_T_vec, result.pose_reprojection_error = estimate_pose(self.object_points, self.image_points, self.frame_info, self.camera_params, flags)
+        return result
 
     def estimate_homography(self) -> tuple[int, np.ndarray | None]:
         if self.object_points is None or self.image_points is None or len(self.object_points) < 4:
             return 0, None
-        return estimate_homography(self.object_points, self.image_points, self.frame_info,
-                                   self.camera_params, self.points_undistorted)
+        return estimate_homography(self.object_points, self.image_points, self.frame_info, self.camera_params, self.points_undistorted)
 
-    def estimate_pose_and_homography(self, frame_idx: int) -> "Pose":
-        result = Pose(frame_idx)
-        result.pose_N_points, result.pose_R_vec, result.pose_T_vec, result.pose_reprojection_error = self.estimate_pose()
+    def estimate_pose_and_homography(self, frame_idx: int) -> "PlanePose":
+        result = PlanePose.from_pose(self.estimate_pose(frame_idx))
         result.homography_N_points, result.homography_mat = self.estimate_homography()
         return result
 
@@ -45,12 +45,11 @@ class DetectionResult:
 class Pose:
     # description of tsv file used for storage
     _columns_compressed = {'timestamp': 1, 'timestamp_VOR': 1, 'frame_idx':1, 'frame_idx_VOR':1,
-                           'pose_N_points': 1, 'pose_reprojection_error': 1, 'pose_R_vec': 3, 'pose_T_vec': 3,
-                           'homography_N_points': 1, 'homography_mat': 9}
-    _non_float          = {'frame_idx': int, 'frame_idx_VOR': int, 'pose_ok': bool, 'pose_N_points': int, 'homography_N_points': int}
+                           'pose_N_points': 1, 'pose_reprojection_error': 1, 'pose_R_vec': 3, 'pose_T_vec': 3}
+    _non_float          = {'frame_idx': int, 'frame_idx_VOR': int, 'pose_ok': bool, 'pose_N_points': int}
     _columns_optional   = ['timestamp', 'timestamp_VOR', 'frame_idx_VOR']
     # backwards compatibility
-    _column_patches     = {'pose_N_markers': ('pose_N_points', lambda x: x*4), 'homography_N_markers': ('homography_N_points', lambda x: x*4)}
+    _column_patches     = {'pose_N_markers': ('pose_N_points', lambda x: x*4)}
 
     def __init__(self,
                  frame_idx              : int,
@@ -62,9 +61,7 @@ class Pose:
                  pose_N_points          : int       = 0,
                  pose_reprojection_error: float     = -1.,
                  pose_R_vec             : np.ndarray= None,
-                 pose_T_vec             : np.ndarray= None,
-                 homography_N_points    : int       = 0,
-                 homography_mat         : np.ndarray= None):
+                 pose_T_vec             : np.ndarray= None):
         self.timestamp              = timestamp
         self.frame_idx              = frame_idx
         # optional timestamps and frame indices. These mirror gaze data fields so
@@ -78,60 +75,84 @@ class Pose:
         self.pose_reprojection_error= pose_reprojection_error
         self.pose_R_vec             = pose_R_vec
         self.pose_T_vec             = pose_T_vec
-        # homography
-        self.homography_N_points    = homography_N_points # number of image points (4 per marker if based on ArUco markers) this homongraphy estimate is based on. 0 if failed or otherwise not available
-        self.homography_mat         = homography_mat.reshape(3,3) if homography_mat is not None else homography_mat
 
-        # internals
-        self._RMat              = None
-        self._RtMat             = None
-        self._plane_normal      = None
-        self._plane_point       = None
-        self._RMatInv           = None
-        self._RtMatInv          = None
-        self._i_homography_mat  = None
-
+        # cache
+        self._RMat                  = None
+        self._RtMat                 = None
+        self._RMatInv               = None
+        self._RtMatInv              = None
     def pose_successful(self):
         return self.pose_N_points>0
-    def homography_successful(self):
-        return self.homography_N_points>0
+
+    def cam_frame_to_world(self, point: np.ndarray):
+        # NB: world frame is in the object's coordinate system
+        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
+            return np.full((3,), np.nan)
+        if self._RtMatInv is None:
+            if self._RMatInv is None:
+                if self._RMat is None:
+                    self._RMat = cv2.Rodrigues(self.pose_R_vec)[0]
+                self._RMatInv = self._RMat.T
+            self._RtMatInv = np.hstack((self._RMatInv, np.matmul(-self._RMatInv, self.pose_T_vec.reshape(3,1))))
+        return np.matmul(self._RtMatInv, np.append(np.array(point), 1.).reshape((4,1))).flatten()
+
+    def world_frame_to_cam(self, point: np.ndarray):
+        # NB: world frame is in the object's coordinate system
+        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
+            return np.full((3,), np.nan)
+        if self._RtMat is None:
+            if self._RMat is None:
+                self._RMat = cv2.Rodrigues(self.pose_R_vec)[0]
+            self._RtMat = np.hstack((self._RMat, self.pose_T_vec.reshape(3,1)))
+        return np.matmul(self._RtMat, np.append(np.array(point), 1.).reshape((4,1))).flatten()
+
+    def world_frame_to_camera_image(self, point: np.ndarray, camera_params: ocv.CameraParams, ROI_offset=[0.,0.]) -> np.ndarray:
+        if (self.pose_R_vec is None) or (self.pose_T_vec is None):
+            return np.full((2,), np.nan)
+        return transforms.project_points(point, camera_params, rot_vec=self.pose_R_vec, trans_vec=self.pose_T_vec, ROI_offset=ROI_offset).flatten()
+
+    def get_origin_on_image(self, camera_params: ocv.CameraParams, ROI_offset=[0.,0.]) -> np.ndarray:
+        if not self.pose_successful() or self.pose_R_vec is None or self.pose_T_vec is None:
+            return np.full((2,), np.nan)
+        return self.world_frame_to_camera_image(np.zeros((1, 3)), camera_params, ROI_offset=ROI_offset)
 
     def draw_frame_axis(self, img, camera_params: ocv.CameraParams, arm_length, thickness, sub_pixel_fac, position = [0.,0.,0.], ROI_offset=[0.,0.]):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or not camera_params.has_intrinsics():
             return
         drawing.openCVFrameAxis(img, camera_params, self.pose_R_vec, self.pose_T_vec, arm_length, thickness, sub_pixel_fac, position, ROI_offset)
 
-    def cam_frame_to_world(self, point: np.ndarray):
-        # NB: world frame is in the plane's coordinate system
-        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
-            return np.full((3,), np.nan)
+class PlanePose(Pose):
+    _columns_compressed = Pose._columns_compressed | {'homography_N_points': 1, 'homography_mat': 9}
+    _non_float = Pose._non_float | {'homography_N_points': int}
+    _column_patches = Pose._column_patches | {'homography_N_markers': ('homography_N_points', lambda x: x*4)}
 
-        if self._RtMatInv is None:
-            if self._RMatInv is None:
-                if self._RMat is None:
-                    self._RMat = cv2.Rodrigues(self.pose_R_vec)[0]
-                self._RMatInv = self._RMat.T
-            self._RtMatInv = np.hstack((self._RMatInv,np.matmul(-self._RMatInv,self.pose_T_vec.reshape(3,1))))
+    def __init__(self, *args, homography_N_points: int = 0, homography_mat: np.ndarray|None = None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self.homography_N_points = homography_N_points
+        self.homography_mat = homography_mat.reshape(3,3) if homography_mat is not None else homography_mat
 
-        return np.matmul(self._RtMatInv,np.append(np.array(point),1.).reshape((4,1))).flatten()
+        # cache
+        self._i_homography_mat = None
+        self._plane_normal = None
+        self._plane_point = None
 
-    def world_frame_to_cam(self, point: np.ndarray):
-        # NB: world frame is in the plane's coordinate system
-        if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(point)):
-            return np.full((3,), np.nan)
+    @classmethod
+    def from_pose(cls, pose: Pose) -> "PlanePose":
+        return cls(
+            frame_idx=pose.frame_idx,
+            timestamp=pose.timestamp,
+            timestamp_ori=pose.timestamp_ori,
+            frame_idx_ori=pose.frame_idx_ori,
+            timestamp_VOR=pose.timestamp_VOR,
+            frame_idx_VOR=pose.frame_idx_VOR,
+            pose_N_points=pose.pose_N_points,
+            pose_reprojection_error=pose.pose_reprojection_error,
+            pose_R_vec=None if pose.pose_R_vec is None else pose.pose_R_vec.copy(),
+            pose_T_vec=None if pose.pose_T_vec is None else pose.pose_T_vec.copy(),
+        )
 
-        if self._RtMat is None:
-            if self._RMat is None:
-                self._RMat = cv2.Rodrigues(self.pose_R_vec)[0]
-            self._RtMat = np.hstack((self._RMat, self.pose_T_vec.reshape(3,1)))
-
-        return np.matmul(self._RtMat,np.append(np.array(point),1.).reshape((4,1))).flatten()
-
-    def plane_to_cam_pose(self, point_plane: np.ndarray, camera_params: ocv.CameraParams, ROI_offset=[0.,0.]) -> np.ndarray:
-        # from location on plane (2D) to location on camera image (2D)
-        if (self.pose_R_vec is None) or (self.pose_T_vec is None):
-            return np.full((2,), np.nan)
-        return transforms.project_points(point_plane, camera_params, rot_vec=self.pose_R_vec, trans_vec=self.pose_T_vec, ROI_offset=ROI_offset).flatten()
+    def homography_successful(self):
+        return self.homography_N_points > 0
 
     def cam_to_plane_pose(self, point: np.ndarray, camera_params: ocv.CameraParams, ROI_offset=[0.,0.]) -> tuple[np.ndarray,np.ndarray]:
         # from location on camera image (2D) to location on plane (2D)
@@ -152,7 +173,6 @@ class Pose:
         # from location on plane (2D) to location on camera image (2D)
         if self.homography_mat is None:
             return np.full((2,), np.nan)
-
         if self._i_homography_mat is None:
             self._i_homography_mat = np.linalg.inv(self.homography_mat)
         out = transforms.apply_homography(point, self._i_homography_mat).flatten()
@@ -164,27 +184,23 @@ class Pose:
         # from location on camera image (2D) to location on plane (2D)
         if self.homography_mat is None:
             return np.full((2,), np.nan)
-
         if camera_params.has_intrinsics():
             point_cam = transforms.undistort_points(point_cam, camera_params, ROI_offset=ROI_offset).flatten()
         return transforms.apply_homography(point_cam, self.homography_mat).flatten()
 
-    def get_origin_on_image(self, camera_params: ocv.CameraParams) -> np.ndarray:
-        return self.get_plane_point_on_image(np.zeros((1,2)), camera_params)
+    def get_origin_on_image(self, camera_params: ocv.CameraParams, ROI_offset=[0.,0.]) -> np.ndarray:
+        return self.get_plane_point_on_image(np.zeros((1,2)), camera_params, ROI_offset=ROI_offset)
 
     def get_plane_point_on_image(self, point: np.ndarray, camera_params: ocv.CameraParams, ROI_offset=[0.,0.]) -> np.ndarray:
         if self.pose_successful() and camera_params.has_intrinsics():
-            a = self.plane_to_cam_pose(np.append(np.array(point),0.), camera_params, ROI_offset=ROI_offset)
-        elif self.homography_successful():
-            a = self.plane_to_cam_homography(point, camera_params, ROI_offset=ROI_offset)
-        else:
-            a = np.full((2,), np.nan)
-        return a
+            return self.world_frame_to_camera_image(np.append(np.array(point), 0.), camera_params, ROI_offset=ROI_offset)
+        if self.homography_successful():
+            return self.plane_to_cam_homography(point, camera_params, ROI_offset=ROI_offset)
+        return np.full((2,), np.nan)
 
-    def vector_intersect(self, vector: np.ndarray, origin = np.array([0.,0.,0.])):
+    def vector_intersect(self, vector: np.ndarray, origin=np.array([0.,0.,0.])):
         if (self.pose_R_vec is None) or (self.pose_T_vec is None) or np.any(np.isnan(vector)):
             return np.full((3,), np.nan)
-
         if self._plane_normal is None:
             if self._RMat is None:
                 self._RMat = cv2.Rodrigues(self.pose_R_vec)[0]
@@ -213,10 +229,26 @@ def read_list_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]
                                 Pose, True, True, True, bool(ts_column_suffixes),
                                 episodes=episodes, ts_fridx_field_suffixes=ts_column_suffixes)[0]
 
+def read_plane_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]|None=None, ts_column_suffixes: list[str]|None=None) -> dict[int,PlanePose]:
+    return data_files.read_file(fileName,
+                                PlanePose, True, True, False, bool(ts_column_suffixes),
+                                episodes=episodes, ts_fridx_field_suffixes=ts_column_suffixes)[0]
+
+def read_plane_list_dict_from_file(fileName:str|pathlib.Path, episodes:list[list[int]]|None=None, ts_column_suffixes: list[str]|None=None) -> dict[int,list[PlanePose]]:
+    return data_files.read_file(fileName,
+                                PlanePose, True, True, True, bool(ts_column_suffixes),
+                                episodes=episodes, ts_fridx_field_suffixes=ts_column_suffixes)[0]
+
 def write_list_to_file(poses: list[Pose], fileName:str|pathlib.Path, skip_failed=False):
     data_files.write_array_to_file(poses, fileName,
                                     Pose._columns_compressed,
                                     Pose._columns_optional,
+                                    skip_all_nan=skip_failed)
+
+def write_plane_list_to_file(poses: list[PlanePose], fileName:str|pathlib.Path, skip_failed=False):
+    data_files.write_array_to_file(poses, fileName,
+                                    PlanePose._columns_compressed,
+                                    PlanePose._columns_optional,
                                     skip_all_nan=skip_failed)
 
 def get_sample_pose(poses: dict[int, Pose] | dict[int, list[Pose]], frame_idx: int, sample_idx: int|None=None, timestamp: float|None=None, timestamp_tolerance: float=1e-4) -> Pose|None:
@@ -271,8 +303,8 @@ def _copy_sample_timing(out: Pose, gaze_sample):
     out.frame_idx_VOR = getattr(gaze_sample, 'frame_idx_VOR', None)
     return out
 
-def _copy_pose_values(src: Pose, frame_idx: int) -> Pose:
-    return Pose(
+def _copy_pose_values(src: PlanePose, frame_idx: int) -> PlanePose:
+    return PlanePose(
         frame_idx=frame_idx,
         pose_N_points=src.pose_N_points,
         pose_reprojection_error=src.pose_reprojection_error,
@@ -291,8 +323,8 @@ def _normalize_homography(H: np.ndarray) -> np.ndarray:
         return H / n
     return H
 
-def _interpolate_pose(left: Pose, right: Pose, alpha: float, out_frame_idx: int) -> Pose|None:
-    out = Pose(frame_idx=out_frame_idx)
+def _interpolate_pose(left: PlanePose, right: PlanePose, alpha: float, out_frame_idx: int) -> PlanePose|None:
+    out = PlanePose(frame_idx=out_frame_idx)
     have_pose = left.pose_successful() and right.pose_successful()
     have_homography = left.homography_successful() and right.homography_successful()
     if have_pose:
@@ -310,11 +342,11 @@ def _interpolate_pose(left: Pose, right: Pose, alpha: float, out_frame_idx: int)
         return None
     return out
 
-def interpolate_plane_poses_to_gaze_samples(poses: dict[int, Pose] | list[Pose],
+def interpolate_plane_poses_to_gaze_samples(poses: dict[int, PlanePose] | list[PlanePose],
                                             gazes: dict[int, list[typing.Any]] | list[typing.Any],
                                             video_timestamps: timestamps.VideoTimestamps | list[float] | np.ndarray,
                                             max_missing_frames: int = 0,
-                                            progress_updater: typing.Callable[[int], None]|None = None) -> list[Pose]:
+                                            progress_updater: typing.Callable[[int], None]|None = None) -> list[PlanePose]:
     if max_missing_frames < 0:
         raise ValueError('max_missing_frames must be >= 0')
 
@@ -365,7 +397,7 @@ def interpolate_plane_poses_to_gaze_samples(poses: dict[int, Pose] | list[Pose],
             closest_sample_by_pose[pose_idx] = (sample_idx, diff)
     anchors = {sample_idx: pose_idx for pose_idx, (sample_idx, _) in closest_sample_by_pose.items()}
 
-    out: list[Pose] = []
+    out: list[PlanePose] = []
     for sample_idx, gaze in enumerate(gaze_list):
         if progress_updater is not None:
             progress_updater(1)
