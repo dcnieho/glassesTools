@@ -87,14 +87,14 @@ def fast_scandir(dirname) -> list[pathlib.Path]:
     return subfolders
 
 def unpack_none_union(annotation: typing.Type) -> tuple[typing.Type, bool]:
-    # below handles both types.Optional and direct unions with None
+    # below handles both types. Optional and direct unions with None
     if typing.get_origin(annotation) in [typing.Union, types.UnionType] and (args:=typing.get_args(annotation))[-1]==types.NoneType:
         return typing.Union[args[:-1]], True
     else:
         return annotation, False
 
 
-def set_all(inp: dict[int, bool], value, subset: list[int] = None, predicate: typing.Callable[[int], bool] = None):
+def set_all(inp: dict[int, bool], value, subset: list[int]|None = None, predicate: typing.Callable[[int], bool] = None):
     if subset is None:
         subset = (r for r in inp)
     for r in subset:
