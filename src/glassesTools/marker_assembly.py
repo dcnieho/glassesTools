@@ -12,13 +12,14 @@ class MarkerAssembly:
     default_ref_image_name = 'reference_image.png'
 
     def __init__(self,
-                 marker_corners: dict[int, np.ndarray],
-                 aruco_dict_id: int = cv2.aruco.DICT_4X4_250,
-                 aruco_settings: dict | None = None,
-                 min_num_markers: int = 3,
-                 unit: str | None = None,
-                 ref_image_store_path: str | pathlib.Path | None = None,
-                 ref_image_size: int | None = None):
+                 marker_corners         : dict[int, np.ndarray],
+                 aruco_dict_id          : int                       = cv2.aruco.DICT_4X4_250,
+                 aruco_settings         : dict | None               = None,
+                 min_num_markers        : int                       = 3,
+                 unit                   : str | None                = None,
+                 ref_image_store_path   : str | pathlib.Path | None = None,
+                 ref_image_size         : int | None                = None
+                 ) -> None:
         if not marker_corners:
             raise ValueError('A marker assembly must contain at least one marker')
         if len(marker_corners) != len(set(marker_corners)):

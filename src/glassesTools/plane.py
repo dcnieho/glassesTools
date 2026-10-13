@@ -24,13 +24,13 @@ class Plane(_MarkerAssembly):
 
                  aruco_dict_id                                          = cv2.aruco.DICT_4X4_250,
                  aruco_settings         : dict | None                   = None,
-                 pos_size_scale_fac                                     = 1.,                              # scale factor for marker positions in the markers input argument, and sizes in the markers file or the marker_size input
-                 unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
-                 package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources
-                 ref_image_store_path   : str|pathlib.Path              = None,
+                 pos_size_scale_fac                                     = 1.,                       # scale factor for marker positions in the markers input argument, and sizes in the markers file or the marker_size input
+                 unit                   : str | None                    = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
+                 package_to_read_from   : str | None                    = None,                     # if provided, reads marker file from specified package's resources
+                 ref_image_store_path   : str | pathlib.Path | None     = None,
                  ref_image_size         : int                           = 1920,                     # largest dimension
                  min_num_markers        : int                           = 3                         # minimum number of markers for gaze to be mapped to this plane
-                 ):
+                 ) -> None:
 
         self.marker_size                                    = marker_size*pos_size_scale_fac
         # marker positions
@@ -137,7 +137,7 @@ class Plane(_MarkerAssembly):
         setup.is_planar = True
         return setup
 
-    def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
+    def _store_reference_image(self, path: str | pathlib.Path | None, im_size: int) -> np.ndarray:
         # get image with markers
         bbox_extents = [self.bbox[2]-self.bbox[0], math.fabs(self.bbox[3]-self.bbox[1])]  # math.fabs to deal with bboxes where (-,-) is bottom left
         aspect_ratio = bbox_extents[0]/bbox_extents[1]
@@ -224,12 +224,12 @@ class TargetPlane(Plane):
                 aruco_dict_id                                          = cv2.aruco.DICT_4X4_250,
                 aruco_settings         : dict | None                   = None,
                 pos_size_scale_fac                                     = 1.,                       # scale factor for marker positions in the markers input argument, and sizes in the markers file or the marker_size input
-                unit                   : str                           = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
-                package_to_read_from   : str                           = None,                     # if provided, reads marker file from specified package's resources
-                ref_image_store_path   : str|pathlib.Path              = None,
+                unit                   : str | None                    = None,                     # Unit in which measurements (marker size and positions for instance) are expressed. Purely informational
+                package_to_read_from   : str | None                    = None,                     # if provided, reads marker file from specified package's resources
+                ref_image_store_path   : str | pathlib.Path | None     = None,
                 ref_image_size         : int                           = 1920,                     # largest dimension
                 min_num_markers        : int                           = 3                         # minimum number of markers for gaze to be mapped to this plane
-                ):
+                ) -> None:
 
         # get targets first, so that they can be drawn on the reference image
         self.targets: dict[int,marker.Marker] = {}
@@ -261,7 +261,7 @@ class TargetPlane(Plane):
     def get_target_IDs(self) -> list[int]:
         return list(self.targets.keys())
 
-    def _store_reference_image(self, path: pathlib.Path, im_size: int) -> np.ndarray:
+    def _store_reference_image(self, path: str | pathlib.Path | None, im_size: int) -> np.ndarray:
         # first call superclass method to generate image without targets
         img = super()._store_reference_image(path, im_size)
         height,width = img.shape[:2]
@@ -277,7 +277,8 @@ class TargetPlane(Plane):
                 raise ValueError(f'Target {key} positioned at ({center}) is outside the defined\nplane which ranges from ({plane_corners[0]}) to ({plane_corners[1]}). Ensure all\nsizes and positions are in the same unit (e.g. mm) and check the target position csv file and plane size.')
 
             # 1. determine position on image
-            circlePos = transforms.to_image_pos(*self.targets[key].center, self.bbox, [width,height])
+            center = self.targets[key].center
+            circlePos = transforms.to_image_pos(center[0], center[1], self.bbox, [width,height])
 
             # 2. draw
             clr = tuple([int(i*255) for i in (colors.to_rgb(self.targets[key].color)[::-1] if self.targets[key].color else (0.,0.,1.))])  # need BGR color ordering
