@@ -7,11 +7,6 @@ import subprocess
 import typing
 from enum import Enum, auto
 
-from ffpyplayer.writer import MediaWriter
-from ffpyplayer.pic import Image
-import ffpyplayer.tools
-from fractions import Fraction
-
 from . import gaze_headref, naming, ocv, timestamps, video_utils, _has_GUI
 if _has_GUI:
     from .gui import video_player
@@ -27,7 +22,7 @@ class Status(Enum):
     Finished = auto()
 
 class VideoMaker:
-    def __init__(self, output_path: str|pathlib.Path, video_file: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path|timestamps.VideoTimestamps, camera_calibration_file: str|pathlib.Path|ocv.CameraParams, gaze_data_file: str|pathlib.Path|dict[int,list[gaze_headref.Gaze]]):
+    def __init__(self, output_path: str|pathlib.Path, video_file: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path|timestamps.VideoTimestamps, camera_calibration_file: str|pathlib.Path|ocv.CameraParams, gaze_data_file: str|pathlib.Path|dict[int,list[gaze_headref.Gaze]], pixel_format: str = 'yuv420p'):
         self.src_video   = pathlib.Path(video_file)
         self.output_path = pathlib.Path(output_path)
         if self.output_path.is_dir():
@@ -58,11 +53,7 @@ class VideoMaker:
         # set up output video
         self._fps= 1000/self.video_ts.get_IFI()
         self._res= (int(self.video.get_prop(cv2.CAP_PROP_FRAME_HEIGHT)),int(self.video.get_prop(cv2.CAP_PROP_FRAME_WIDTH)))
-        codec    = ffpyplayer.tools.get_format_codec(fmt=self.output_path.suffix[1:])
-        pix_fmt  = ffpyplayer.tools.get_best_pix_fmt('bgr24',ffpyplayer.tools.get_supported_pixfmts(codec))
-        fpsFrac  = Fraction(self._fps).limit_denominator(10000).as_integer_ratio()
-        out_opts = {'pix_fmt_in':'bgr24', 'pix_fmt_out':pix_fmt, 'width_in':self._res[1], 'height_in':self._res[0], 'frame_rate':fpsFrac}
-        self._vid_writer = MediaWriter(str(self.output_path), [out_opts], overwrite=True)
+        self._vid_writer = video_utils.create_video_writer(self.output_path, pixel_format, self._res[1], self._res[0], self._fps)
 
     def __del__(self):
         if self.has_gui:
@@ -163,8 +154,7 @@ class VideoMaker:
             self.gui.update_image(frame, frame_ts/1000., frame_idx)
 
         # submit frame to be encoded
-        img = Image(plane_buffers=[frame.flatten().tobytes()], pix_fmt='bgr24', size=(frame.shape[1], frame.shape[0]))
-        self._vid_writer.write_frame(img=img, pts=frame_idx/self._fps)
+        video_utils.write_video_frame(self._vid_writer, frame, frame_idx/self._fps)
 
         if self.progress_updater:
             self.progress_updater()

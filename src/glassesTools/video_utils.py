@@ -3,8 +3,39 @@ import pandas as pd
 import cv2
 import pathlib
 import subprocess
+import ffpyplayer.tools
+from fractions import Fraction
+from ffpyplayer.pic import Image
+from ffpyplayer.writer import MediaWriter
 
 from .mp4analyser import iso
+
+
+def validate_encoder_pixel_format(codec: str, pixel_format: str) -> str:
+    supported_formats = ffpyplayer.tools.get_supported_pixfmts(codec)
+    if pixel_format not in supported_formats:
+        raise ValueError(
+            f'Pixel format {pixel_format!r} is not supported by encoder {codec!r}. '
+            f'Supported formats: {", ".join(supported_formats)}')
+    return pixel_format
+
+def create_video_writer(output_path: str|pathlib.Path, pixel_format: str, width: int, height: int, fps: float) -> MediaWriter:
+    output_path = pathlib.Path(output_path)
+    codec = ffpyplayer.tools.get_format_codec(fmt=output_path.suffix[1:])
+    pixel_format = validate_encoder_pixel_format(codec, pixel_format)
+    frame_rate = Fraction(fps).limit_denominator(10000).as_integer_ratio()
+    out_opts = {
+        'pix_fmt_in': 'bgr24',
+        'pix_fmt_out': pixel_format,
+        'width_in': width,
+        'height_in': height,
+        'frame_rate': frame_rate,
+    }
+    return MediaWriter(str(output_path), [out_opts], overwrite=True)
+
+def write_video_frame(writer: MediaWriter, frame: np.ndarray, pts: float) -> None:
+    image = Image(plane_buffers=[frame.flatten().tobytes()], pix_fmt='bgr24', size=(frame.shape[1], frame.shape[0]))
+    writer.write_frame(img=image, pts=pts)
 
 
 def av_rescale(a, b, c):
