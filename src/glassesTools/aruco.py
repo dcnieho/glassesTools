@@ -97,13 +97,13 @@ corner_refinement_methods = typing.Literal[
         cv2.aruco.CORNER_REFINE_NONE, cv2.aruco.CORNER_REFINE_SUBPIX,
         cv2.aruco.CORNER_REFINE_CONTOUR, cv2.aruco.CORNER_REFINE_APRILTAG]
 
-# Parameter descriptions checked against OpenCV 4.13.0:
-# https://docs.opencv.org/4.13.0/d5/dae/tutorial_aruco_detection.html
-# https://docs.opencv.org/4.13.0/d1/dcd/structcv_1_1aruco_1_1DetectorParameters.html
-# https://docs.opencv.org/4.13.0/d5/d09/structcv_1_1aruco_1_1RefineParameters.html
+# Parameter descriptions checked against OpenCV 5.0.0:
+# https://docs.opencv.org/5.0/d5/dae/tutorial_aruco_detection.html
+# https://docs.opencv.org/5.0/d1/dcd/structcv_1_1aruco_1_1DetectorParameters.html
+# https://docs.opencv.org/5.0/d5/d09/structcv_1_1aruco_1_1RefineParameters.html
 # Implementation details (especially recovery limits and AprilTag preprocessing):
-# https://github.com/opencv/opencv/blob/4.13.0/modules/objdetect/src/aruco/aruco_detector.cpp
-# https://github.com/opencv/opencv/blob/4.13.0/modules/objdetect/src/aruco/apriltag/apriltag_quad_thresh.cpp
+# https://github.com/opencv/opencv/blob/5.0.0/modules/objdetect/src/aruco/aruco_detector.cpp
+# https://github.com/opencv/opencv/blob/5.0.0/modules/objdetect/src/aruco/apriltag/apriltag_quad_thresh.cpp
 corner_refinement_doc: dict[int, tuple[str, str]] = {
     cv2.aruco.CORNER_REFINE_NONE: (
         'None',
@@ -289,6 +289,11 @@ detector_parameter_doc: dict[str, tuple[str, str]] = {
         'Enable accelerated ArUco3 detection using image scales. Requires subpixel corner refinement. '
         'The canonical-size and marker-length-ratio parameters control the size/speed tradeoff.',
     ),
+    'validBitIdThreshold': (
+        'Valid bit ID threshold',
+        'Threshold in [0, 1] used to classify sampled marker cells when matching a detected marker '
+        'to its dictionary code.',
+    ),
 }
 
 refine_parameter_doc: dict[str, tuple[str, str]] = {
@@ -390,6 +395,8 @@ def _resolve_settings(settings: dict | None) -> tuple[dict, dict[tuple[str, ...]
         check('detector_params', [name], d[name] >= 0, f'ArUco detector_params.{name} cannot be negative')
     for name in ('errorCorrectionRate', 'maxErroneousBitsInBorderRate'):
         check('detector_params', [name], 0 <= d[name] <= 1, f'ArUco detector_params.{name} must be between 0 and 1')
+    check('detector_params', ['validBitIdThreshold'], 0 <= d['validBitIdThreshold'] <= 1,
+          'ArUco validBitIdThreshold must be between 0 and 1')
     check('detector_params', ['perspectiveRemoveIgnoredMarginPerCell'], 0 <= d['perspectiveRemoveIgnoredMarginPerCell'] < .5,
           'ArUco perspectiveRemoveIgnoredMarginPerCell must be in [0, 0.5)')
     check('detector_params', ['useAruco3Detection', 'minSideLengthCanonicalImg', 'minMarkerLengthRatioOriginalImg'],
@@ -584,7 +591,7 @@ def _expire_temporal_corner_history(history, timestamp_ms, max_age_ms):
 
 def _update_temporal_corner_history(history, board, image_corners, ids, pose, frame_info, camera_params, timestamp_ms, settings):
     board_map = {int(marker_id): np.asarray(points) for marker_id, points in zip(board.getIds(), board.getObjPoints())}
-    marker_ids = np.asarray(ids).flatten()
+    marker_ids = np.asarray(ids)
     object_corners = np.asarray([board_map[int(marker_id)] for marker_id in marker_ids]).reshape(-1, 4, 3)
     residuals = _normalized_reprojection_error(object_corners, image_corners, pose[1], pose[2], frame_info, camera_params)
     min_facing_cosine = math.cos(math.radians(settings['max_marker_tilt_angle_deg']))
@@ -708,7 +715,7 @@ def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, m
     if ids is None or not len(ids):
         return [], failed
     # Build board geometry for each detection and group detections by marker ID.
-    ids = np.asarray(ids).flatten()
+    ids = np.asarray(ids)
     board_map = {int(m_id): np.asarray(obj) for m_id, obj in zip(board.getIds(), board.getObjPoints())}
     layout_centers = np.asarray([points.mean(axis=0) for points in board_map.values()])
     obj = np.asarray([board_map[int(mid)] for mid in ids]).reshape(-1, 4, 3)
@@ -1000,7 +1007,12 @@ class Detector:
         self._det = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(self.dictionary_id), detector_params, refine_params)
 
     def detect_markers(self, image: cv2.UMat, frame_info: dict, camera_params: ocv.CameraParams, raw_detection=None) -> tuple:
-        img_points, ids, rejected = raw_detection if raw_detection is not None else self._detect_markers(image)
+        if raw_detection is None:
+            img_points, ids, rejected = self._detect_markers(image)
+        else:
+            img_points, ids, rejected = raw_detection
+            if ids is not None:
+                ids = np.asarray(ids).reshape(-1)
         rejected = tuple(rejected)
         out_planes = {}
         consistency = self.settings['pose_consistency']
@@ -1036,7 +1048,7 @@ class Detector:
                 continue
 
             corner_candidate_points = list(pl_img_points)
-            corner_candidate_ids = np.asarray(pl_ids).flatten().tolist()
+            corner_candidate_ids = pl_ids.tolist()
             accepted_pose = None
             refine_before_final_pose = self.settings['refine'] and len(pl_ids) >= self.assemblies[p].min_num_markers
 
@@ -1059,7 +1071,7 @@ class Detector:
                 rejected = tuple(rejected)
                 if pl_ids is not None and len(pl_ids):
                     corner_candidate_points.extend(pl_img_points)
-                    corner_candidate_ids.extend(np.asarray(pl_ids).flatten().tolist())
+                    corner_candidate_ids.extend(pl_ids.tolist())
 
                 # Validate the refined set, including newly recovered markers if any
                 if consistency['enabled']:
@@ -1067,7 +1079,7 @@ class Detector:
                     rejected += tuple(c for i, c in enumerate(pl_img_points) if i not in selected)
                     pl_img_points, pl_ids = [pl_img_points[i] for i in selected], pl_ids[selected]
                     if recovered_ids is not None:
-                        recovered_ids = recovered_ids[np.isin(recovered_ids.flatten(), pl_ids.flatten())]
+                        recovered_ids = recovered_ids[np.isin(recovered_ids, pl_ids)]
 
             # We got a good pose, record in history
             if (consistency['enabled'] and consistency['temporal_enabled'] and timestamp_ms is not None and accepted_pose is not None and accepted_pose[1] is not None):
@@ -1096,8 +1108,11 @@ class Detector:
 
     def _detect_markers(self, image: cv2.UMat):
         img_points, ids, rejected_img_points = self._det.detectMarkers(image)
-        if np.any(ids==None):
-            ids = None
+        if ids is not None:
+            if np.any(ids==None):
+                ids = None
+            else:
+                ids = np.asarray(ids).reshape(-1)
         return img_points, ids, rejected_img_points
 
     def _refine_detection(self, image: cv2.UMat, detected_corners, detected_ids, rejected_corners, board: cv2.aruco.Board, frame_info: dict, camera_params: ocv.CameraParams):
@@ -1122,7 +1137,7 @@ class Detector:
             detect_tuple = self._last_detect_output
         if detect_tuple[1]['ids'] is None or not detect_tuple[1]['img_points'] or marker_id not in detect_tuple[1]['ids']:
             return None, None
-        img_points = detect_tuple[1]['img_points'][detect_tuple[1]['ids'].flatten().tolist().index(marker_id)]
+        img_points = detect_tuple[1]['img_points'][detect_tuple[1]['ids'].tolist().index(marker_id)]
         return self._indiv_marker_points[marker_id], img_points
 
     def visualize(self, frame, detect_tuple=None, sub_pixel_fac=8, assembly_marker_color=(0,255,0), recovered_assembly_marker_color=(255,255,0), individual_marker_color=(255,0,255), unexpected_marker_color=(150,253,253), rejected_marker_color=None):
@@ -1396,6 +1411,8 @@ def create_assembly_geometry(marker_corners: list[np.ndarray], ids: list[int], a
     return cv2.aruco.Board(marker_corners, aruco_dict, np.asarray(ids))
 
 def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, frame_info: dict, camera_parameters: ocv.CameraParams):
+    if detected_ids is not None:
+        detected_ids = np.asarray(detected_ids).reshape(-1)
     # Corners must remain in the image's coordinates for OpenCV's pixel sampling.
     # Shift the principal point for a sensor ROI, rather than shifting the corners.
     camera_matrix = None
@@ -1407,6 +1424,8 @@ def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_c
     img_points, ids, rejected_img_points, _ = det.refineDetectedMarkers(
         image=image, board=board, detectedCorners=detected_corners, detectedIds=detected_ids,
         rejectedCorners=rejected_corners, cameraMatrix=camera_matrix, distCoeffs=distortion)
+    if ids is not None:
+        ids = np.asarray(ids).reshape(-1)
     if img_points and img_points[0].shape[0]==4:
         # there are versions out there where there is a bug in output shape of each set of corners, fix up
         img_points = [np.reshape(c,(1,4,2)) for c in img_points]
@@ -1416,7 +1435,7 @@ def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_c
     # determine which are new (recovered) markers
     recovered_ids = None
     if detected_ids is not None and ids is not None:
-        recovered_ids = np.array(list(set(ids.flatten())-set(detected_ids.flatten()))).reshape((-1,1))
+        recovered_ids = np.array(list(set(ids)-set(detected_ids)), dtype=ids.dtype)
 
     return img_points, ids, rejected_img_points, recovered_ids
 
@@ -1424,11 +1443,11 @@ def filter_detections(img_points: list[np.ndarray], ids: np.ndarray, expected_id
     if ids is None or not img_points:
         return img_points, ids
     if not keep_expected:
-        expected_ids = set(ids.flatten())-set(expected_ids)
+        expected_ids = set(ids)-set(expected_ids)
     if not expected_ids:
         # optimization. If output will definitely be empty, return directly
         return tuple(), None
-    to_remove = np.where([x not in expected_ids for x in ids.flatten()])[0]
+    to_remove = np.where([x not in expected_ids for x in ids])[0]
     ids = np.delete(ids, to_remove, axis=0)
     img_points = tuple(v.copy() for i,v in enumerate(img_points) if i not in to_remove)
     return img_points, ids
@@ -1438,8 +1457,8 @@ def has_duplicates(ids: np.ndarray) -> bool:
     """Return True if any ID repeats."""
     if ids is None or len(ids) == 0:
         return False
-    flat = ids.flatten().astype(int)
-    return len(flat) != len(np.unique(flat))
+    ids = ids.astype(int)
+    return len(ids) != len(np.unique(ids))
 
 def group_indices_by_id(
     ids: np.ndarray
@@ -1450,7 +1469,7 @@ def group_indices_by_id(
     id_to_indices: dict[int, list[int]] = {}
     if ids is None or len(ids) == 0:
         return id_to_indices
-    for i, mid in enumerate(ids.flatten()):
+    for i, mid in enumerate(ids):
         id_to_indices.setdefault(int(mid), []).append(i)
     return id_to_indices
 
@@ -1534,7 +1553,7 @@ def filter_board_duplicates(
     Returns:
         ok (bool),
         corners_consistent (list[np.ndarray]): preserved shapes per item (e.g., (4,1,2)),
-        ids_consistent (np.ndarray): shape (N,1), dtype matches input ids.dtype,
+        ids_consistent (np.ndarray): shape (N,), dtype matches input ids.dtype,
         kept_indices (list[int]): indices into the original detections.
 
     Notes:
@@ -1543,13 +1562,13 @@ def filter_board_duplicates(
     """
     # --- Early outs ---
     if ids is None or len(ids) == 0:
-        return False, [], np.empty((0, 1), dtype=np.int32), []
+        return False, [], np.empty(0, dtype=np.int32 if ids is None else ids.dtype), []
 
     # If all IDs are unique, keep all (no pose computation)
     if not has_duplicates(ids):
         kept_indices = list(range(len(ids)))
         corners_consistent = [corners[i] for i in kept_indices]
-        ids_consistent = ids.reshape(-1, 1).copy()
+        ids_consistent = ids.copy()
         return True, corners_consistent, ids_consistent, []
 
     if len(corners) != len(ids):
@@ -1572,12 +1591,12 @@ def filter_board_duplicates(
 
     if max_combinations is not None and num_combinations > max_combinations:
         # Too many; caller assumed "few duplicates", so bail rather than blow up.
-        return False, [], np.empty((0, 1), dtype=ids.dtype), []
+        return False, [], np.empty(0, dtype=ids.dtype), []
 
     # Precompute object points per ID
     board_map = _build_board_objpoints_map(board)
     # Prepare an array form of ids for fast slicing
-    ids_arr = ids.reshape(-1, 1)
+    ids_arr = ids
 
     if 'offset_x' in frame_info and 'offset_y' in frame_info:
         # if we have a ROI, need to add the offset to the image points to get correct pose estimation
@@ -1611,7 +1630,7 @@ def filter_board_duplicates(
         total_corners = 0
 
         for i in selected:
-            mid = int(ids_arr[i, 0])
+            mid = int(ids_arr[i])
             if mid not in board_map:
                 # Board doesn't define this ID; skip (shouldn't happen if detections are on the same board)
                 continue
@@ -1635,12 +1654,12 @@ def filter_board_duplicates(
             best_indices = selected
 
     if not best_indices:
-        return False, [], np.empty((0, 1), dtype=ids.dtype), []
+        return False, [], np.empty(0, dtype=ids.dtype), []
 
-    # Prepare outputs (preserve corner shapes and return OpenCV-style ids)
+    # Prepare outputs
     best_indices = sorted(best_indices)
     corners_consistent = [corners[i] for i in best_indices]
-    ids_consistent = ids_arr[best_indices].reshape(-1, 1).astype(ids.dtype, copy=False)
+    ids_consistent = ids_arr[best_indices].astype(ids.dtype, copy=False)
 
     return True, corners_consistent, ids_consistent, list(set(range(len(ids)))-set(best_indices))
 

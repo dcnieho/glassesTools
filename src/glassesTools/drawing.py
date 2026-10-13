@@ -56,13 +56,12 @@ def arucoDetectedMarkers(img,corners,ids,border_color=(0,255,0), draw_IDs = True
     cornerColor[1], cornerColor[2] = cornerColor[2], cornerColor[1]     # corner color just swap G and R
 
     draw_IDs = draw_IDs and (ids is not None) and len(ids)>0
-
     for i in range(0, len(corners)):
         corner = corners[i][0]
         # draw marker sides
         sideColor = border_color
         for s,c in zip(special_highlight[::2],special_highlight[1::2]):
-            if s is not None and ids[i][0] in s:
+            if s is not None and ids is not None and ids[i] in s:
                 sideColor = c
         for j in range(4):
             p0 = corner[j,:]
@@ -74,6 +73,6 @@ def arucoDetectedMarkers(img,corners,ids,border_color=(0,255,0), draw_IDs = True
         openCVRectangle(img, corner[0]-3, corner[0]+3, cornerColor, 1, sub_pixel_fac)
 
         # draw IDs if wanted
-        if draw_IDs:
+        if draw_IDs and ids is not None:
             c = marker.corners_intersection(corner)
-            cv2.putText(img, str(ids[i][0]), tuple(c.astype(np.intc)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, textColor, 2, lineType=cv2.LINE_AA)
+            cv2.putText(img, str(ids[i]), tuple(c.astype(np.intc)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, textColor, 2, lineType=cv2.LINE_AA)

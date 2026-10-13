@@ -3,6 +3,7 @@ import pandas as pd
 import cv2
 import pathlib
 import bisect
+import math
 import warnings
 import pycolmap
 import copy
@@ -230,7 +231,7 @@ class CV2VideoReader:
 
             # keep going
             ts_from_list = self._ts[self.frame_idx]
-            if self.frame_idx==1 or ocv_ts>0.:
+            if math.isfinite(ocv_ts) and (ocv_ts > 0. or (self.frame_idx == 1 and ocv_ts == 0.)):
                 # check for gap, and if there is a gap, fix up frame_idx if needed
                 if self._last_good_ts[0]!=-1 and ts_from_list-self._last_good_ts[2] < ocv_ts-self._last_good_ts[1]-1:  # little bit of leeway (1ms) for precision or mismatched timestamps
                     # we skipped some frames altogether, need to correct current frame_idx
