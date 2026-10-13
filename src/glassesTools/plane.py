@@ -51,23 +51,18 @@ class Plane(_MarkerAssembly):
 
         # prep markers
         self._load_markers(markers, pos_size_scale_fac, package_to_read_from)
+        if ref_image_store_path:
+            ref_image_store_path = pathlib.Path(ref_image_store_path)
+
         super().__init__(
             marker_corners={key: np.asarray(value.corners) for key, value in self.markers.items()},
             aruco_dict_id=self.aruco_dict_id,
             aruco_settings=self.aruco_settings,
             min_num_markers=self.min_num_markers,
             unit=self.unit,
+            ref_image_store_path=ref_image_store_path,
+            ref_image_size=ref_image_size,
         )
-
-        # get reference image of plane
-        if ref_image_store_path:
-            ref_image_store_path = pathlib.Path(ref_image_store_path)
-
-        # get image (always create reference image, to be safe (settings may have changed))
-        img = self._store_reference_image(ref_image_store_path, ref_image_size)
-
-        self._ref_image_size                                = ref_image_size
-        self._ref_image_cache   : dict[int, np.ndarray]     = {ref_image_size: img}
 
     def set_origin(self, origin: Coordinate):
         # change from current origin
@@ -82,23 +77,6 @@ class Plane(_MarkerAssembly):
         self.bbox[3] -= offset[1]
 
         super().set_origin(np.array([origin.x, origin.y, 0.]))
-
-    def get_ref_image(self, im_size: int|None=None, as_RGB=False) -> np.ndarray:
-        if im_size is None:
-            im_size = self._ref_image_size
-        if not isinstance(im_size,int):
-            raise TypeError(f'width input should be an int, not {type(im_size)}')
-        # check we have the image, if not, add to cache
-        if im_size not in self._ref_image_cache:
-            scale = float(im_size)/self._ref_image_size
-            self._ref_image_cache[im_size] = cv2.resize(self._ref_image_cache[self._ref_image_size], None, fx=scale, fy=scale, interpolation = cv2.INTER_AREA)
-
-        # return
-        if as_RGB:
-            return self._ref_image_cache[im_size][:,:,[2,1,0]].copy()
-        else:
-            # OpenCV's BGR
-            return self._ref_image_cache[im_size].copy()
 
     def draw(self, img, x, y, sub_pixel_fac=1, color=None, size=6):
         if not math.isnan(x):
