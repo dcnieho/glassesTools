@@ -229,7 +229,7 @@ class Plane(_MarkerAssembly):
             # perform affine transformation (i.e. rotate marker)
             img = cv2.warpAffine(marker_image, transformation, (img.shape[1], img.shape[0]), img, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT)
 
-        img = cv2.cvtColor(img, cv2.COLOR_GRAY2RGB)
+        img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
         if path:
             cv2.imwrite(path, img)
 
