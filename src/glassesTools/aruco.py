@@ -84,7 +84,13 @@ def settings_defaults() -> dict:
                     temporal_invert_pose=True,
                     temporal_history_size=5,
                     max_translation_speed_m_s=3.,
-                    max_rotation_speed_deg_s=400.)
+                    max_rotation_speed_deg_s=400.,
+                    temporal_corner_enabled=True,
+                    temporal_corner_history_size=10,
+                    temporal_corner_history_max_age_ms=1000.,
+                    temporal_corner_min_observations=5,
+                    temporal_corner_instability_factor=3.,
+                    temporal_corner_jitter_floor_fraction=.01)
                 )
 
 corner_refinement_methods = typing.Literal[
@@ -411,6 +417,24 @@ def _resolve_settings(settings: dict | None) -> tuple[dict, dict[tuple[str, ...]
           'ArUco pose consistency max_translation_speed_m_s must be positive')
     check('pose_consistency', ['max_rotation_speed_deg_s'], c['max_rotation_speed_deg_s'] > 0,
           'ArUco pose consistency max_rotation_speed_deg_s must be positive')
+    check('pose_consistency', ['temporal_corner_history_size'],
+          type(c['temporal_corner_history_size']) is int and c['temporal_corner_history_size'] >= 1,
+          'ArUco pose consistency temporal_corner_history_size must be a positive integer')
+    check('pose_consistency', ['temporal_corner_min_observations'],
+          type(c['temporal_corner_min_observations']) is int and c['temporal_corner_min_observations'] >= 2,
+          'ArUco pose consistency temporal_corner_min_observations must be an integer of at least 2')
+    check('pose_consistency', ['temporal_corner_history_size', 'temporal_corner_min_observations'],
+          c['temporal_corner_history_size'] >= c['temporal_corner_min_observations'],
+          'ArUco pose consistency temporal_corner_history_size must be at least temporal_corner_min_observations')
+    check('pose_consistency', ['temporal_corner_history_max_age_ms'],
+          math.isfinite(c['temporal_corner_history_max_age_ms']) and c['temporal_corner_history_max_age_ms'] > 0,
+          'ArUco pose consistency temporal_corner_history_max_age_ms must be a positive finite number')
+    check('pose_consistency', ['temporal_corner_instability_factor'],
+          c['temporal_corner_instability_factor'] > 1,
+          'ArUco pose consistency temporal_corner_instability_factor must be greater than 1')
+    check('pose_consistency', ['temporal_corner_jitter_floor_fraction'],
+          0 < c['temporal_corner_jitter_floor_fraction'] <= 1,
+          'ArUco pose consistency temporal_corner_jitter_floor_fraction must be in (0, 1]')
 
     # Round-trip valid parameters so comparisons use OpenCV's actual precision (float32, not double in case of floats).
     for which in ('detector', 'refine'):
@@ -430,16 +454,24 @@ def _resolve_settings(settings: dict | None) -> tuple[dict, dict[tuple[str, ...]
 def _project_points(object_points, rvec, tvec, frame_info, camera_params):
     return transforms.project_points(np.asarray(object_points).reshape(-1, 3), camera_params, rot_vec=rvec, trans_vec=tvec, ROI_offset=[frame_info.get('offset_x', 0), frame_info.get('offset_y', 0)])
 
-def _residuals(object_points, image_points, rvec, tvec, frame_info, camera_params, shape):
+def _reprojection_error(object_points, image_points, rvec, tvec, frame_info, camera_params, shape):
     projected_points = _project_points(object_points, rvec, tvec, frame_info, camera_params)
     return np.asarray(projected_points).reshape(shape) - np.asarray(image_points).reshape(shape)
 
+def _normalized_reprojection_error(object_points, image_points, rvec, tvec, frame_info, camera_params):
+    # reprojection error normalized by marker size
+    img = np.asarray(image_points, dtype=np.float64).reshape(-1, 4, 2)
+    residuals = _reprojection_error(object_points, img, rvec, tvec, frame_info, camera_params, (-1, 4, 2))
+    edge_lengths = np.linalg.norm(np.roll(img, -1, axis=1) - img, axis=2)
+    marker_sizes = np.maximum(np.median(edge_lengths, axis=1), np.finfo(float).eps)
+    return residuals / marker_sizes[:, None, None]
+
 def _reprojection_error_distance(object_points, image_points, rvec, tvec, frame_info, camera_params):
-    residuals = _residuals(object_points, image_points, rvec, tvec, frame_info, camera_params, (-1, 4, 2))
+    residuals = _reprojection_error(object_points, image_points, rvec, tvec, frame_info, camera_params, (-1, 4, 2))
     return np.linalg.norm(residuals, axis=2).max(axis=1)
 
 def _reprojection_error_rms(object_points, image_points, rvec, tvec, frame_info, camera_params):
-    residuals = _residuals(object_points, image_points, rvec, tvec, frame_info, camera_params, (-1, 2))
+    residuals = _reprojection_error(object_points, image_points, rvec, tvec, frame_info, camera_params, (-1, 2))
     return float(np.sqrt(np.mean(residuals ** 2)))
 
 def _pose_candidates(object_points, image_points, frame_info, camera_params):
@@ -497,6 +529,77 @@ def _marker_reprojection_limits(image_corners, settings):
     edge_lengths = np.linalg.norm(np.roll(img, -1, axis=1) - img, axis=2)
     marker_sizes = np.median(edge_lengths, axis=1)
     return np.clip(settings['max_reprojection_error_fraction'] * marker_sizes, settings['min_reprojection_error_px'], settings['max_reprojection_error_px'])
+
+def _filter_temporal_corner_outliers(selected, ids, normalized_residuals, history, min_markers, settings):
+    if not settings['temporal_corner_enabled'] or len(selected) <= min_markers or not history:
+        return selected
+
+    # Compute the jitter of each marker based on its reprojection error history. Markers with high jitter relative to their peers are rejected as outliers.
+    history_size = settings['temporal_corner_history_size']
+    min_observations = settings['temporal_corner_min_observations']
+    jitter_by_index = {}
+    for index in selected:
+        marker_id = int(ids[index])
+        # collect the marker's recent normalized reprojection residuals plus the current frame's residuals
+        samples = [sample[1] for sample in history.get(marker_id, ())[-(history_size - 1):]]
+        samples = [*samples, normalized_residuals[index]]
+        if len(samples) < min_observations:
+            continue
+        # this has shape (observations, 4 corners, 2 coordinates)
+        samples = np.asarray(samples, dtype=float)
+        # per-coordinate median residual for each corner across observations
+        center = np.median(samples, axis=0)
+        # one jitter value per corner
+        jitter_by_index[index] = np.sqrt(np.mean(np.sum((samples - center) ** 2, axis=2), axis=0))
+
+    # prune outliers one at a time (remove worst, i.e., largest jitter-to-threshold ratio) until the remaining markers have similar jitter to their peers (i.e., below threshold)
+    # also stop when min_markers is reached, or we have no markers left with sufficient history
+    selected = list(selected)
+    while len(selected) > min_markers:
+        outliers = []
+        for index in selected:
+            peer_indices = [peer for peer in selected if peer != index and peer in jitter_by_index]
+            if len(peer_indices) < 2 or index not in jitter_by_index:
+                continue
+            peer_jitter = np.concatenate([jitter_by_index[peer] for peer in peer_indices])
+            peer_median = float(np.median(peer_jitter))             # median jitter of the other markers' corners
+            marker_jitter = float(np.max(jitter_by_index[index]))   # get the worst corner's jitter for this marker
+            threshold = max(settings['temporal_corner_jitter_floor_fraction'],
+                            settings['temporal_corner_instability_factor'] * peer_median)
+            if marker_jitter > threshold:
+                outliers.append((marker_jitter / threshold, index))
+        if not outliers:
+            break
+        _, index = max(outliers, key=lambda item: (item[0], -item[1]))
+        selected.remove(index)
+    return selected
+
+def _expire_temporal_corner_history(history, timestamp_ms, max_age_ms):
+    cutoff = timestamp_ms - max_age_ms
+    for marker_id, samples in list(history.items()):
+        while samples and samples[0][0] < cutoff:
+            samples.pop(0)
+        if not samples:
+            del history[marker_id]
+
+def _update_temporal_corner_history(history, board, image_corners, ids, pose, frame_info, camera_params, timestamp_ms, settings):
+    board_map = {int(marker_id): np.asarray(points) for marker_id, points in zip(board.getIds(), board.getObjPoints())}
+    marker_ids = np.asarray(ids).flatten()
+    object_corners = np.asarray([board_map[int(marker_id)] for marker_id in marker_ids]).reshape(-1, 4, 3)
+    residuals = _normalized_reprojection_error(object_corners, image_corners, pose[1], pose[2], frame_info, camera_params)
+    min_facing_cosine = math.cos(math.radians(settings['max_marker_tilt_angle_deg']))
+    errors = _marker_errors(object_corners, image_corners, pose[1], pose[2], frame_info, camera_params, min_facing_cosine)
+    limits = _marker_reprojection_limits(image_corners, settings)
+    best_by_marker = {}
+    for index, marker_id in enumerate(marker_ids):
+        normalized_error = errors[index] / limits[index]
+        if normalized_error <= 1. and (int(marker_id) not in best_by_marker or
+                normalized_error < best_by_marker[int(marker_id)][0]):
+            best_by_marker[int(marker_id)] = (normalized_error, index)
+    for marker_id, (_, index) in best_by_marker.items():
+        samples = history.setdefault(marker_id, [])
+        samples.append((timestamp_ms, residuals[index]))
+        del samples[:-settings['temporal_corner_history_size']]
 
 def _marker_spread_fraction(selected_centers, layout_centers):
     # for planes: determine the fraction of the plane layout that is covered by the selected markers, in each axis
@@ -591,7 +694,7 @@ def _temporal_pose_score(rvec, tvec, timestamp_ms, history, unit_to_meters, sett
     return max(float(np.median(translation_speeds)) / settings['max_translation_speed_m_s'],
                float(np.median(rotation_speeds))    / settings['max_rotation_speed_deg_s'])
 
-def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, min_markers=3, history=(), unit_to_meters=1.) -> tuple[list[int], tuple[int, None, None, float] | tuple[int, np.ndarray, np.ndarray, float]]:
+def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, min_markers=3, history=(), unit_to_meters=1., corner_history=(), temporal_checks=True) -> tuple[list[int], tuple[int, None, None, float] | tuple[int, np.ndarray, np.ndarray, float]]:
     # check whether pose is consistent with the board geometry and recent pose history, and physically plausible. In the process, markers that may be misdetected are filtered out.
     # Returns the set of selected markers, and the best pose and its reprojection error.
     # The inner tuple represents the best pose and its reprojection error, and contains:
@@ -621,14 +724,19 @@ def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, m
     best_indices, best_pose, best_error, best_spread, best_temporal_score = [], failed, np.inf, 0., np.inf
 
     # Score each pose by marker-level reprojection, orientation, and temporal consistency.
-    def score(solution):
+    def score(solution, eligible_indices=None):
         # Get reprojection error for each marker and reject markers that are facing away or too tilted.
         errors = _marker_errors(obj, img, solution[1], solution[2], frame_info, camera_params, min_facing_cosine)
         normalized_errors = errors / reprojection_limits
-        selected = [min(indices, key=lambda i: normalized_errors[i]) for indices in groups.values()]
+        if eligible_indices is None:
+            candidate_groups = groups.values()
+        else:
+            eligible = set(eligible_indices)
+            candidate_groups = [filtered for indices in groups.values() if (filtered := [i for i in indices if i in eligible])]
+        selected = [min(indices, key=lambda i: normalized_errors[i]) for indices in candidate_groups]
         selected = sorted(i for i in selected if normalized_errors[i] <= 1.)
         # Reject poses that are inconsistent with the recent pose history, or that use too few markers.
-        temporal_score = _temporal_pose_score(solution[1], solution[2], timestamp_ms, history, unit_to_meters, settings)
+        temporal_score = _temporal_pose_score(solution[1], solution[2], timestamp_ms, history, unit_to_meters, settings) if temporal_checks else 0.
         if len(selected) < min_markers or temporal_score > 1.:
             return [], np.inf, 0., np.inf
         # Compute the spatial spread of the selected markers relative to the board layout. This is used to prefer poses that cover more of the board.
@@ -647,6 +755,46 @@ def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, m
         rms = _reprojection_error_rms(obj[selected], img[selected], candidate[1], candidate[2], frame_info, camera_params)
         best_pose = (len(selected) * 4, candidate[1], candidate[2], rms)
 
+    def refit_consensus(selected, error, spread, temporal_score, candidate, eligible_indices=None):
+        state = (selected, error, spread, temporal_score, candidate)
+        for _ in range(3):
+            refits = _pose_candidates(obj[state[0]], img[state[0]], frame_info, camera_params)
+            acceptable = []
+            for fitted in refits:
+                next_indices, next_error, next_spread, next_temporal_score = score(fitted, eligible_indices)
+                if len(next_indices) >= min_markers:
+                    acceptable.append((next_indices, next_error, next_spread, next_temporal_score, fitted))
+            if not acceptable:
+                return state, False
+
+            next_state = min(acceptable, key=lambda x: (-len(x[0]), -x[2], x[1], x[3]))
+            unchanged = next_state[0] == state[0]
+            state = next_state
+            if unchanged:
+                return state, True
+        return state, False
+
+    def finalize():
+        if (not best_indices or best_pose[1] is None or not temporal_checks or not settings['temporal_corner_enabled'] or not corner_history):
+            return best_indices, best_pose
+
+        tracked_markers = sum(len(corner_history.get(int(ids[index]), ())) >= settings['temporal_corner_min_observations'] - 1 for index in best_indices)
+        if tracked_markers < 3:
+            return best_indices, best_pose
+
+        # reject markers whose corners jitter too much (i.e., have high reprojection jitter) relative to their peers, based on the recent corner history
+        normalized_residuals = _normalized_reprojection_error(obj, img, best_pose[1], best_pose[2], frame_info, camera_params)
+        selected = _filter_temporal_corner_outliers(best_indices, ids, normalized_residuals, corner_history, min_markers, settings)
+
+        # If the consensus markers are unchanged, return the best pose. Otherwise, refit the pose using only the consensus markers and return that if it converges.
+        if selected == best_indices:
+            return best_indices, best_pose
+        refitted, converged = refit_consensus(selected, best_error, best_spread, best_temporal_score, best_pose, eligible_indices=selected)
+        if not converged:
+            return best_indices, best_pose
+        record(*refitted, force=True)
+        return best_indices, best_pose
+
     # Fit candidate subsets, then refit each pose using its consensus markers.
     def consider(indices):
         candidates = _pose_candidates(obj[indices], img[indices], frame_info, camera_params)
@@ -655,20 +803,7 @@ def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, m
             if len(selected) < min_markers:
                 continue
             # Refit only the consensus, then recheck both geometry and membership.
-            for _ in range(3):
-                refits = _pose_candidates(obj[selected], img[selected], frame_info, camera_params)
-                acceptable = []
-                for fitted in refits:
-                    next_indices, next_error, next_spread, next_temporal_score = score(fitted)
-                    if len(next_indices) >= min_markers:
-                        acceptable.append((next_indices, next_error, next_spread, next_temporal_score, fitted))
-                if not acceptable:
-                    break
-                next_indices, next_error, next_spread, next_temporal_score, fitted = min(acceptable, key=lambda x: (-len(x[0]), -x[2], x[1], x[3]))
-                unchanged = next_indices == selected
-                selected, error, spread, temporal_score, candidate = next_indices, next_error, next_spread, next_temporal_score, fitted
-                if unchanged:
-                    break
+            (selected, error, spread, temporal_score, candidate), _ = refit_consensus(selected, error, spread, temporal_score, candidate)
             record(selected, error, spread, temporal_score, candidate)
 
     # To keep this fast, if all marker detections are unique (so no markers detected multiple times), just fit the pose and check its quality. If the pose is acceptable, return it. If not, then try refitting the pose using only the consensus markers. If that fails, then search all subsets of detections up to a limit.
@@ -711,7 +846,7 @@ def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, m
         if fast_candidate is not None:
             # Return the best full or refitted consensus with adequate spread.
             record(*fast_candidate[1:], force=True)
-            return best_indices, best_pose
+            return finalize()
 
     # Search all subsets when affordable; otherwise sample spatially spread subsets.
     combinations = math.prod(len(g) + 1 for g in groups.values()) - 1
@@ -734,7 +869,7 @@ def _consistent_pose(board, corners, ids, frame_info, camera_params, settings, m
         consider(list(key))
         if (len(best_indices) == len(groups) and best_spread >= settings['fast_path_min_spread_fraction']):
             break
-    return best_indices, best_pose
+    return finalize()
 
 
 @dataclass
@@ -804,6 +939,8 @@ class Detector:
         self._individual_marker_ids : set[int]                  = set()
         self._all_markers           : set[int]                  = set()
         self._pose_history          : dict[str, list[tuple]]    = {}
+        self._corner_history        : dict[str, dict[int, list[tuple[float, np.ndarray]]]] = {}
+        self._corner_history_timestamp: dict[str, float]        = {}
         self._assembly_unit_to_meters: dict[str, float]         = {}
 
         self.settings                                           = resolve_settings(settings)
@@ -869,27 +1006,44 @@ class Detector:
         consistency = self.settings['pose_consistency']
         pose_cache = {}
         for p in self.assemblies:
+            # keep track of the pose and corner history for each assembly, so that we can filter out detections that are inconsistent with the recent history. If the timestamp is invalid or goes backwards, we clear the history.
+            history = self._pose_history.setdefault(p, [])
+            corner_history = self._corner_history.setdefault(p, {})
+            timestamp_ms = frame_info.get('timestamp_ms')
+            try:
+                timestamp_ms = float(timestamp_ms)
+            except (TypeError, ValueError):
+                timestamp_ms = None
+            last_timestamp = self._corner_history_timestamp.get(p)
+            if history and (last_timestamp is None or history[-1][0] > last_timestamp):
+                last_timestamp = history[-1][0]
+            if timestamp_ms is None or not math.isfinite(timestamp_ms):
+                history.clear()
+                corner_history.clear()
+                self._corner_history_timestamp.pop(p, None)
+                timestamp_ms = None
+            else:
+                if last_timestamp is not None and timestamp_ms <= last_timestamp:
+                    history.clear()
+                    corner_history.clear()
+                _expire_temporal_corner_history(corner_history, timestamp_ms, consistency['temporal_corner_history_max_age_ms'])
+                self._corner_history_timestamp[p] = timestamp_ms
+
             # get the detections for this plane (that is, filter on expected marker IDs)
             pl_img_points, pl_ids = filter_detections(img_points, ids, self._assembly_marker_ids[p])
             if pl_ids is None or not len(pl_ids):
                 out_planes[p] = None
                 continue
 
-            timestamp_ms = frame_info.get('timestamp_ms')
-            history = self._pose_history.setdefault(p, [])
-            try:
-                timestamp_ms = float(timestamp_ms)
-            except (TypeError, ValueError):
-                timestamp_ms = None
-            if timestamp_ms is None or not math.isfinite(timestamp_ms) or (history and timestamp_ms <= history[-1][0]):
-                history.clear()
-                timestamp_ms = None if timestamp_ms is None or not math.isfinite(timestamp_ms) else timestamp_ms
+            corner_candidate_points = list(pl_img_points)
+            corner_candidate_ids = np.asarray(pl_ids).flatten().tolist()
             accepted_pose = None
+            refine_before_final_pose = self.settings['refine'] and len(pl_ids) >= self.assemblies[p].min_num_markers
 
             # If consistency checking is enabled, we will filter out any detections that do not yield a consistent pose with the other detections. This also filters out duplicate detections.
             # If consistency checking is disabled, we will filter out any duplicate detections of the same marker.
             if consistency['enabled']:
-                selected, accepted_pose = self._consistent_pose(self.assemblies[p].aruco_board, pl_img_points, pl_ids, frame_info, camera_params, self.assemblies[p].min_num_markers, pose_cache, history, self._assembly_unit_to_meters[p])
+                selected, accepted_pose = self._consistent_pose(self.assemblies[p].aruco_board, pl_img_points, pl_ids, frame_info, camera_params, self.assemblies[p].min_num_markers, pose_cache, history, self._assembly_unit_to_meters[p], corner_history, temporal_checks=not refine_before_final_pose)
                 rejected += tuple(c for i, c in enumerate(pl_img_points) if i not in selected)
                 pl_img_points, pl_ids = [pl_img_points[i] for i in selected], pl_ids[selected]
             else:
@@ -900,21 +1054,33 @@ class Detector:
             recovered_ids = None
 
             # Preserve the existing recovery threshold independently of the on/off switch.
-            if self.settings['refine'] and len(pl_ids) >= self.assemblies[p].min_num_markers:
+            if refine_before_final_pose:
                 pl_img_points, pl_ids, rejected, recovered_ids = self._refine_detection(image, pl_img_points, pl_ids, rejected, self.assemblies[p].aruco_board, frame_info, camera_params)
                 rejected = tuple(rejected)
+                if pl_ids is not None and len(pl_ids):
+                    corner_candidate_points.extend(pl_img_points)
+                    corner_candidate_ids.extend(np.asarray(pl_ids).flatten().tolist())
 
                 # Validate the refined set, including newly recovered markers if any
                 if consistency['enabled']:
-                    selected, accepted_pose = self._consistent_pose(self.assemblies[p].aruco_board, pl_img_points, pl_ids, frame_info, camera_params, self.assemblies[p].min_num_markers, pose_cache, history, self._assembly_unit_to_meters[p])
+                    selected, accepted_pose = self._consistent_pose(self.assemblies[p].aruco_board, pl_img_points, pl_ids, frame_info, camera_params, self.assemblies[p].min_num_markers, pose_cache, history, self._assembly_unit_to_meters[p], corner_history, temporal_checks=True)
                     rejected += tuple(c for i, c in enumerate(pl_img_points) if i not in selected)
                     pl_img_points, pl_ids = [pl_img_points[i] for i in selected], pl_ids[selected]
                     if recovered_ids is not None:
                         recovered_ids = recovered_ids[np.isin(recovered_ids.flatten(), pl_ids.flatten())]
 
+            # We got a good pose, record in history
             if (consistency['enabled'] and consistency['temporal_enabled'] and timestamp_ms is not None and accepted_pose is not None and accepted_pose[1] is not None):
                 history.append(_pose_history_entry(accepted_pose[1], accepted_pose[2], timestamp_ms, self._assembly_unit_to_meters[p], consistency.get('temporal_invert_pose', True)))
                 del history[:-consistency['temporal_history_size']]
+
+            # Recording corner history, including for markers not used for pose because too jittery, so that we can keep determining jitter on the freshest data
+            if (consistency['enabled'] and consistency['temporal_corner_enabled'] and timestamp_ms is not None
+                    and accepted_pose is not None and accepted_pose[1] is not None
+                    and pl_ids is not None
+                    and len(pl_ids) >= self.assemblies[p].min_num_markers):
+                # N.B. raw detections are fed in, but are filtered on facing and reprojection error inside the function
+                _update_temporal_corner_history(corner_history, self.assemblies[p].aruco_board, corner_candidate_points, np.asarray(corner_candidate_ids), accepted_pose, frame_info, camera_params, timestamp_ms, consistency)
 
             out_planes[p] = dict(img_points=pl_img_points, ids=pl_ids, recovered_ids=recovered_ids)
         out_individual = dict(zip(('img_points', 'ids'), filter_detections(img_points, ids, self._individual_marker_ids)))
@@ -922,10 +1088,10 @@ class Detector:
         self._last_detect_output = (out_planes, out_individual, unexpected, rejected)
         return self._last_detect_output
 
-    def _consistent_pose(self, board, corners, ids, frame_info, camera_params, min_num_markers, cache, history=(), unit_to_meters=1.):
-        key = freeze((board.getObjPoints(), board.getIds(), corners, ids, frame_info.get('timestamp_ms'), history, self.settings['pose_consistency'], min_num_markers, unit_to_meters, self.settings['undistort']))
+    def _consistent_pose(self, board, corners, ids, frame_info, camera_params, min_num_markers, cache, history=(), unit_to_meters=1., corner_history=(), temporal_checks=True):
+        key = freeze((board.getObjPoints(), board.getIds(), corners, ids, frame_info.get('timestamp_ms'), history, corner_history, temporal_checks, self.settings['pose_consistency'], min_num_markers, unit_to_meters, self.settings['undistort']))
         if key not in cache:
-            cache[key] = _consistent_pose(board, corners, ids, frame_info, camera_params, self.settings['pose_consistency'], min_num_markers, history, unit_to_meters)
+            cache[key] = _consistent_pose(board, corners, ids, frame_info, camera_params, self.settings['pose_consistency'], min_num_markers, history, unit_to_meters, corner_history, temporal_checks)
         return copy.deepcopy(cache[key])
 
     def _detect_markers(self, image: cv2.UMat):
