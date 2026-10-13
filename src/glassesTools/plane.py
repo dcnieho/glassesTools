@@ -155,7 +155,6 @@ class Plane(_MarkerAssembly):
         return super().get_aruco_board()
 
     def get_assembly_setup(self):
-        from . import aruco
         setup = super().get_assembly_setup()
         setup.is_planar = True
         return setup
