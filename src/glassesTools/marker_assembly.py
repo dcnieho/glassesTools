@@ -105,6 +105,12 @@ class MarkerAssembly:
         return image.copy()
 
     def _store_reference_image(self, path: str | pathlib.Path | None, im_size: int) -> np.ndarray:
+        image = self._generate_reference_image(im_size)
+        if path:
+            cv2.imwrite(str(path), image)
+        return image
+
+    def _generate_reference_image(self, im_size: int) -> np.ndarray:
         # set up a white canvas
         tile_size = im_size // 2
         canvas = np.full((tile_size * 2, tile_size * 2, 3), 255, dtype=np.uint8)
@@ -243,8 +249,6 @@ class MarkerAssembly:
                     cv2.putText(canvas, axis_label, label_origin, cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, text_thickness, cv2.LINE_AA)
         cv2.line(canvas, (tile_size, 0), (tile_size, tile_size * 2 - 1), (192, 192, 192), 1)
         cv2.line(canvas, (0, tile_size), (tile_size * 2 - 1, tile_size), (192, 192, 192), 1)
-        if path:
-            cv2.imwrite(str(path), canvas)
         return canvas
 
     def get_marker_IDs(self) -> dict[str|int,list[marker.MarkerID]]:

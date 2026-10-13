@@ -137,7 +137,7 @@ class Plane(_MarkerAssembly):
         setup.is_planar = True
         return setup
 
-    def _store_reference_image(self, path: str | pathlib.Path | None, im_size: int) -> np.ndarray:
+    def _generate_reference_image(self, im_size: int) -> np.ndarray:
         # get image with markers
         bbox_extents = [self.bbox[2]-self.bbox[0], math.fabs(self.bbox[3]-self.bbox[1])]  # math.fabs to deal with bboxes where (-,-) is bottom left
         aspect_ratio = bbox_extents[0]/bbox_extents[1]
@@ -208,9 +208,6 @@ class Plane(_MarkerAssembly):
             img = cv2.warpAffine(marker_image, transformation, (img.shape[1], img.shape[0]), img, flags=cv2.INTER_LINEAR, borderMode=cv2.BORDER_TRANSPARENT)
 
         img = cv2.cvtColor(img, cv2.COLOR_GRAY2BGR)
-        if path:
-            cv2.imwrite(path, img)
-
         return img
 
 
@@ -261,9 +258,9 @@ class TargetPlane(Plane):
     def get_target_IDs(self) -> list[int]:
         return list(self.targets.keys())
 
-    def _store_reference_image(self, path: str | pathlib.Path | None, im_size: int) -> np.ndarray:
+    def _generate_reference_image(self, im_size: int) -> np.ndarray:
         # first call superclass method to generate image without targets
-        img = super()._store_reference_image(path, im_size)
+        img = super()._generate_reference_image(im_size)
         height,width = img.shape[:2]
 
         # add targets
@@ -283,8 +280,5 @@ class TargetPlane(Plane):
             # 2. draw
             clr = tuple([int(i*255) for i in (colors.to_rgb(self.targets[key].color)[::-1] if self.targets[key].color else (0.,0.,1.))])  # need BGR color ordering
             drawing.openCVCircle(img, circlePos, 15, clr, -1, subPixelFac)
-
-        if path:
-            cv2.imwrite(path, img)
 
         return img
