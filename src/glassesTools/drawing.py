@@ -56,6 +56,9 @@ def arucoDetectedMarkers(img,corners,ids,border_color=(0,255,0), draw_IDs = True
     cornerColor[1], cornerColor[2] = cornerColor[2], cornerColor[1]     # corner color just swap G and R
 
     draw_IDs = draw_IDs and (ids is not None) and len(ids)>0
+    font = cv2.FONT_HERSHEY_SIMPLEX
+    scale = 0.8
+    thickness = 2
     for i in range(0, len(corners)):
         corner = corners[i][0]
         # draw marker sides
@@ -74,5 +77,12 @@ def arucoDetectedMarkers(img,corners,ids,border_color=(0,255,0), draw_IDs = True
 
         # draw IDs if wanted
         if draw_IDs and ids is not None:
-            c = marker.corners_intersection(corner)
-            cv2.putText(img, str(ids[i]), tuple(c.astype(np.intc)), cv2.FONT_HERSHEY_SIMPLEX, 0.6, textColor, 2, lineType=cv2.LINE_AA)
+            # get text size
+            text = str(ids[i])
+            (width, height), baseline = cv2.getTextSize(text, font, scale, thickness)
+            # get marker center
+            center = marker.corners_intersection(corner).astype(int)
+            # determine text origin so its centered on the marker
+            origin = (int(center[0] - width / 2), int(center[1] + (height - baseline) / 2))
+
+            cv2.putText(img, text, origin, font, scale, textColor, thickness, lineType=cv2.LINE_AA)
