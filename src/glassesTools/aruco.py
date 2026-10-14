@@ -75,7 +75,7 @@ _parameter_order = {
     'refine': ('minRepDistance', 'errorCorrectionRate', 'checkAllOrders'),
 }
 
-def parameter_defaults(which: str) -> dict:
+def _build_parameter_defaults(which: str) -> dict:
     cls = {'detector': cv2.aruco.DetectorParameters, 'refine': cv2.aruco.RefineParameters}[which]
     params = cls()
     values = {name: getattr(params, name) for name in dir(params) if not name.startswith('_') and type(getattr(params, name)) in (bool, int, float)}
@@ -85,6 +85,11 @@ def parameter_defaults(which: str) -> dict:
     # reorder: any parameters not in the _parameter_order list are appended at the end in alphabetical order
     names = (*_parameter_order[which], *values)
     return {name: values[name] for name in names if name in values}
+
+_parameter_defaults = {which: _build_parameter_defaults(which) for which in _parameter_order}
+
+def parameter_defaults(which: str) -> dict:
+    return _parameter_defaults[which].copy()
 
 def settings_defaults() -> dict:
     return dict(detector_params=parameter_defaults('detector'),
