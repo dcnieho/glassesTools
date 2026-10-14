@@ -57,15 +57,34 @@ family_to_str = {
     9: ('DICT_ARUCO_MIP_36H12', False),
 }
 
+_parameter_order = {
+    'detector': (
+        'adaptiveThreshWinSizeMin', 'adaptiveThreshWinSizeMax', 'adaptiveThreshWinSizeStep',
+        'adaptiveThreshConstant', 'minMarkerPerimeterRate', 'maxMarkerPerimeterRate',
+        'polygonalApproxAccuracyRate', 'minCornerDistanceRate', 'minDistanceToBorder',
+        'minMarkerDistanceRate', 'minGroupDistance', 'cornerRefinementMethod',
+        'cornerRefinementWinSize', 'relativeCornerRefinmentWinSize',
+        'cornerRefinementMaxIterations', 'cornerRefinementMinAccuracy', 'markerBorderBits',
+        'perspectiveRemovePixelPerCell', 'perspectiveRemoveIgnoredMarginPerCell',
+        'maxErroneousBitsInBorderRate', 'minOtsuStdDev', 'errorCorrectionRate',
+        'aprilTagQuadDecimate', 'aprilTagQuadSigma', 'aprilTagMinClusterPixels',
+        'aprilTagMaxNmaxima', 'aprilTagCriticalRad', 'aprilTagMaxLineFitMse',
+        'aprilTagMinWhiteBlackDiff', 'aprilTagDeglitch', 'detectInvertedMarker',
+        'useAruco3Detection', 'minSideLengthCanonicalImg', 'minMarkerLengthRatioOriginalImg',
+    ),
+    'refine': ('minRepDistance', 'errorCorrectionRate', 'checkAllOrders'),
+}
+
 def parameter_defaults(which: str) -> dict:
     cls = {'detector': cv2.aruco.DetectorParameters, 'refine': cv2.aruco.RefineParameters}[which]
     params = cls()
-    values = {name: getattr(params, name) for name in dir(params)
-                if not name.startswith('_') and type(getattr(params, name)) in (bool, int, float)}
+    values = {name: getattr(params, name) for name in dir(params) if not name.startswith('_') and type(getattr(params, name)) in (bool, int, float)}
     # override default corner refinement method to subpixel
     if which == 'detector':
         values['cornerRefinementMethod'] = cv2.aruco.CORNER_REFINE_SUBPIX
-    return values
+    # reorder: any parameters not in the _parameter_order list are appended at the end in alphabetical order
+    names = (*_parameter_order[which], *values)
+    return {name: values[name] for name in names if name in values}
 
 def settings_defaults() -> dict:
     return dict(detector_params=parameter_defaults('detector'),
