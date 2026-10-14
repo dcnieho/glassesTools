@@ -18,7 +18,6 @@ class Recording:
     default_json_file_name      : typing.ClassVar[str] = 'recording_info.json'
 
     name                        : str
-    type                        : Type
     video_file                  : str
     source_directory            : pathlib.Path
     working_directory           : pathlib.Path  = ""
@@ -40,12 +39,8 @@ class Recording:
         if path.is_dir():
             path /= Recording.default_json_file_name
         kwds = json.load(path)
-        # roundtrip the enum
-        if 'type' in kwds:
-            kwds['type'] = Type(kwds['type'])
-        # backwards compat
-        if 'type' not in kwds:
-            kwds['type'] = Type.External
+        # backwards compat: files may include the subtype. This is no longer used, remove it if present
+        kwds.pop('type', None)
         return Recording(**kwds, working_directory=path.parent)
 
 
