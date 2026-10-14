@@ -122,6 +122,9 @@ class MarkerAssembly:
                 borderBits=self.aruco_settings['detector_params']['markerBorderBits'])
             for marker_id in self.marker_corners
         }
+        coverage_source = np.full((marker_render_size, marker_render_size), 255, dtype=np.uint8)
+        marker_edge = marker_render_size - 1
+        source = np.array([[0, 0], [marker_edge, 0], [marker_edge, marker_edge], [0, marker_edge]], dtype=np.float32)
         # get marker positions
         corners_by_id = {}
         all_points = []
@@ -134,6 +137,13 @@ class MarkerAssembly:
         all_points = np.concatenate(all_points)
         target = (all_points.min(axis=0) + all_points.max(axis=0)) / 2
         relative_points = all_points - target
+        # get marker normals and corner positions
+        marker_geometry = {}
+        for marker_id, corners_3d in corners_by_id.items():
+            normal = np.cross(corners_3d[1] - corners_3d[0], corners_3d[3] - corners_3d[0])
+            normal_length = np.linalg.norm(normal)
+            normal = None if normal_length == 0 else normal / normal_length
+            marker_geometry[marker_id] = (corners_3d - target, normal)
         max_extent = max(float(np.ptp(all_points, axis=0).max()), 1e-6)
         # determine camera views (positions and orientations) for each of the four panels
         isometric_elevation = np.deg2rad(60)
@@ -155,6 +165,7 @@ class MarkerAssembly:
         model_origin = np.zeros(3, dtype=np.float32)
         axis_world_length = max_extent * 0.1
         axis_fit_points = np.vstack((model_origin, np.eye(3) * axis_world_length))
+        fit_relative_points = np.concatenate((relative_points, axis_fit_points - target))
         # set up projection
         tan_half_fov = np.tan(np.deg2rad(55 / 2))
         half_canvas = max(tile_size / 2 - 8, 1)
@@ -162,7 +173,6 @@ class MarkerAssembly:
         # render each view
         for view_idx, (camera_forward, camera_up, forward_axis) in enumerate(views):
             # compute model space points and project into camera space
-            fit_relative_points = np.concatenate((relative_points, axis_fit_points - target))
             camera_forward = camera_forward / np.linalg.norm(camera_forward)
             right = np.cross(camera_forward, camera_up)
             right /= np.linalg.norm(right)
@@ -175,15 +185,12 @@ class MarkerAssembly:
             min_distance = -float(camera_points[:, 2].min()) + max_extent * 0.1
             camera_distance = max(float(fit_distance), min_distance, max_extent * 0.5)
             visible = []
-            for marker_id, corners_3d in corners_by_id.items():
+            for marker_id, (relative_corners, normal) in marker_geometry.items():
                 # determine if marker is facing camera
-                normal = np.cross(corners_3d[1] - corners_3d[0], corners_3d[3] - corners_3d[0])
-                normal_length = np.linalg.norm(normal)
-                if normal_length == 0 or np.dot(normal / normal_length, camera_forward) <= 1e-6:
+                if normal is None or np.dot(normal, camera_forward) <= 1e-6:
                     # not facing camera, so skip it
                     continue
                 # project marker corners into camera space and then into image space
-                relative_corners = corners_3d - target
                 camera_x = relative_corners @ right
                 camera_y = relative_corners @ down
                 camera_z = camera_distance + relative_corners @ camera_forward
@@ -196,14 +203,23 @@ class MarkerAssembly:
                 x_slice = slice((view_idx % 2) * tile_size, (view_idx % 2 + 1) * tile_size)
                 tile = canvas[y_slice, x_slice]
                 for _, marker_id, projected in sorted(visible, key=lambda entry: entry[0], reverse=True):
+                    x_min = max(0, int(np.floor(projected[:, 0].min())) - 2)
+                    y_min = max(0, int(np.floor(projected[:, 1].min())) - 2)
+                    x_max = min(tile_size, int(np.ceil(projected[:, 0].max())) + 3)
+                    y_max = min(tile_size, int(np.ceil(projected[:, 1].max())) + 3)
+                    if x_min >= x_max or y_min >= y_max:
+                        continue
+
                     destination = projected.astype(np.float32)
-                    marker_edge = marker_render_size - 1
-                    source = np.array([[0, 0], [marker_edge, 0], [marker_edge, marker_edge], [0, marker_edge]], dtype=np.float32)
+                    destination[:, 0] -= x_min
+                    destination[:, 1] -= y_min
                     transform = cv2.getPerspectiveTransform(source, destination)
-                    warped = cv2.warpPerspective(marker_images[marker_id], transform, (tile_size, tile_size), flags=cv2.INTER_AREA, borderValue=255)
-                    coverage = cv2.warpPerspective(np.full((marker_render_size, marker_render_size), 255, np.uint8), transform, (tile_size, tile_size), flags=cv2.INTER_AREA, borderValue=0)
+                    roi_size = (x_max - x_min, y_max - y_min)
+                    warped = cv2.warpPerspective(marker_images[marker_id], transform, roi_size, flags=cv2.INTER_AREA, borderValue=255)
+                    coverage = cv2.warpPerspective(coverage_source, transform, roi_size, flags=cv2.INTER_AREA, borderValue=0)
                     alpha = coverage.astype(np.float32)[..., None] / 255
-                    tile[:] = np.clip(tile.astype(np.float32) * (1 - alpha) + warped.astype(np.float32)[..., None] * alpha, 0, 255).astype(np.uint8)
+                    region = tile[y_min:y_max, x_min:x_max]
+                    region[:] = np.clip(region.astype(np.float32) * (1 - alpha) + warped.astype(np.float32)[..., None] * alpha, 0, 255).astype(np.uint8)
             # draw axes and labels. Axes originate at the model origin
             if tile_size >= 32:
                 panel_x = (view_idx % 2) * tile_size
