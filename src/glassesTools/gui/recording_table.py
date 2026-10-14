@@ -197,6 +197,9 @@ class RecordingTable:
     def font_changed(self):
         self._et_widget_drawer.eye_tracker_label_width = None
 
+    def request_sort(self):
+        self.require_sort = True
+
     def set_local_item_remover(self):
         self.item_remove_callback = self.remove_recording
 
