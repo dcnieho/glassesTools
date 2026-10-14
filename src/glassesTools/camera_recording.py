@@ -100,7 +100,12 @@ def do_import(rec_info: Recording, cam_cal_file: str|pathlib.Path=None, copy_vid
 
     # store recording info to folder
     if source_dir_as_relative_path:
-        rec_info.source_directory = pathlib.Path(os.path.relpath(rec_info.source_directory,rec_info.working_directory))
+        try:
+            rec_info.source_directory = pathlib.Path(os.path.relpath(rec_info.source_directory, rec_info.working_directory))
+        except ValueError:
+            # Computing the relative path failed, fall back to absolute path
+            # A possible reason is that relative paths cannot cross drive boundaries on Windows
+            rec_info.source_directory = pathlib.Path(rec_info.source_directory).resolve()
     rec_info.store_as_json(rec_info.working_directory)
 
     return rec_info

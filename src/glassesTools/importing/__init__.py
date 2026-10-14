@@ -221,7 +221,13 @@ def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame|None, frame_ts: pd.
 
     # store rec info
     if source_dir_as_relative_path:
-        rec_info.source_directory = pathlib.Path(os.path.relpath(rec_info.source_directory,output_dir))
+        try:
+            rec_info.source_directory = pathlib.Path(os.path.relpath(rec_info.source_directory, output_dir))
+        except ValueError:
+            # Computing the relative path failed, fall back to absolute path
+            # A possible reason is that relative paths cannot cross drive boundaries on Windows
+            rec_info.source_directory = pathlib.Path(rec_info.source_directory).resolve()
+
     # if duration not known, fill it
     if not rec_info.duration and (gaze is not None or frame_ts is not None):
         # make a reasonable estimate of duration
