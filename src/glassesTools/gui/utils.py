@@ -60,7 +60,7 @@ def draw_process_state(state: process_pool.State, have_hover_popup=True, progres
             imgui.text_colored(colors.warning, ifa6.ICON_FA_HAND)
             hover_text = 'Canceled'
         case process_pool.State.Failed:
-            imgui.text_colored(colors.error_bright, ifa6.ICON_FA_TRIANGLE_EXCLAMATION)
+            imgui.text_colored(colors.error_bright, ifa6.ICON_FA_CIRCLE_XMARK)
             hover_text = 'Failed'
     if have_hover_popup:
         draw_hover_text(hover_text, text='')
