@@ -8,40 +8,44 @@ class Type(Enum):
     Interval    = auto()
 
 class EventType(utils.AutoName):
-    Validate    = auto()    # interval to be used for running glassesValidator
-    Sync_Camera = auto()    # point to be used for synchronizing different cameras
-    Sync_ET_Data= auto()    # episode to be used for synchronization of eye tracker data to scene camera (e.g. using VOR)
-    Trial       = auto()    # episode for which to map gaze to plane(s): output for files to be provided to user
-    Target      = auto()    # episode indicating when a specific target is being looked at
-    Fixation    = auto()    # episode indicating a fixation (e.g. detected by I2MC)
+    Validate            = auto()    # interval to be used for running glassesValidator
+    Sync_Camera         = auto()    # point to be used for synchronizing different cameras. When offsets are also used, this is interpreted as the sync event onset
+    Sync_Camera_Offset  = auto()    # point marking the disappearance transition for camera synchronization
+    Sync_ET_Data        = auto()    # episode to be used for synchronization of eye tracker data to scene camera (e.g. using VOR)
+    Trial               = auto()    # episode for which to map gaze to plane(s): output for files to be provided to user
+    Target              = auto()    # episode indicating when a specific target is being looked at
+    Fixation            = auto()    # episode indicating a fixation (e.g. detected by I2MC)
 event_types = [x for x in EventType]
 json.register_type(json.TypeEntry(EventType,'__enum.Event__', utils.enum_val_2_str, lambda x: getattr(EventType, x.split('.')[1])))
 
 type_map = {
-    EventType.Validate      : Type.Interval,
-    EventType.Sync_Camera   : Type.Point,
-    EventType.Sync_ET_Data  : Type.Interval,
-    EventType.Trial         : Type.Interval,
-    EventType.Target        : Type.Interval,
-    EventType.Fixation      : Type.Interval,
+    EventType.Validate          : Type.Interval,
+    EventType.Sync_Camera       : Type.Point,
+    EventType.Sync_Camera_Offset: Type.Point,
+    EventType.Sync_ET_Data      : Type.Interval,
+    EventType.Trial             : Type.Interval,
+    EventType.Target            : Type.Interval,
+    EventType.Fixation          : Type.Interval,
 }
 
-internal_types = {EventType.Target, EventType.Fixation}
+internal_types = {EventType.Target, EventType.Fixation, EventType.Sync_Camera_Offset}
 
 tooltip_map = {
-    EventType.Validate      : 'Validation episode',
-    EventType.Sync_Camera   : 'Camera sync point',
-    EventType.Sync_ET_Data  : 'Eye tracker synchronization episode',
-    EventType.Trial         : 'Trial episode',
-    EventType.Target        : 'Target episode',
-    EventType.Fixation      : 'Fixation episode',
+    EventType.Validate          : 'Validation episode',
+    EventType.Sync_Camera       : 'Camera sync point',
+    EventType.Sync_Camera_Offset: 'Camera sync offset point',
+    EventType.Sync_ET_Data      : 'Eye tracker synchronization episode',
+    EventType.Trial             : 'Trial episode',
+    EventType.Target            : 'Target episode',
+    EventType.Fixation          : 'Fixation episode',
 }
 
 default_hotkeys = {
-    EventType.Validate      : 'v',
-    EventType.Sync_Camera   : 'c',
-    EventType.Sync_ET_Data  : 'e',
-    EventType.Trial         : 't',
+    EventType.Validate          : 'v',
+    EventType.Sync_Camera       : 'c',
+    EventType.Sync_Camera_Offset: 'o',
+    EventType.Sync_ET_Data      : 'e',
+    EventType.Trial             : 't',
 }
 
 @dataclasses.dataclass
