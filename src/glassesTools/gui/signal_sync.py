@@ -85,7 +85,7 @@ class GUI:
 
         params = hello_imgui.RunnerParams()
         params.app_window_params.restore_previous_geometry = False
-        params.ini_folder_type = hello_imgui.IniFolderType.temp_folder  # so we don't have endless ini files in the app folder, since we don't use them anyway (see previous line, restore_previous_geometry = False)
+        params.ini_disable = True
         params.app_window_params.hidden = True
         params.fps_idling.fps_idle = 0
         params.callbacks.show_gui  = self._gui_func
