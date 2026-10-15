@@ -491,7 +491,8 @@ class RecordingTable:
 class EyeTrackerName:
     def __init__(self):
         self._device_names: set[str] = set(('Camera',)) | set(et.value for et in eyetracker.EyeTracker)
-        self.eye_tracker_label_width: float = None
+        self.eye_tracker_label_width: float | None = None
+        self._eye_tracker_label_scale: float | None = None
 
     def draw(self, rec: recording.Recording|camera_recording.Recording, align=False):
         imgui.push_style_var(imgui.StyleVar_.frame_border_size, 0)
@@ -516,12 +517,14 @@ class EyeTrackerName:
         lum = _color_luminance(imgui.ImColor(*clr))
         txt_clr = (1.,1.,1.,1.) if lum<0.5 else (0.,0.,0.,1.)
 
-        x_padding = 4
-        if self.eye_tracker_label_width is None or need_calc_lbl_widths:
+        dpi_scale = imgui.get_window_dpi_scale()
+        x_padding = 4 * dpi_scale
+        if self.eye_tracker_label_width is None or need_calc_lbl_widths or self._eye_tracker_label_scale != dpi_scale:
             self.eye_tracker_label_width = 0
             for lbl in self._device_names:
                 self.eye_tracker_label_width = max(self.eye_tracker_label_width, imgui.calc_text_size(lbl).x)
             self.eye_tracker_label_width += 2 * x_padding
+            self._eye_tracker_label_scale = dpi_scale
 
         iid         = imgui.get_id(et)
         label_size  = imgui.calc_text_size(et)
