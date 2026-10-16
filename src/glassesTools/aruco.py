@@ -11,6 +11,18 @@ from glassesTools.utils import freeze
 
 from . import annotation, drawing, marker, ocv, pose, transforms
 
+unit_to_meters = {
+    'm': 1.,
+    'cm': .01,
+    'mm': .001,
+    'in': .0254,
+    'inch': .0254,
+    'inches': .0254,
+    'ft': .3048,
+    'foot': .3048,
+    'feet': .3048,
+}
+
 default_dict = cv2.aruco.DICT_4X4_250
 
 dict_id_to_str: dict[int,str] = {getattr(cv2.aruco,k):k for k in ['DICT_4X4_50', 'DICT_4X4_100', 'DICT_4X4_250', 'DICT_4X4_1000', 'DICT_5X5_50', 'DICT_5X5_100', 'DICT_5X5_250', 'DICT_5X5_1000', 'DICT_6X6_50', 'DICT_6X6_100', 'DICT_6X6_250', 'DICT_6X6_1000', 'DICT_7X7_50', 'DICT_7X7_100', 'DICT_7X7_250', 'DICT_7X7_1000', 'DICT_ARUCO_ORIGINAL', 'DICT_APRILTAG_16H5', 'DICT_APRILTAG_25H9', 'DICT_APRILTAG_36H10', 'DICT_APRILTAG_36H11', 'DICT_ARUCO_MIP_36H12']}
@@ -983,11 +995,11 @@ class Detector:
     def add_assembly(self, name: str, setup: AssemblySetup, assembly_kind: str = 'assembly'):
         self._check_dict(setup.aruco_dict_id, assembly_kind)
         unit = (setup.unit or '').strip().lower()
-        unit_to_meters = {'m': 1., 'cm': .01, 'mm': .001}.get(unit)
+        unit_to_meters_factor = unit_to_meters.get(unit)
         consistency = self.settings['pose_consistency']
-        if consistency['enabled'] and consistency['temporal_enabled'] and unit_to_meters is None:
-            raise ValueError('Temporal ArUco pose consistency requires the assembly unit to be m, cm, or mm')
-        self._assembly_unit_to_meters[name] = unit_to_meters or 1.
+        if consistency['enabled'] and consistency['temporal_enabled'] and unit_to_meters_factor is None:
+            raise ValueError('Temporal ArUco pose consistency requires the assembly unit to be m, cm, mm, inches, or feet')
+        self._assembly_unit_to_meters[name] = unit_to_meters_factor or 1.
         self.assemblies[name] = setup
         marker_ids = {m.m_id for m in setup.marker_ids['assembly']}
         self._all_markers.update(marker_ids)
