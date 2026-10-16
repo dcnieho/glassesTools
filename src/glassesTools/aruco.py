@@ -11,6 +11,12 @@ from glassesTools.utils import freeze
 
 from . import annotation, drawing, marker, ocv, pose, transforms
 
+class DetectionOutput(typing.NamedTuple):
+    assemblies: dict[str, dict[str, typing.Any] | None]
+    individual: dict[str, typing.Any]
+    unexpected: dict[str, typing.Any]
+    rejected: tuple[np.ndarray, ...]
+
 unit_to_meters = {
     'm': 1.,
     'cm': .01,
@@ -990,7 +996,7 @@ class Detector:
 
         self._det: cv2.aruco.ArucoDetector|None                 = None
 
-        self._last_detect_output : tuple[dict[str,dict[str]],dict[str],dict[str],list[np.ndarray]] = {}
+        self._last_detect_result: DetectionOutput               = DetectionOutput({}, {'img_points': [], 'ids': None}, {'img_points': [], 'ids': None}, ())
 
     def add_assembly(self, name: str, setup: AssemblySetup, assembly_kind: str = 'assembly'):
         self._check_dict(setup.aruco_dict_id, assembly_kind)
@@ -1042,7 +1048,7 @@ class Detector:
         # create a detector with the requested settings
         self._det = cv2.aruco.ArucoDetector(cv2.aruco.getPredefinedDictionary(self.dictionary_id), detector_params, refine_params)
 
-    def detect_markers(self, image: cv2.UMat, frame_info: dict, camera_params: ocv.CameraParams, raw_detection=None) -> tuple:
+    def detect_markers(self, image: cv2.UMat, frame_info: dict, camera_params: ocv.CameraParams, raw_detection=None) -> DetectionOutput:
         if raw_detection is None:
             img_points, ids, rejected = self._detect_markers(image)
         else:
@@ -1050,7 +1056,7 @@ class Detector:
             if ids is not None:
                 ids = np.asarray(ids).reshape(-1)
         rejected = tuple(rejected)
-        out_planes = {}
+        out_assemblies = {}
         consistency = self.settings['pose_consistency']
         pose_cache = {}
         for p in self.assemblies:
@@ -1078,44 +1084,44 @@ class Detector:
                 self._corner_history_timestamp[p] = timestamp_ms
 
             # get the detections for this plane (that is, filter on expected marker IDs)
-            pl_img_points, pl_ids = filter_detections(img_points, ids, self._assembly_marker_ids[p])
-            if pl_ids is None or not len(pl_ids):
-                out_planes[p] = None
+            a_img_points, a_ids = filter_detections(img_points, ids, self._assembly_marker_ids[p])
+            if a_ids is None or not len(a_ids):
+                out_assemblies[p] = None
                 continue
 
-            corner_candidate_points = list(pl_img_points)
-            corner_candidate_ids = pl_ids.tolist()
+            corner_candidate_points = list(a_img_points)
+            corner_candidate_ids = a_ids.tolist()
             accepted_pose = None
-            refine_before_final_pose = self.settings['refine'] and len(pl_ids) >= self.assemblies[p].min_num_markers
+            refine_before_final_pose = self.settings['refine'] and len(a_ids) >= self.assemblies[p].min_num_markers
 
             # If consistency checking is enabled, we will filter out any detections that do not yield a consistent pose with the other detections. This also filters out duplicate detections.
             # If consistency checking is disabled, we will filter out any duplicate detections of the same marker.
             if consistency['enabled']:
-                selected, accepted_pose = self._consistent_pose(self.assemblies[p].aruco_board, pl_img_points, pl_ids, frame_info, camera_params, self.assemblies[p].min_num_markers, pose_cache, history, self._assembly_unit_to_meters[p], corner_history, temporal_checks=not refine_before_final_pose)
-                rejected += tuple(c for i, c in enumerate(pl_img_points) if i not in selected)
-                pl_img_points, pl_ids = [pl_img_points[i] for i in selected], pl_ids[selected]
+                selected, accepted_pose = self._consistent_pose(self.assemblies[p].aruco_board, a_img_points, a_ids, frame_info, camera_params, self.assemblies[p].min_num_markers, pose_cache, history, self._assembly_unit_to_meters[p], corner_history, temporal_checks=not refine_before_final_pose)
+                rejected += tuple(c for i, c in enumerate(a_img_points) if i not in selected)
+                a_img_points, a_ids = [a_img_points[i] for i in selected], a_ids[selected]
             else:
-                ok, kept, kept_ids, rejected_indices = filter_board_duplicates(self.assemblies[p].aruco_board, pl_img_points, pl_ids, frame_info, camera_params)
+                ok, kept, kept_ids, rejected_indices = filter_board_duplicates(self.assemblies[p].aruco_board, a_img_points, a_ids, frame_info, camera_params)
                 if ok:
-                    rejected += tuple(pl_img_points[i] for i in rejected_indices)
-                    pl_img_points, pl_ids = kept, kept_ids
+                    rejected += tuple(a_img_points[i] for i in rejected_indices)
+                    a_img_points, a_ids = kept, kept_ids
             recovered_ids = None
 
             # Preserve the existing recovery threshold independently of the on/off switch.
             if refine_before_final_pose:
-                pl_img_points, pl_ids, rejected, recovered_ids = self._refine_detection(image, pl_img_points, pl_ids, rejected, self.assemblies[p].aruco_board, frame_info, camera_params)
+                a_img_points, a_ids, rejected, recovered_ids = self._refine_detection(image, a_img_points, a_ids, rejected, self.assemblies[p].aruco_board, frame_info, camera_params)
                 rejected = tuple(rejected)
-                if pl_ids is not None and len(pl_ids):
-                    corner_candidate_points.extend(pl_img_points)
-                    corner_candidate_ids.extend(pl_ids.tolist())
+                if a_ids is not None and len(a_ids):
+                    corner_candidate_points.extend(a_img_points)
+                    corner_candidate_ids.extend(a_ids.tolist())
 
                 # Validate the refined set, including newly recovered markers if any
                 if consistency['enabled']:
-                    selected, accepted_pose = self._consistent_pose(self.assemblies[p].aruco_board, pl_img_points, pl_ids, frame_info, camera_params, self.assemblies[p].min_num_markers, pose_cache, history, self._assembly_unit_to_meters[p], corner_history, temporal_checks=True)
-                    rejected += tuple(c for i, c in enumerate(pl_img_points) if i not in selected)
-                    pl_img_points, pl_ids = [pl_img_points[i] for i in selected], pl_ids[selected]
+                    selected, accepted_pose = self._consistent_pose(self.assemblies[p].aruco_board, a_img_points, a_ids, frame_info, camera_params, self.assemblies[p].min_num_markers, pose_cache, history, self._assembly_unit_to_meters[p], corner_history, temporal_checks=True)
+                    rejected += tuple(c for i, c in enumerate(a_img_points) if i not in selected)
+                    a_img_points, a_ids = [a_img_points[i] for i in selected], a_ids[selected]
                     if recovered_ids is not None:
-                        recovered_ids = recovered_ids[np.isin(recovered_ids, pl_ids)]
+                        recovered_ids = recovered_ids[np.isin(recovered_ids, a_ids)]
 
             # We got a good pose, record in history
             if (consistency['enabled'] and consistency['temporal_enabled'] and timestamp_ms is not None and accepted_pose is not None and accepted_pose[1] is not None):
@@ -1125,16 +1131,16 @@ class Detector:
             # Recording corner history, including for markers not used for pose because too jittery, so that we can keep determining jitter on the freshest data
             if (consistency['enabled'] and consistency['temporal_corner_enabled'] and timestamp_ms is not None
                     and accepted_pose is not None and accepted_pose[1] is not None
-                    and pl_ids is not None
-                    and len(pl_ids) >= self.assemblies[p].min_num_markers):
+                    and a_ids is not None
+                    and len(a_ids) >= self.assemblies[p].min_num_markers):
                 # N.B. raw detections are fed in, but are filtered on facing and reprojection error inside the function
                 _update_temporal_corner_history(corner_history, self.assemblies[p].aruco_board, corner_candidate_points, np.asarray(corner_candidate_ids), accepted_pose, frame_info, camera_params, timestamp_ms, consistency)
 
-            out_planes[p] = dict(img_points=pl_img_points, ids=pl_ids, recovered_ids=recovered_ids)
+            out_assemblies[p] = dict(img_points=a_img_points, ids=a_ids, recovered_ids=recovered_ids)
         out_individual = dict(zip(('img_points', 'ids'), filter_detections(img_points, ids, self._individual_marker_ids)))
         unexpected = dict(zip(('img_points', 'ids'), filter_detections(img_points, ids, self._all_markers, keep_expected=False)))
-        self._last_detect_output = (out_planes, out_individual, unexpected, rejected)
-        return self._last_detect_output
+        self._last_detect_result = DetectionOutput(out_assemblies, out_individual, unexpected, rejected)
+        return self._last_detect_result
 
     def _consistent_pose(self, board, corners, ids, frame_info, camera_params, min_num_markers, cache, history=(), unit_to_meters=1., corner_history=(), temporal_checks=True):
         key = freeze((board.getObjPoints(), board.getIds(), corners, ids, frame_info.get('timestamp_ms'), history, corner_history, temporal_checks, self.settings['pose_consistency'], min_num_markers, unit_to_meters, self.settings['undistort']))
@@ -1157,46 +1163,46 @@ class Detector:
     def _filter_detections(self, img_points: list[np.ndarray], ids: np.ndarray, expected_ids: list[np.ndarray], keep_expected=True):
         return filter_detections(img_points, ids, expected_ids, keep_expected)
 
-    def get_matching_image_assembly_points(self, assembly_name: str, detect_tuple=None):
-        if detect_tuple is None:
-            detect_tuple = self._last_detect_output
-        if assembly_name not in detect_tuple[0] or not detect_tuple[0][assembly_name] or detect_tuple[0][assembly_name]['ids'] is None or not detect_tuple[0][assembly_name]['img_points']:
+    def get_matching_image_assembly_points(self, assembly_name: str, detect_result: DetectionOutput | None = None):
+        if detect_result is None:
+            detect_result = self._last_detect_result
+        if assembly_name not in detect_result.assemblies or not detect_result.assemblies[assembly_name] or detect_result.assemblies[assembly_name]['ids'] is None or not detect_result.assemblies[assembly_name]['img_points']:
             return None, None
         setup = self.assemblies[assembly_name]
-        objP, imgP = setup.aruco_board.matchImagePoints(detect_tuple[0][assembly_name]['img_points'], detect_tuple[0][assembly_name]['ids'])
+        objP, imgP = setup.aruco_board.matchImagePoints(detect_result.assemblies[assembly_name]['img_points'], detect_result.assemblies[assembly_name]['ids'])
         if imgP is None or int(imgP.shape[0]/4)<setup.min_num_markers:
             return None, None
         return objP, imgP
 
-    def get_individual_marker_points(self, marker_id: int, detect_tuple=None):
-        if detect_tuple is None:
-            detect_tuple = self._last_detect_output
-        if detect_tuple[1]['ids'] is None or not detect_tuple[1]['img_points'] or marker_id not in detect_tuple[1]['ids']:
+    def get_individual_marker_points(self, marker_id: int, detect_result: DetectionOutput | None = None):
+        if detect_result is None:
+            detect_result = self._last_detect_result
+        if detect_result.individual['ids'] is None or not detect_result.individual['img_points'] or marker_id not in detect_result.individual['ids']:
             return None, None
-        img_points = detect_tuple[1]['img_points'][detect_tuple[1]['ids'].tolist().index(marker_id)]
+        img_points = detect_result.individual['img_points'][detect_result.individual['ids'].tolist().index(marker_id)]
         return self._indiv_marker_points[marker_id], img_points
 
-    def visualize(self, frame, detect_tuple=None, sub_pixel_fac=8, assembly_marker_color=(0,255,0), recovered_assembly_marker_color=(255,255,0), individual_marker_color=(255,0,255), unexpected_marker_color=(150,253,253), rejected_marker_color=None):
-        if detect_tuple is None:
-            detect_tuple = self._last_detect_output
+    def visualize(self, frame, detect_result: DetectionOutput | None = None, sub_pixel_fac=8, assembly_marker_color=(0,255,0), recovered_assembly_marker_color=(255,255,0), individual_marker_color=(255,0,255), unexpected_marker_color=(150,253,253), rejected_marker_color=None):
+        if detect_result is None:
+            detect_result = self._last_detect_result
 
         # for debug, can draw rejected markers on frame
         if rejected_marker_color is not None:
-            cv2.aruco.drawDetectedMarkers(frame, detect_tuple[3], None, borderColor=rejected_marker_color)
+            cv2.aruco.drawDetectedMarkers(frame, detect_result.rejected, None, borderColor=rejected_marker_color)
 
         # draw detected markers on the frame
         if assembly_marker_color is not None:
-            for p in detect_tuple[0]:
+            for p in detect_result.assemblies:
                 special_highlight = []
-                if not detect_tuple[0][p] or 'ids' not in detect_tuple[0][p] or len(detect_tuple[0][p]['ids'])==0:
+                if not detect_result.assemblies[p] or 'ids' not in detect_result.assemblies[p] or len(detect_result.assemblies[p]['ids'])==0:
                     continue
-                if recovered_assembly_marker_color is not None and detect_tuple[0][p]['recovered_ids'] is not None and len(detect_tuple[0][p]['recovered_ids'])>0:
-                    special_highlight = [detect_tuple[0][p]['recovered_ids'],recovered_assembly_marker_color]
-                drawing.arucoDetectedMarkers(frame, detect_tuple[0][p]['img_points'], detect_tuple[0][p]['ids'], border_color=assembly_marker_color, sub_pixel_fac=sub_pixel_fac, special_highlight=special_highlight)
-        if individual_marker_color is not None and detect_tuple[1]['ids'] is not None and len(detect_tuple[1]['ids']>0):
-            drawing.arucoDetectedMarkers(frame, detect_tuple[1]['img_points'], detect_tuple[1]['ids'], border_color=individual_marker_color, sub_pixel_fac=sub_pixel_fac)
-        if unexpected_marker_color is not None and detect_tuple[2]['ids'] is not None and len(detect_tuple[2]['ids']>0):
-            drawing.arucoDetectedMarkers(frame, detect_tuple[2]['img_points'], detect_tuple[2]['ids'], border_color=unexpected_marker_color, sub_pixel_fac=sub_pixel_fac)
+                if recovered_assembly_marker_color is not None and detect_result.assemblies[p]['recovered_ids'] is not None and len(detect_result.assemblies[p]['recovered_ids'])>0:
+                    special_highlight = [detect_result.assemblies[p]['recovered_ids'],recovered_assembly_marker_color]
+                drawing.arucoDetectedMarkers(frame, detect_result.assemblies[p]['img_points'], detect_result.assemblies[p]['ids'], border_color=assembly_marker_color, sub_pixel_fac=sub_pixel_fac, special_highlight=special_highlight)
+        if individual_marker_color is not None and detect_result.individual['ids'] is not None and len(detect_result.individual['ids']>0):
+            drawing.arucoDetectedMarkers(frame, detect_result.individual['img_points'], detect_result.individual['ids'], border_color=individual_marker_color, sub_pixel_fac=sub_pixel_fac)
+        if unexpected_marker_color is not None and detect_result.unexpected['ids'] is not None and len(detect_result.unexpected['ids']>0):
+            drawing.arucoDetectedMarkers(frame, detect_result.unexpected['img_points'], detect_result.unexpected['ids'], border_color=unexpected_marker_color, sub_pixel_fac=sub_pixel_fac)
 
 class Manager:
     # Consolidates marker assemblies, individual markers and detector settings into a minimal
@@ -1360,10 +1366,10 @@ class Manager:
         if assembly_name not in self._assembly_to_detector:
             raise ValueError(f'The marker assembly {assembly_name} is not known')
         aruco_dict_id = self._assembly_to_detector[assembly_name]
-        detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, frame, frame_info, camera_parameters)
-        if not detect_tuple[0] or assembly_name not in detect_tuple[0] or not detect_tuple[0][assembly_name]:
+        detect_result = self._get_detector_cache(aruco_dict_id, frame_idx, frame, frame_info, camera_parameters)
+        if not detect_result.assemblies or assembly_name not in detect_result.assemblies or not detect_result.assemblies[assembly_name]:
             return None
-        obj, img = self._detectors[aruco_dict_id].get_matching_image_assembly_points(assembly_name, detect_tuple)
+        obj, img = self._detectors[aruco_dict_id].get_matching_image_assembly_points(assembly_name, detect_result)
         if obj is None or img is None:
             return None
         context = self._working_set.contexts[self._detectors[aruco_dict_id].settings['undistort']]
@@ -1374,11 +1380,11 @@ class Manager:
         if mark not in self.individual_markers:
             raise ValueError(f'The individual marker {marker.marker_ID_to_str(mark)} is not known')
         detector_id = self._individual_to_detector[mark]
-        detect_tuple = self._get_detector_cache(detector_id, frame_idx, frame, frame_info, camera_parameters)
-        if not detect_tuple[1] or detect_tuple[1]['ids'] is None or mark.m_id not in detect_tuple[1]['ids']:
+        detect_result = self._get_detector_cache(detector_id, frame_idx, frame, frame_info, camera_parameters)
+        if not detect_result.individual or detect_result.individual['ids'] is None or mark.m_id not in detect_result.individual['ids']:
             return None
         detector = self._detectors[detector_id]
-        obj, img = detector.get_individual_marker_points(mark.m_id, detect_tuple)
+        obj, img = detector.get_individual_marker_points(mark.m_id, detect_result)
         if img is None:
             return None
         context = self._working_set.contexts[self._detectors[detector_id].settings['undistort']]
@@ -1399,15 +1405,15 @@ class Manager:
             self._working_set.detector_results[detector_id] = detector.detect_markers(context.image, context.frame_info, context.camera_params, self._working_set.detections[key])
         return self._working_set.detector_results[detector_id]
 
-    def _visualization_output(self, detector_id, detect_tuple):
+    def _visualization_output(self, detector_id: int, detect_result: DetectionOutput) -> DetectionOutput:
         context = self._working_set.contexts[self._detectors[detector_id].settings['undistort']]
         if not context.undistorted:
-            return detect_tuple
-        assemblies, individual, unexpected, rejected = copy.deepcopy(detect_tuple)
-        for points in [*assemblies.values(), individual, unexpected]:
+            return detect_result
+        output = copy.deepcopy(detect_result)
+        for points in [*output.assemblies.values(), output.individual, output.unexpected]:
             if points:
                 points['img_points'] = context.original_corners(points['img_points'])
-        return assemblies, individual, unexpected, context.original_corners(rejected)
+        return output._replace(rejected=context.original_corners(output.rejected))
 
     def _visualize_assembly(self, assembly_name: str, frame_idx: int, frame: np.ndarray, frame_info: dict):
         if assembly_name not in self._assembly_to_detector:
@@ -1719,12 +1725,12 @@ class ImageContext:
 class WorkingSet:
     """One frame's images/detections, plus a cached calibration/ROI remap."""
     def __init__(self):
-        self._frame_key = None
-        self.contexts = {}                   # Raw and undistorted image contexts.
-        self.detections = {}                 # Raw detections shared by compatible configurations.
-        self.detector_results: dict[int, tuple] = {}  # Filtered/refined results per detector wrapper.
-        self.visualized: set[int] = set()    # Detector wrappers already drawn on this frame.
-        self._map_cache = None
+        self._frame_key                                   = None
+        self.contexts                                     = {}      # Raw and undistorted image contexts.
+        self.detections                                   = {}      # Raw detections shared by compatible configurations.
+        self.detector_results: dict[int, DetectionOutput] = {}      # Filtered/refined results per detector wrapper.
+        self.visualized      : set[int]                   = set()   # Detector wrappers already drawn on this frame.
+        self._map_cache                                   = None
 
     def _reset_frame(self):
         self._frame_key = None
