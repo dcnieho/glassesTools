@@ -28,7 +28,7 @@ def compute(
     if not all((c in marker_intervals or c in marker_intervals.index.names for c in ('marker_interval','target','start_timestamp','end_timestamp'))):
         raise ValueError('Provided marker intervals should contain the following columns: [marker_interval, target, start_timestamp, end_timestamp]')
     if not isinstance(gazes, dict):
-        gazes = gaze_worldref.read_dict_from_file(gazes,validation_intervals)
+        gazes = gaze_worldref.read_dict_from_file(gazes, validation_intervals, ts_column_suffixes=['VOR',''])
     if not isinstance(poses, dict):
         poses = pose.read_list_dict_from_file(poses,validation_intervals, ts_column_suffixes=['VOR',''])
     # prep targets

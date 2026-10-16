@@ -131,7 +131,7 @@ def plot(
     if 'xpos' not in selected_intervals.columns or (other_intervals is not None and 'xpos' not in other_intervals.columns):
         # read input if needed
         if not isinstance(gazes,dict):
-            gazes = gaze_worldref.read_dict_from_file(gazes)
+            gazes = gaze_worldref.read_dict_from_file(gazes, ts_column_suffixes=['VOR',''])
         if 'xpos' not in selected_intervals.columns:
             samples_per_frame = {k:v for (k,v) in gazes.items() if k>=episode[0] and k<=episode[1]}
             has_ray = np.any(np.logical_not(np.isnan([s.gazePosPlane2D_vidPos_ray for v in gazes.values() for s in v])))

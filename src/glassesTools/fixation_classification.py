@@ -23,7 +23,7 @@ def from_plane_gaze(
 
     # read input if needed
     if not isinstance(gazes,dict):
-        gazes = gaze_worldref.read_dict_from_file(gazes)
+        gazes = gaze_worldref.read_dict_from_file(gazes, ts_column_suffixes=['VOR',''])
 
     # set I2MC options
     opt = {'xres': None, 'yres': None}  # dummy values for required options

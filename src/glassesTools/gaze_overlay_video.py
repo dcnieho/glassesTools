@@ -30,7 +30,7 @@ class VideoMaker:
         self.video_ts   = frame_timestamp_file if isinstance(frame_timestamp_file,timestamps.VideoTimestamps) else timestamps.VideoTimestamps(frame_timestamp_file)
         self.video      = ocv.CV2VideoReader(self.src_video, self.video_ts.timestamps)
         self.cam_params = camera_calibration_file if isinstance(camera_calibration_file,ocv.CameraParams) else ocv.CameraParams.read_from_file(camera_calibration_file)
-        self.gaze       = gaze_data_file if isinstance(gaze_data_file,dict) else gaze_headref.read_dict_from_file(gaze_data_file)[0]
+        self.gaze       = gaze_data_file if isinstance(gaze_data_file,dict) else gaze_headref.read_dict_from_file(gaze_data_file, ts_column_suffixes=['VOR',''])[0]
 
         self._cache: tuple[Status, tuple[np.ndarray, int, float]] = None  # self._cache[1][1] is frame number
 
