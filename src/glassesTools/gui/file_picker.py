@@ -2,6 +2,7 @@ import pathlib
 import typing
 import sys
 import natsort
+import pathvalidate
 import threading
 from dataclasses import dataclass
 from imgui_bundle import hello_imgui, imgui, icons_fontawesome_6 as ifa6, imspinner
@@ -60,7 +61,7 @@ class FilePicker:
         imgui.WindowFlags_.no_saved_settings
     )
 
-    def __init__(self, title="File picker", dir_picker=False, start_dir: str | pathlib.Path | None = None, callback: typing.Callable = None, allow_multiple = True, file_action_provider: fap.FileActionProvider = None, custom_popup_flags=0):
+    def __init__(self, title="File picker", dir_picker=False, start_dir: str | pathlib.Path | None = None, callback: typing.Callable = None, allow_multiple = True, file_action_provider: fap.FileActionProvider = None, custom_popup_flags=0, save_filename: str|None=None):
         self.title = title
         self.elapsed = 0.0
         self.callback = callback
@@ -84,6 +85,7 @@ class FilePicker:
         self.last_clicked_id: int = None
 
         self.allow_multiple = allow_multiple
+        self.save_filename = save_filename
         self._is_dir_picker = False
         self.predicate_selectable: typing.Callable[[int], bool] = None
         self.set_is_dir_picker(dir_picker)
@@ -635,6 +637,29 @@ class FilePicker:
     def draw_bottom_bar(self):
         cancelled = closed = False
 
+        if self.save_filename is not None:
+            imgui.set_next_item_width(-1)
+            _, self.save_filename = imgui.input_text_with_hint("##save_filename", "File name", self.save_filename)
+            imgui.spacing()
+            if imgui.button(ifa6.ICON_FA_CIRCLE_XMARK+" Cancel"):
+                imgui.close_current_popup()
+                return True, True
+            imgui.same_line()
+            filename = self.save_filename.strip()
+            valid_filename = (
+                bool(filename)
+                and not self._is_root(self.loc)
+                and pathvalidate.is_valid_filename(filename, "auto")
+            )
+            if not valid_filename:
+                imgui.begin_disabled()
+            if imgui.button(ifa6.ICON_FA_FLOPPY_DISK+" Save"):
+                imgui.close_current_popup()
+                closed = True
+            if not valid_filename:
+                imgui.end_disabled()
+            return cancelled, closed
+
         # Cancel button
         if imgui.button(ifa6.ICON_FA_CIRCLE_XMARK+" Cancel"):
             imgui.close_current_popup()
@@ -670,6 +695,8 @@ class FilePicker:
         if leave_space_for_bottom_bar:
             button_text_size = imgui.calc_text_size(ifa6.ICON_FA_CIRCLE_XMARK+" Cancel")
             bottom_margin = button_text_size.y+imgui.get_style().frame_padding.y*2+imgui.get_style().item_spacing.y
+            if self.save_filename is not None:
+                bottom_margin += imgui.get_frame_height()+2*imgui.get_style().item_spacing.y
             size.y = -bottom_margin
         imgui.begin_child("##folder_contents", size=size)
         if self.refreshing and self.new_loc:
@@ -968,7 +995,12 @@ class FilePicker:
             cancelled = closed = True
         if closed:
             if not cancelled and self.callback:
-                if self._dir_picker_is_current_dir_selected():
+                if self.save_filename is not None:
+                    filename = pathlib.Path(self.save_filename.strip())
+                    if filename.suffix.lower() != '.png':
+                        filename = filename.with_suffix('.png')
+                    selected = [self.loc / filename]
+                elif self._dir_picker_is_current_dir_selected():
                     selected = [self.loc]
                 else:
                     with self.items_lock:
