@@ -70,13 +70,8 @@ def read_file(file_name              : str|pathlib.Path,
     if column_patches is not None:
         dtypes |= {on:dtypes[nn] for on,(nn,_) in column_patches.items()}
 
-    # read file and select, if wanted
+    # read file
     df = pd.read_csv(file_name, delimiter='\t', index_col=False, dtype=defaultdict(lambda: float, **dtypes))
-    if episodes:
-        sel = (df[subset_var] >= episodes[0][0]) & (df[subset_var] <= episodes[0][1])
-        for e in episodes[1:]:
-            sel |= (df[subset_var] >= e[0]) & (df[subset_var] <= e[1])
-        df = df[sel]
 
     # if we have column renaming to do, do it now
     if column_patches is not None:
@@ -134,6 +129,12 @@ def read_file(file_name              : str|pathlib.Path,
             break
         if not copied:
             raise ValueError("None of the specified suffixes were found, can't continue")
+
+    if episodes:
+        sel = (df[subset_var] >= episodes[0][0]) & (df[subset_var] <= episodes[0][1])
+        for e in episodes[1:]:
+            sel |= (df[subset_var] >= e[0]) & (df[subset_var] <= e[1])
+        df = df[sel]
 
     if as_list_dict:
         obj_list = [object(**kwargs) for kwargs in df.to_dict(orient='records')]
