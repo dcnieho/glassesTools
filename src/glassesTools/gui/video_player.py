@@ -1,3 +1,4 @@
+import pathlib
 import threading
 import numpy as np
 import functools
@@ -5,13 +6,15 @@ from enum import Enum, auto
 import dataclasses
 from typing import Any
 import natsort
+import pathvalidate
+import cv2
 
 from imgui_bundle import imgui, immapp, hello_imgui, glfw_utils, icons_fontawesome_6 as ifa6
 import glfw
 import OpenGL.GL as gl
 
 from .. import annotation, intervals, timestamps, utils
-from . import timeline, utils as gui_utils
+from . import file_picker, msg_box, timeline, utils as gui_utils
 
 class Action(Enum):
     Back_Time       = auto()
@@ -21,6 +24,7 @@ class Action(Enum):
     Pause           = auto()
     Close           = auto()
     Quit            = auto()    # difference between Close and Quit: Quit requests stopping the whole process, Close only to remove the GUI but keep the process running
+    Save_Frame      = auto()
     Annotate_Make   = auto()
     Annotate_Delete = auto()
 
@@ -33,8 +37,22 @@ shortcut_key_map = {
     Action.Pause            : imgui.Key.space,
     Action.Close            : imgui.Key.escape,
     Action.Quit             : imgui.Key.enter,
+    Action.Save_Frame       : imgui.Key.s,
     Action.Annotate_Delete  : imgui.Key.d
 }
+
+shortcut_modifier_map = {
+    Action.Save_Frame       : imgui.Key.mod_ctrl
+}
+
+def _get_key_chord_name(key: imgui.Key, modifier: imgui.Key|None = None) -> str:
+    key_name = imgui.get_key_name(key)
+    if modifier is None:
+        return key_name
+    modifier_name = imgui.get_key_name(modifier)
+    if modifier_name.lower().startswith('mod'):
+        modifier_name = modifier_name[3:]
+    return f'{modifier_name}+{key_name}'
 
 action_lbl_map: dict[Action, str|tuple[str,str]] = {
     Action.Back_Time        : ifa6.ICON_FA_BACKWARD_FAST,
@@ -44,6 +62,7 @@ action_lbl_map: dict[Action, str|tuple[str,str]] = {
     Action.Pause            : (ifa6.ICON_FA_PLAY, ifa6.ICON_FA_PAUSE),  # (no_playing, playing)
     Action.Close            : "Continue in background",
     Action.Quit             : "Done",
+    Action.Save_Frame       : ifa6.ICON_FA_CAMERA,
     Action.Annotate_Delete  : ifa6.ICON_FA_TRASH_CAN
 }
 
@@ -55,6 +74,7 @@ action_tooltip_map = {
     Action.Pause            : "Pause or resume playback",
     Action.Close            : "Close GUI, but keep process running in background",
     Action.Quit             : "Done",
+    Action.Save_Frame       : "Save this frame as a PNG image",
     Action.Annotate_Delete  : "Delete annotation"
 }
 
@@ -66,6 +86,7 @@ class Button:
     key: imgui.Key|None
     event: str|None = None
     color: imgui.ImVec4|None = None
+    modifier: imgui.Key|None = None
 
     has_shift: bool = dataclasses.field(init=False, default=False)
     repeats: bool =  dataclasses.field(init=False, default=False)
@@ -78,7 +99,7 @@ class Button:
         self.has_shift = self.action in [Action.Back_Time, Action.Back_Frame, Action.Forward_Frame, Action.Forward_Time]
         self.repeats = self.has_shift
 
-        accelerator = imgui.get_key_name(self.key) if self.key is not None else ''
+        accelerator = _get_key_chord_name(self.key, self.modifier) if self.key is not None else ''
         if accelerator and self.has_shift:
             mod_lbl = imgui.get_key_name(imgui.Key.mod_shift)
             if mod_lbl.lower().startswith('mod'):
@@ -139,12 +160,15 @@ class GUI:
         self._window_show_controls: dict[int,bool] = {}
         self._window_show_action_tooltip: dict[int,bool] = {}
         self._window_show_play_percentage: dict[int,bool] = {}
+        self._window_popup_stacks: dict[int,list] = {}
+        self._window_screenshot_filename_prefix: dict[int,str] = {}
         self._window_sfac: dict[int,float] = {}
         self._window_timeline: dict[int,timeline.Timeline|None] = {}
         self._window_timecode_pos: dict[int,str] = {}
 
         self._buttons: dict[Action|tuple[Action,str], Button] = {}
         self._add_remove_button(True, Action.Quit)
+        self._add_remove_button(True, Action.Save_Frame)
 
     def __del__(self):
         self.stop()
@@ -163,6 +187,8 @@ class GUI:
             self._window_show_controls[w_id]    = False
             self._window_show_action_tooltip[w_id]  = False
             self._window_show_play_percentage[w_id] = False
+            self._window_popup_stacks[w_id]         = []
+            self._window_screenshot_filename_prefix[w_id] = self._sanitize_screenshot_filename_prefix(name)
             self._window_sfac[w_id]             = 1.
             self._window_timeline[w_id]         = None
             self._window_timecode_pos[w_id]     = 'l'
@@ -185,6 +211,8 @@ class GUI:
             self._window_show_controls.pop(window_id)
             self._window_show_action_tooltip.pop(window_id)
             self._window_show_play_percentage.pop(window_id)
+            self._window_popup_stacks.pop(window_id)
+            self._window_screenshot_filename_prefix.pop(window_id)
             self._window_sfac.pop(window_id)
             self._window_timeline.pop(window_id)
             self._window_timecode_pos.pop(window_id)
@@ -229,10 +257,10 @@ class GUI:
         keys = set()
         for b in self._buttons.values():
             if b.key is not None and (include_annotate or b.action!=Action.Annotate_Make):
-                keys.add(imgui.get_key_name(b.key))
+                keys.add(_get_key_chord_name(b.key, b.modifier))
         if include_unused:
-            for key in self._shortcut_key_map.values():
-                keys.add(imgui.get_key_name(key))
+            for action, key in self._shortcut_key_map.items():
+                keys.add(_get_key_chord_name(key, shortcut_modifier_map.get(action)))
         return keys
 
     def _add_remove_button(self, add: bool, action: Action, event: str|None=None):
@@ -249,7 +277,7 @@ class GUI:
                 lbl = self._action_button_lbls[action]
                 tooltip = self._action_tooltips[action]
                 key = self._shortcut_key_map[action]
-            self._buttons[d_key] = Button(action, lbl, tooltip, key, event)
+            self._buttons[d_key] = Button(action, lbl, tooltip, key, event, modifier=shortcut_modifier_map.get(action))
 
     def set_allow_timeline_zoom(self, allow_timeline_zoom: bool):
         self._allow_timeline_zoom = allow_timeline_zoom
@@ -274,6 +302,56 @@ class GUI:
         if window_id is None:
             window_id = self._get_main_window_id()
         self._window_show_play_percentage[window_id] = show_play_percentage
+    def set_screenshot_filename_prefix(self, prefix: str, window_id: int|None=None):
+        if window_id is None:
+            window_id = self._get_main_window_id()
+        self._window_screenshot_filename_prefix[window_id] = self._sanitize_screenshot_filename_prefix(prefix)
+
+    @staticmethod
+    def _sanitize_screenshot_filename_prefix(prefix: str) -> str:
+        return pathvalidate.sanitize_filename(prefix, replacement_text='_', platform='auto').rstrip(' .') or 'frame'
+
+    def _save_frame(self, window_id: int, frame: np.ndarray, path: pathlib.Path):
+        def write_frame():
+            try:
+                if not cv2.imwrite(str(path), frame):
+                    raise OSError(f'Could not write image to {path}')
+            except Exception as exc:
+                self._window_popup_stacks[window_id].append(functools.partial(
+                    msg_box.msgbox,
+                    f'Save frame error##{window_id}',
+                    f'Could not save frame to {path}:\n{exc}',
+                    type=msg_box.MsgBox.error,
+                ))
+
+        if path.exists():
+            self._window_popup_stacks[window_id].append(functools.partial(
+                gui_utils.popup,
+                f'Overwrite screenshot##{window_id}',
+                lambda: imgui.text_wrapped(f'{path} already exists. Overwrite it?'),
+                buttons={'Overwrite': write_frame, 'Cancel': None},
+            ))
+        else:
+            write_frame()
+
+    def _open_frame_save_picker(self, window_id: int):
+        frame, _, frame_idx = self._current_frame[window_id]
+        if frame is None or frame_idx < 0:
+            return
+        frame = frame.copy()
+        prefix = self._window_screenshot_filename_prefix[window_id]
+        filename = f'{prefix}_frame{frame_idx:05d}.png'
+
+        def save_selected(paths):
+            if paths:
+                self._save_frame(window_id, frame, paths[0])
+
+        self._window_popup_stacks[window_id].append(file_picker.FilePicker(
+            title=f'Save frame##{window_id}',
+            callback=save_selected,
+            allow_multiple=False,
+            save_filename=filename,
+        ))
     def set_duration(self, duration: float, last_frame_idx: int):
         self._duration = duration
         self._last_frame_idx = last_frame_idx
@@ -598,9 +676,9 @@ class GUI:
             overlay_text = f'{fr_idx}'
         if self._window_show_play_percentage[w] and self._last_frame_idx is not None:
             overlay_text += f' ({fr_idx/self._last_frame_idx*100:.1f}%)'
-        txt_sz = imgui.calc_text_size(overlay_text)
+        timecode_text_size = imgui.calc_text_size(overlay_text)
         padding = imgui.get_style().frame_padding
-        overlay_size = txt_sz+imgui.ImVec2(padding.x*2, padding.y*2)
+        overlay_size = timecode_text_size+imgui.ImVec2(padding.x*2, padding.y*2)
         match self._window_timecode_pos[w]:
             case 'l':
                 overlay_x_pos = img_margins[0]
@@ -609,8 +687,8 @@ class GUI:
         overlay_cursor_pos = (overlay_x_pos, img_sz[1]+img_margins[1]-overlay_size.y)
 
         # prepare for tooltip
-        txt_sz = imgui.calc_text_size('(?)')
-        tooltip_child_size = txt_sz+imgui.ImVec2(padding.x*2, padding.y*2)
+        help_text_size = imgui.calc_text_size('(?)')
+        tooltip_child_size = help_text_size+imgui.ImVec2(padding.x*2, padding.y*2)
         if self._window_timecode_pos[w]=='r':
             # timecode is on the right, so tooltip goes on the left
             tooltip_x_pos = img_margins[0]
@@ -650,6 +728,27 @@ class GUI:
                 else:
                     but = self._buttons[(Action.Annotate_Make, e)]
                 buttons.append(but)
+        tooltip_visible = self._window_show_action_tooltip[w] or not self._window_show_controls[w]
+        save_button = self._buttons[Action.Save_Frame]
+        save_text_size = imgui.calc_text_size(save_button.lbl)
+        save_button_size = imgui.ImVec2(save_text_size.x+2*padding.x, save_text_size.y+2*padding.y)
+        save_help_spacing = padding.x
+        save_overlay_size = imgui.ImVec2(
+            tooltip_child_size.x+save_help_spacing+save_button_size.x-padding.x if tooltip_visible else save_button_size.x,
+            max(tooltip_child_size.y, save_button_size.y) if tooltip_visible else save_button_size.y,
+        )
+        if tooltip_visible:
+            text_center_y = overlay_cursor_pos[1]+padding.y+timecode_text_size.y/2
+            save_overlay_pos_y = text_center_y-save_overlay_size.y/2
+            if self._window_timecode_pos[w]=='l':
+                save_overlay_pos = (tooltip_cursor_pos[0]+padding.x-save_button_size.x-save_help_spacing, save_overlay_pos_y)
+            else:
+                save_overlay_pos = (tooltip_cursor_pos[0], save_overlay_pos_y)
+        else:
+            save_overlay_pos = (
+                tooltip_cursor_pos[0] if self._window_timecode_pos[w]=='r' else tooltip_cursor_pos[0]+tooltip_child_size.x-save_button_size.x,
+                overlay_cursor_pos[1]+padding.y+timecode_text_size.y/2-save_button_size.y/2,
+            )
         # determine space they take up
         def _get_text_size(b: Button|None):
             if b is None:
@@ -659,25 +758,25 @@ class GUI:
             return imgui.calc_text_size(b.lbl)
         text_sizes = [_get_text_size(b) for b in buttons]
         button_sizes = [imgui.ImVec2([ts.x+2*padding.x, ts.y+2*padding.y]) for ts in text_sizes]
-        total_button_size = functools.reduce(lambda a,b: imgui.ImVec2(a.x+b.x, max(a.y,b.y)), button_sizes) if button_sizes else imgui.ImVec2()
-        total_button_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*item_spacing_backup.x, total_button_size.y)
-
-        # determine if tooltip will be shown
-        show_tooltip = buttons and (self._window_show_action_tooltip[w] or not self._window_show_controls[w])
+        if button_sizes:
+            total_button_size = functools.reduce(lambda a,b: imgui.ImVec2(a.x+b.x, max(a.y,b.y)), button_sizes)
+            total_button_size = imgui.ImVec2(total_button_size.x+(len(buttons)-1)*item_spacing_backup.x, total_button_size.y)
+        else:
+            total_button_size = imgui.ImVec2()
 
         # determine where buttons will be drawn
         if buttons:
             # center buttons in between timecode and tooltip
             # determine amount of space
             if self._window_timecode_pos[w]=='l':
-                # space between right edge of status overlay and left edge of tooltip
+                # space between the status overlay and the full help/save overlay
                 left_edge = overlay_x_pos + overlay_size.x
-                right_edge = tooltip_x_pos if show_tooltip else img_margins[0]+img_sz[0]  # if no tooltip, we can use all the way to the right edge of the image
+                right_edge = save_overlay_pos[0]
             else:
-                # space between right edge of tooltip and left edge of status overlay
-                left_edge = tooltip_x_pos + tooltip_child_size.x if show_tooltip else img_margins[0]  # if no tooltip, we can use all the way to the left edge of the image
+                # space between the full help/save overlay and the status overlay
+                left_edge = save_overlay_pos[0] + save_overlay_size.x
                 right_edge = overlay_x_pos
-            space = right_edge - left_edge - imgui.get_style().item_spacing.x*(2 if show_tooltip else 1)
+            space = right_edge - left_edge - imgui.get_style().item_spacing.x*2
             # make multiple rows of buttons if needed
             if total_button_size.x > space:
                 # partition buttons in rows
@@ -705,11 +804,7 @@ class GUI:
             if len(rows)==1 and button_cursor_pos_x > left_edge+imgui.get_style().item_spacing.x and button_cursor_pos_x + total_button_size.x < right_edge-imgui.get_style().item_spacing.x:
                 button_cursor_pos = (button_cursor_pos_x, img_sz[1]+img_margins[1]-total_height)
             else:
-                margin = space - max_row_width
-                if show_tooltip:
-                    margin /= 2
-                elif self._window_timecode_pos[w]=='r':
-                    margin = 0  # flush to left of image
+                margin = (space - max_row_width)/2
                 button_cursor_pos = (int(left_edge + margin), img_sz[1]+img_margins[1]-total_height)
             buttons_child_size = imgui.ImVec2(max_row_width, total_height)
 
@@ -725,13 +820,14 @@ class GUI:
 
         # draw buttons
         def _draw_action_tooltip():
-            imgui.set_cursor_pos(imgui.get_style().frame_padding)
+            imgui.align_text_to_frame_padding()
             imgui.text('(?)')
             if imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
                 overlay_text = ''
                 for b in buttons:
                     if b is not None and b.key is not None:
                         overlay_text += f"'{imgui.get_key_name(b.key)}': {b.tooltip if b.tooltip else b.lbl}\n"
+                overlay_text += f"'{_get_key_chord_name(save_button.key, save_button.modifier)}': {save_button.tooltip}\n"
                 overlay_text = overlay_text[:-1]
                 if self._window_timeline[w] is not None and self._allow_timeline_zoom:
                     overlay_text += '\nMouse wheel: hover over timeline to zoom'
@@ -742,10 +838,17 @@ class GUI:
                 imgui.set_cursor_pos(button_cursor_pos)
                 imgui.begin_child("##controls_overlay", size=buttons_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
                 imgui.push_style_var(imgui.StyleVar_.item_spacing, item_spacing_backup)
+            else:
+                imgui.set_cursor_pos(button_cursor_pos)
 
             # always "draw" buttons, even if we don't show them, so that shortcuts still work
             for b_row, r_sz in rows:
-                imgui.set_cursor_pos_x(int((buttons_child_size.x-r_sz.x)/2))
+                if self._window_show_controls[w]:
+                    imgui.set_cursor_pos_x(int((buttons_child_size.x-r_sz.x)/2))
+                elif self._window_timecode_pos[w]=='l':
+                    imgui.set_cursor_pos_x(int(button_cursor_pos[0]+buttons_child_size.x-r_sz.x))
+                else:
+                    imgui.set_cursor_pos_x(int(button_cursor_pos[0]))
                 for i_b, (b,sz) in enumerate(b_row):
                     if b is None:
                         imgui.dummy(sz)
@@ -760,7 +863,7 @@ class GUI:
                     if b.repeats:
                         flags |= imgui.InputFlags_.repeat
                     if b.key is not None:
-                        imgui.set_next_item_shortcut(b.key|mod_key, flags=flags)
+                        imgui.set_next_item_shortcut(b.key|(b.modifier or 0)|mod_key, flags=flags)
                     lbl = b.lbl
                     if b.action==Action.Pause:
                         lbl = lbl[1] if self._is_playing else lbl[0]
@@ -817,11 +920,30 @@ class GUI:
             if self._window_show_controls[w]:
                 imgui.pop_style_var()
                 imgui.end_child()
-            if self._window_show_action_tooltip[w] or not self._window_show_controls[w]:
-                imgui.set_cursor_pos(tooltip_cursor_pos)
-                imgui.begin_child("##tooltip_overlay", size=tooltip_child_size, window_flags=imgui.WindowFlags_.no_scrollbar)
+
+        imgui.set_cursor_pos(save_overlay_pos)
+        imgui.begin_child("##save_frame_help_overlay", size=save_overlay_size, window_flags=imgui.WindowFlags_.no_scrollbar)
+
+        def _draw_save_button():
+            imgui.set_next_item_shortcut(save_button.key|save_button.modifier, flags=imgui.InputFlags_.route_global)
+            if imgui.button(save_button.lbl, size=save_button_size):
+                self._open_frame_save_picker(w)
+            if imgui.is_item_hovered(imgui.HoveredFlags_.for_tooltip | imgui.HoveredFlags_.delay_normal):
+                imgui.set_tooltip(save_button.full_tooltip)
+
+        if tooltip_visible:
+            if self._window_timecode_pos[w]=='l':
+                _draw_save_button()
+                imgui.same_line(spacing=save_help_spacing)
                 _draw_action_tooltip()
-                imgui.end_child()
+            else:
+                imgui.set_cursor_pos_x(padding.x)
+                _draw_action_tooltip()
+                imgui.same_line(spacing=save_help_spacing)
+                _draw_save_button()
+        else:
+            _draw_save_button()
+        imgui.end_child()
         imgui.pop_style_color()
         imgui.end_child()
 
@@ -833,5 +955,6 @@ class GUI:
             imgui.end_child()
 
         imgui.pop_style_var()
+        gui_utils.handle_popup_stack(self._window_popup_stacks[w])
         if need_begin_end:
             imgui.end()
