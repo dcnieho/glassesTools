@@ -15,6 +15,31 @@ class Type(utils.AutoName):
     Average_Gaze_Vector     = enum.auto()
 json.register_type(json.TypeEntry(Type,'__enum.gaze_worldref.Type__', utils.enum_val_2_str, lambda x: getattr(Type, x.split('.')[-1])))
 
+def get_gaze_point_fields(gaze_type: Type, reference_frame: typing.Literal['plane', 'camera']) -> tuple[str, ...]:
+    """Return source vector fields, in fallback order, for a gaze type and frame."""
+    if reference_frame not in ('plane', 'camera'):
+        raise ValueError(f"reference_frame must be 'plane' or 'camera', got {reference_frame!r}")
+
+    camera_fields = {
+        Type.World_3D_Point: ('gazePosCamWorld',),
+        Type.Left_Eye_Gaze_Vector: ('gazePosCamLeft',),
+        Type.Right_Eye_Gaze_Vector: ('gazePosCamRight',),
+        Type.Average_Gaze_Vector: ('gazePosCamLeft', 'gazePosCamRight'),
+    }
+    plane_fields = {
+        Type.World_3D_Point: ('gazePosPlane2DWorld',),
+        Type.Left_Eye_Gaze_Vector: ('gazePosPlane2DLeft',),
+        Type.Right_Eye_Gaze_Vector: ('gazePosPlane2DRight',),
+        Type.Average_Gaze_Vector: ('gazePosPlane2DLeft', 'gazePosPlane2DRight'),
+    }
+    if gaze_type == Type.Scene_Video_Position:
+        prefix = 'gazePosCam' if reference_frame == 'camera' else 'gazePosPlane2D'
+        return (f'{prefix}_vidPos_ray', f'{prefix}_vidPos_homography')
+    try:
+        return (camera_fields if reference_frame == 'camera' else plane_fields)[gaze_type]
+    except KeyError as exc:
+        raise ValueError(f'Unsupported gaze type: {gaze_type!r}') from exc
+
 class Gaze:
     # description of tsv file used for storage
     _columns_compressed = {'timestamp': 1, 'timestamp_VOR': 1, 'timestamp_ref': 1, 'frame_idx':1, 'frame_idx_VOR':1, 'frame_idx_ref':1,
