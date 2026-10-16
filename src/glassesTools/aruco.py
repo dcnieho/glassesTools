@@ -10,24 +10,13 @@ from dataclasses import dataclass, field
 from glassesTools.utils import freeze
 
 from . import annotation, drawing, marker, ocv, pose, transforms
+from .units import unit_to_meters
 
 class DetectionOutput(typing.NamedTuple):
     assemblies: dict[str, dict[str, typing.Any] | None]
     individual: dict[str, typing.Any]
     unexpected: dict[str, typing.Any]
     rejected: tuple[np.ndarray, ...]
-
-unit_to_meters = {
-    'm': 1.,
-    'cm': .01,
-    'mm': .001,
-    'in': .0254,
-    'inch': .0254,
-    'inches': .0254,
-    'ft': .3048,
-    'foot': .3048,
-    'feet': .3048,
-}
 
 default_dict = cv2.aruco.DICT_4X4_250
 
