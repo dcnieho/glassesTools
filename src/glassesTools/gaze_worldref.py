@@ -75,8 +75,11 @@ class Gaze:
         self.gazePosPlane2DLeft                 = gazePosPlane2DLeft                # gazePosCamLeft in plane space
         self.gazePosPlane2DRight                = gazePosPlane2DRight               # gazePosCamRight in plane space
 
-    def get_gaze_point(self, gaze_type: Type, reference_frame='plane'):
-        return_3D = reference_frame in ('world', 'camera')    # in all other cases return gaze on plane
+    def get_gaze_point(self, gaze_type: Type, reference_frame: typing.Literal['plane', 'camera']='plane'):
+        """Return the gaze point in 2D plane or 3D camera coordinates."""
+        if reference_frame not in ('plane', 'camera'):
+            raise ValueError(f"reference_frame must be 'plane' or 'camera', got {reference_frame!r}")
+        return_3D = reference_frame == 'camera'
         match gaze_type:
             case Type.Scene_Video_Position:
                 gaze_point = self.gazePosCam_vidPos_ray if return_3D else self.gazePosPlane2D_vidPos_ray
@@ -130,7 +133,7 @@ class Gaze:
         if self.gazePosCamRight is not None and clr_right is not None:
             project_and_draw(img, self.gazePosCamRight, 3, clr_right)
         # average
-        if clr_average is not None and (pointCam:=self.get_gaze_point(Type.Average_Gaze_Vector, 'world')) is not None:
+        if clr_average is not None and (pointCam:=self.get_gaze_point(Type.Average_Gaze_Vector, 'camera')) is not None:
             project_and_draw(img, pointCam, 6, clr_average)
 
     def draw_on_plane(self, img, reference, sub_pixel_fac=1):
