@@ -1203,7 +1203,6 @@ class Manager:
     # set of detectors while preserving each assembly's processing intervals.
     # also handles information for each about when they should be detected (called intervals below)
     def __init__(self):
-        self.working_set = WorkingSet()
         # assemblies to be detected
         self.assemblies             : dict[str, AssemblySetup] = {}
         self.assembly_proc_intervals: dict[str, tuple[annotation.EventType, list[int]|list[list[int]]]|None] = {}
@@ -1215,7 +1214,9 @@ class Manager:
         self._individual_to_detector            : dict[marker.MarkerID, int] = {}
 
         # consolidated into set of detectors, and associated planes+individual markers for each
-        self._detectors             : dict[int, Detector]                   = {}
+        self._detectors             : dict[int, Detector]   = {}
+        # cache
+        self._working_set                                   = WorkingSet()
 
         # colors for drawing (in BGR order)
         self._assembly_marker_color             = (  0,255,  0)
@@ -1310,7 +1311,7 @@ class Manager:
         self._detectors.clear()
         self._assembly_to_detector.clear()
         self._individual_to_detector.clear()
-        self.working_set.clear()
+        self._working_set.clear()
         # Choose one raw dictionary per compatible detection group, even when refinement differs.
         raw_groups = {}
         for entries in groups.values():
@@ -1365,7 +1366,7 @@ class Manager:
         obj, img = self._detectors[aruco_dict_id].get_matching_image_assembly_points(assembly_name, detect_tuple)
         if obj is None or img is None:
             return None
-        context = self.working_set.contexts[self._detectors[aruco_dict_id].settings['undistort']]
+        context = self._working_set.contexts[self._detectors[aruco_dict_id].settings['undistort']]
         return pose.DetectionResult(obj, img, context.camera_params, context.frame_info, context.undistorted)
 
 
@@ -1380,26 +1381,26 @@ class Manager:
         obj, img = detector.get_individual_marker_points(mark.m_id, detect_tuple)
         if img is None:
             return None
-        context = self.working_set.contexts[self._detectors[detector_id].settings['undistort']]
+        context = self._working_set.contexts[self._detectors[detector_id].settings['undistort']]
         return pose.DetectionResult(obj, img, context.camera_params, context.frame_info, context.undistorted)
 
 
     def _get_detector_cache(self, detector_id: int, frame_idx: int, frame: np.ndarray|None, frame_info: dict, camera_parameters: ocv.CameraParams|None):
         if frame is None:
             # Visualization only reads the current frame; it must not resurrect stale results.
-            return self.working_set.detector_results.get(detector_id) if self.working_set.matches_frame(frame_idx) else None
+            return self._working_set.detector_results.get(detector_id) if self._working_set.matches_frame(frame_idx) else None
 
         detector = self._detectors[detector_id]
-        context = self.working_set.prepare(frame_idx, frame, frame_info, camera_parameters, detector.settings['undistort'])
-        if detector_id not in self.working_set.detector_results:
+        context = self._working_set.prepare(frame_idx, frame, frame_info, camera_parameters, detector.settings['undistort'])
+        if detector_id not in self._working_set.detector_results:
             key = (detector.dictionary_id, freeze(detector.settings['detector_params']), context.undistorted)
-            if key not in self.working_set.detections:
-                self.working_set.detections[key] = detector._detect_markers(context.image)
-            self.working_set.detector_results[detector_id] = detector.detect_markers(context.image, context.frame_info, context.camera_params, self.working_set.detections[key])
-        return self.working_set.detector_results[detector_id]
+            if key not in self._working_set.detections:
+                self._working_set.detections[key] = detector._detect_markers(context.image)
+            self._working_set.detector_results[detector_id] = detector.detect_markers(context.image, context.frame_info, context.camera_params, self._working_set.detections[key])
+        return self._working_set.detector_results[detector_id]
 
     def _visualization_output(self, detector_id, detect_tuple):
-        context = self.working_set.contexts[self._detectors[detector_id].settings['undistort']]
+        context = self._working_set.contexts[self._detectors[detector_id].settings['undistort']]
         if not context.undistorted:
             return detect_tuple
         assemblies, individual, unexpected, rejected = copy.deepcopy(detect_tuple)
@@ -1412,25 +1413,25 @@ class Manager:
         if assembly_name not in self._assembly_to_detector:
             raise ValueError(f'The marker assembly {assembly_name} is not known')
         aruco_dict_id = self._assembly_to_detector[assembly_name]
-        if aruco_dict_id in self.working_set.visualized:
+        if aruco_dict_id in self._working_set.visualized:
             # nothing to do, already drawn
             return
         detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, None, frame_info, None)
         if detect_tuple is not None:
             frame = self._detectors[aruco_dict_id].visualize(frame, self._visualization_output(aruco_dict_id, detect_tuple), assembly_marker_color=self._assembly_marker_color, recovered_assembly_marker_color=self._recovered_assembly_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
-            self.working_set.visualized.add(aruco_dict_id)
+            self._working_set.visualized.add(aruco_dict_id)
 
     def _visualize_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray, frame_info: dict):
         if mark not in self.individual_markers:
             raise ValueError(f'The individual marker {marker.marker_ID_to_str(mark)} is not known')
         detector_id = self._individual_to_detector[mark]
-        if detector_id in self.working_set.visualized:
+        if detector_id in self._working_set.visualized:
             # nothing to do, already drawn
             return
         detect_tuple = self._get_detector_cache(detector_id, frame_idx, None, frame_info, None)
         if detect_tuple is not None:
             frame = self._detectors[detector_id].visualize(frame, self._visualization_output(detector_id, detect_tuple), assembly_marker_color=self._assembly_marker_color, recovered_assembly_marker_color=self._recovered_assembly_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
-            self.working_set.visualized.add(detector_id)
+            self._working_set.visualized.add(detector_id)
 
 
 def create_assembly_geometry(marker_corners: list[np.ndarray], ids: list[int], aruco_dict: cv2.aruco.Dictionary):
