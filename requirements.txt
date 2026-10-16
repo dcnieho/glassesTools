@@ -15,3 +15,4 @@ pebble
 pycolmap
 orjson
 av
+ETDQualitizer

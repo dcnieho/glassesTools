@@ -62,7 +62,7 @@ def summarize_and_store_data_quality(df: pd.DataFrame, output_file_or_dir: str |
     targets_sel = [t in targets for t in targets_have]
     if not all(targets_sel):
         df = df.drop(index=[t for i,t in enumerate(targets_have) if not targets_sel[i]], level='target')
-    # remove unwanted data loss
+    # remove optional data-quality measures if not wanted
     if not include_data_loss and 'data_loss' in df.columns:
         df = df.drop(columns='data_loss')
     # average data if wanted

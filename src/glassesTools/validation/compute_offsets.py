@@ -1,10 +1,11 @@
 import pathlib
 import numpy as np
 import pandas as pd
-import math
 import warnings
 
-from .. import data_types, gaze_worldref, naming, pose, transforms
+from ETDQualitizer import _frechet_median_on_sphere, data_loss_from_invalid, rms_s2s, std
+
+from .. import data_types, gaze_worldref, naming, pose
 
 
 def compute(
@@ -70,88 +71,38 @@ def compute(
             if (idx+1,t) not in marker_intervals.index:
                 continue
             frame_idxs  =           [k           for k,v in samples_per_frame.items() for _ in v]
-            ts          = np.vstack([s.timestamp for  v in samples_per_frame.values() for s in v])
+            ts          = np.asarray([s.timestamp for v in samples_per_frame.values() for s in v], dtype=float)
             st = marker_intervals.loc[(idx+1,t),'start_timestamp']
             et = marker_intervals.loc[(idx+1,t),  'end_timestamp']
             q_data = np.logical_and(ts>=st, ts<=et)
 
-            offset = np.full((np.count_nonzero(q_data),len(d_types),2), np.nan)
-            target_cam: dict[int,dict[int,np.ndarray]] = {}
-            for idt,dt in enumerate(d_types):
-                # get data
-                fields = data_types.get_world_gaze_fields_for_data_type(dt)
-                if fields is None:
-                    continue
-                if fields[0] is None:
-                    ori     = np.zeros((ts.shape[0],3))
-                else:
-                    ori     = np.vstack([getattr(s,fields[0]) for v in samples_per_frame.values() for s in v])
-                gazePlane   = np.vstack([getattr(s,fields[2]) for v in samples_per_frame.values() for s in v])
-                if fields[1] is None:
-                    if not dt==data_types.DataType.viewpos_vidpos_homography:
-                        raise NotImplementedError(f'This field should be set, is a special case not implemented? Contact developer')
-                    gaze    = np.hstack((gazePlane[:,0:2], np.full((gazePlane.shape[0],1),distance_mm_for_homography)))
-                else:
-                    gaze    = np.vstack([getattr(s,fields[1]) for v in samples_per_frame.values() for s in v])
-
-                # compute
-                out_idx = -1
-                for i in range(len(ts)):
-                    if not q_data[i]:
-                        continue
-                    out_idx += 1
-                    frame_idx = frame_idxs[i]
-                    if dt==data_types.DataType.viewpos_vidpos_homography:
-                        # get vectors based on assumed viewing distance (from config), without using pose info
-                        vGaze   = gaze[i,:]
-                        vTarget = targets_for_homography[t]
-                    else:
-                        # use 3D vectors known given pose information
-                        this_pose = pose.get_sample_pose(poses, frame_idx, timestamp=float(ts[i, 0]))
-                        if this_pose is None:
-                            continue
-                        if frame_idx not in target_cam:
-                            target_cam[frame_idx] = {}
-                        if i not in target_cam[frame_idx]:
-                            target_cam[frame_idx][i] = this_pose.world_frame_to_cam(targets[t])
-
-                        # get vectors from origin to target and to gaze point
-                        vGaze   = gaze[i,:]            -ori[i,:]
-                        vTarget = target_cam[frame_idx][i]-ori[i,:]
-
-                    # get offset
-                    ang2D               = transforms.angle_between(vTarget,vGaze)
-                    # decompose in horizontal/vertical (in plane space)
-                    onPlaneAngle        = math.atan2(gazePlane[i,1]-targets[t][1], gazePlane[i,0]-targets[t][0])
-                    offset[out_idx,idt,:]= ang2D*np.array([math.cos(onPlaneAngle), math.sin(onPlaneAngle)])
-
-            # special case for average of left and right eye
-            if data_types.DataType.pose_left_right_avg in d_types:
-                l_idx = d_types.index(data_types.DataType.pose_left_eye)
-                r_idx = d_types.index(data_types.DataType.pose_right_eye)
-                a_idx = d_types.index(data_types.DataType.pose_left_right_avg)
-                offset[:,a_idx,:] = offset[:,[l_idx, r_idx],:].mean(axis=1)
+            _, _, relative_vectors = data_types.calculate_target_relative_gaze_vectors(samples_per_frame, poses, targets, d_types, targets_for_homography, distance_mm_for_homography)
 
             # compute data quality for this target
             with warnings.catch_warnings():
                 warnings.simplefilter("ignore") # ignore warnings from np.nanmean, np.nanmedian and np.nanstd
 
-                df.loc[idxer[idx+1,:,t],'acc_x'] = np.nanmedian(offset[:,:,0],axis=0)
-                df.loc[idxer[idx+1,:,t],'acc_y'] = np.nanmedian(offset[:,:,1],axis=0)
-                # NB: below is equivalent to computing offset of median gaze vector from target
-                df.loc[idxer[idx+1,:,t],'acc'  ] = np.hypot(df.loc[idxer[idx+1,:,t],'acc_x'], df.loc[idxer[idx+1,:,t],'acc_y'])
+                for dt in d_types:
+                    vectors = relative_vectors[t][dt][q_data]
+                    azi, ele = data_types.target_relative_vectors_to_fick(vectors)
+                    median_vector = _frechet_median_on_sphere(vectors)
+                    median_azi, median_ele = data_types.target_relative_vectors_to_fick(median_vector)
+                    acc = np.degrees(np.arctan2(np.hypot(median_vector[0], median_vector[1]), median_vector[2]))
+                    rms, rms_x, rms_y = rms_s2s(azi, ele)
+                    std_total, std_x, std_y = std(azi, ele)
+                    row = idxer[idx+1,dt,t]
+                    df.loc[row,'acc_x'] = median_azi
+                    df.loc[row,'acc_y'] = median_ele
+                    df.loc[row,'acc'] = acc
+                    df.loc[row,'rms_x'] = rms_x
+                    df.loc[row,'rms_y'] = rms_y
+                    df.loc[row,'rms'] = rms
+                    df.loc[row,'std_x'] = std_x
+                    df.loc[row,'std_y'] = std_y
+                    df.loc[row,'std'] = std_total
 
-                df.loc[idxer[idx+1,:,t],'rms_x'] = np.sqrt(np.nanmean(np.diff(offset[:,:,0],axis=0)**2))
-                df.loc[idxer[idx+1,:,t],'rms_y'] = np.sqrt(np.nanmean(np.diff(offset[:,:,1],axis=0)**2))
-                # NB: below is equivalent to np.sqrt(np.nanmean(xdiff+ydiff))
-                df.loc[idxer[idx+1,:,t],'rms'  ] = np.hypot(df.loc[idxer[idx+1,:,t],'rms_x'], df.loc[idxer[idx+1,:,t],'rms_y'])
-
-                df.loc[idxer[idx+1,:,t],'std_x'] = np.nanstd(offset[:,:,0],ddof=0,axis=0)
-                df.loc[idxer[idx+1,:,t],'std_y'] = np.nanstd(offset[:,:,1],ddof=0,axis=0)
-                df.loc[idxer[idx+1,:,t],'std'  ] = np.hypot(df.loc[idxer[idx+1,:,t],'std_x'], df.loc[idxer[idx+1,:,t],'std_y'])
-
-                if include_data_loss:
-                    df.loc[idxer[idx+1,:,t],'data_loss'] = np.sum(np.isnan(offset[:,:,0]),axis=0)/offset.shape[0]
+                    if include_data_loss:
+                        df.loc[row,'data_loss'] = data_loss_from_invalid(azi, ele) if len(vectors) else np.nan
 
         if out_df is None:
             out_df = df

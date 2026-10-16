@@ -187,3 +187,25 @@ def _vecdot(x1,x2, axis=-1):
 
 def angle_between(v1, v2):
     return (180.0 / np.pi) * np.arctan2(np.linalg.norm(np.cross(v1,v2),axis=min((1,v1.ndim-1,v2.ndim-1))), _vecdot(v1,v2))
+
+def vector_to_target_frame(gaze_vector: np.ndarray, target_vector: np.ndarray) -> np.ndarray:
+    gaze_vector   = np.asarray(gaze_vector  , dtype=float)
+    target_vector = np.asarray(target_vector, dtype=float)
+    gaze_norm   = np.linalg.norm(gaze_vector)
+    target_norm = np.linalg.norm(target_vector)
+    if (gaze_vector.shape != (3,) or target_vector.shape != (3,) or
+            not np.isfinite(gaze_norm) or not np.isfinite(target_norm) or
+            gaze_norm == 0 or target_norm == 0):
+        return np.full((3,), np.nan)
+
+    gaze_vector   =   gaze_vector / gaze_norm
+    target_vector = target_vector / target_norm
+    target_azi = np.arctan2(target_vector[0], target_vector[2])
+    target_ele = np.arctan2(target_vector[1], np.hypot(target_vector[0], target_vector[2]))
+    ca, sa = np.cos(target_azi), np.sin(target_azi)
+    ce, se = np.cos(target_ele), np.sin(target_ele)
+
+    x_rel = ca*gaze_vector[0] - sa*gaze_vector[2]
+    y_rel = ce*gaze_vector[1] - se*(sa*gaze_vector[0] + ca*gaze_vector[2])
+    z_rel = se*gaze_vector[1] + ce*(sa*gaze_vector[0] + ca*gaze_vector[2])
+    return np.array([x_rel, y_rel, z_rel])

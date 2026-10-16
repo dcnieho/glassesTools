@@ -1,8 +1,8 @@
 # NB: using pose information requires a calibrated scene camera
 import enum
-import math
 import typing
 import numpy as np
+from ETDQualitizer import vector_to_Fick
 
 from . import json, pose, transforms, utils as _utils, gaze_worldref
 
@@ -79,9 +79,9 @@ def get_explanation(dq: DataType):
                    "measures in degrees with respect to the right eye."
         case DataType.pose_left_right_avg:
             return "Average eye rays + pose", \
-                   "For each time point, take angular offset between the left and " \
-                   "right gaze positions and the fixation target and average them " \
-                   "to compute angular measures in degrees. Requires " \
+                   "For each time point, take the spherical midpoint of the left " \
+                   "and right gaze directions before computing target-relative " \
+                   "angular measures in degrees. Requires " \
                    f"'{ler_name}' and '{rer_name}' to be enabled."
 
 
@@ -174,58 +174,89 @@ def select_data_types_to_use(dq_types: typing.Iterable[DataType]|DataType|str|No
     return dq_types
 
 
-def calculate_gaze_angles_to_point(plane_gazes: dict[int, list[gaze_worldref.Gaze]], poses: dict[int, pose.Pose] | dict[int, list[pose.Pose]], points: dict[int, np.ndarray], d_types: list[DataType], points_for_homography: dict[int, np.ndarray]|None=None, viewing_distance: float|None = None) -> tuple[list[int], np.ndarray, dict[int, dict[DataType, np.ndarray]]]:
-    # collect needed data
-    out: dict[int, dict[DataType, np.ndarray]] = {}
-    frame_idxs = None
-    timestamps = None
-    for t in points:
-        points_cam_space: dict[int,dict[int,np.ndarray]] = {}
-        out[t] = {}
-        for d_type in d_types:
-            if d_type == DataType.pose_left_right_avg:
-                continue  # special case handled below
-            # get data
-            fr_idxs, ts, ori, gaze, gazePlane = collect_gaze_data(plane_gazes, d_type, viewing_distance)
-            if frame_idxs is None:
-                frame_idxs = fr_idxs
-            if timestamps is None:
-                timestamps = ts
-            out[t][d_type] = np.full((gaze.shape[0],3), np.nan)
+def calculate_target_relative_gaze_vectors(plane_gazes: dict[int, list[gaze_worldref.Gaze]], poses: dict[int, pose.Pose] | dict[int, list[pose.Pose]], points: dict[int, np.ndarray], d_types: list[DataType], points_for_homography: dict[int, np.ndarray]|None=None, viewing_distance: float|None = None) -> tuple[list[int], np.ndarray, dict[int, dict[DataType, np.ndarray]]]:
+    requested_types = list(dict.fromkeys(d_types))
+    selected_types = [d_type for d_type in requested_types if d_type != DataType.pose_left_right_avg]
+    if DataType.pose_left_right_avg in requested_types:
+        selected_types.extend(d_type for d_type in (DataType.pose_left_eye, DataType.pose_right_eye) if d_type not in selected_types)
 
-            # compute
-            for i, f_idx in enumerate(fr_idxs):
-                if d_type==DataType.viewpos_vidpos_homography:
-                    # get vectors based on assumed viewing distance (from config), without using pose info
-                    vGaze   = gaze[i,:]
-                    vTarget = points_for_homography[t]
+    selected_data: dict[DataType, tuple[list[int], list[float], np.ndarray, np.ndarray]] = {}
+    for d_type in selected_types:
+        selected_data[d_type] = collect_gaze_data(plane_gazes, d_type, viewing_distance)
+    if selected_data:
+        first_data = next(iter(selected_data.values()))
+        frame_idxs = first_data[0]
+        timestamps = np.asarray(first_data[1], dtype=float)
+    else:
+        frame_idxs = []
+        timestamps = np.empty((0,), dtype=float)
+
+    out: dict[int, dict[DataType, np.ndarray]] = {}
+    for target_id, target_point in points.items():
+        target_vectors: dict[int,dict[int,np.ndarray]] = {}
+        computed_vectors = {}
+        for d_type, (sample_frames, sample_timestamps, origins, gaze_points) in selected_data.items():
+            vectors = np.full((len(sample_frames), 3), np.nan)
+            for sample_idx, frame_idx in enumerate(sample_frames):
+                if d_type == DataType.viewpos_vidpos_homography:
+                    if points_for_homography is None:
+                        raise ValueError('points_for_homography must be provided for homography gaze data.')
+                    gaze_vector   = gaze_points[sample_idx]
+                    target_vector = points_for_homography[target_id]
                 else:
-                    # use 3D vectors known given pose information
-                    this_pose = pose.get_sample_pose(poses, f_idx, timestamp=ts[i])
+                    this_pose = pose.get_sample_pose(poses, frame_idx, timestamp=float(sample_timestamps[sample_idx]))
                     if this_pose is None:
                         continue
-                    if f_idx not in points_cam_space:
-                        points_cam_space[f_idx] = {}
-                    if i not in points_cam_space[f_idx]:
-                        points_cam_space[f_idx][i] = this_pose.world_frame_to_cam(points[t])
+                    if frame_idx not in target_vectors:
+                        target_vectors[frame_idx] = {}
+                    if sample_idx not in target_vectors[frame_idx]:
+                        target_vectors[frame_idx][sample_idx] = this_pose.world_frame_to_cam(target_point)
+                    gaze_vector   = gaze_points[sample_idx]               - origins[sample_idx]
+                    target_vector = target_vectors[frame_idx][sample_idx] - origins[sample_idx]
 
-                    # get vectors from origin to target and to gaze point
-                    vGaze   = gaze[i,:]                 -ori[i,:]
-                    vTarget = points_cam_space[f_idx][i]-ori[i,:]
+                vectors[sample_idx] = transforms.vector_to_target_frame(gaze_vector, target_vector)
+            computed_vectors[d_type] = vectors
 
-                # get offset
-                ang2D               = transforms.angle_between(vTarget,vGaze)
-                # decompose in horizontal/vertical (in plane space)
-                onPlaneAngle        = math.atan2(gazePlane[i,1]-points[t][1], gazePlane[i,0]-points[t][0])
-                out[t][d_type][i,:] = ang2D*np.array([1., math.cos(onPlaneAngle), math.sin(onPlaneAngle)])
-
-        # special case for average of left and right eye
-        if DataType.pose_left_right_avg in d_types:
-            out[t][DataType.pose_left_right_avg] = np.dstack((out[t][DataType.pose_left_eye], out[t][DataType.pose_right_eye])).mean(axis=2)
+        out[target_id] = {}
+        for d_type in requested_types:
+            if d_type == DataType.pose_left_right_avg:
+                out[target_id][d_type] = average_gaze_vectors(computed_vectors[DataType.pose_left_eye], computed_vectors[DataType.pose_right_eye])
+            else:
+                out[target_id][d_type] = computed_vectors[d_type]
 
     return frame_idxs, timestamps, out
 
-def collect_gaze_data(plane_gazes: dict[int, list[gaze_worldref.Gaze]], d_type: DataType, viewing_distance: float|None = None) -> tuple[list[int], np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+def target_relative_vectors_to_fick(vectors: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    vectors = np.asarray(vectors, dtype=float)
+    if vectors.shape[-1] != 3:
+        raise ValueError('Target-relative gaze vectors should have a final dimension of 3.')
+    return vector_to_Fick(vectors[..., 0], vectors[..., 1], vectors[..., 2])
+
+def average_gaze_vectors(left: np.ndarray, right: np.ndarray) -> np.ndarray:
+    left = np.asarray(left, dtype=float)
+    right = np.asarray(right, dtype=float)
+    left_norm = np.linalg.norm(left, axis=-1, keepdims=True)
+    right_norm = np.linalg.norm(right, axis=-1, keepdims=True)
+    valid = (np.all(np.isfinite(left), axis=-1, keepdims=True) & np.all(np.isfinite(right), axis=-1, keepdims=True) & (left_norm > 0) & (right_norm > 0))
+    left_unit  = np.divide( left,  left_norm, out=np.zeros_like( left), where= left_norm > 0)
+    right_unit = np.divide(right, right_norm, out=np.zeros_like(right), where=right_norm > 0)
+    midpoint = left_unit + right_unit
+    midpoint_norm = np.linalg.norm(midpoint, axis=-1, keepdims=True)
+    valid &= midpoint_norm > 1e-12
+    return np.divide(midpoint, midpoint_norm, out=np.full_like(midpoint, np.nan), where=valid)
+
+def calculate_gaze_angles_to_point(plane_gazes: dict[int, list[gaze_worldref.Gaze]], poses: dict[int, pose.Pose] | dict[int, list[pose.Pose]], points: dict[int, np.ndarray], d_types: list[DataType], points_for_homography: dict[int, np.ndarray]|None=None, viewing_distance: float|None = None) -> tuple[list[int], np.ndarray, dict[int, dict[DataType, np.ndarray]]]:
+    frame_idxs, timestamps, vectors = calculate_target_relative_gaze_vectors(plane_gazes, poses, points, d_types, points_for_homography, viewing_distance)
+    out: dict[int, dict[DataType, np.ndarray]] = {}
+    for target_id, target_vectors in vectors.items():
+        out[target_id] = {}
+        for d_type, gaze_vectors in target_vectors.items():
+            azi, ele = target_relative_vectors_to_fick(gaze_vectors)
+            total = np.degrees(np.arctan2(np.hypot(gaze_vectors[:, 0], gaze_vectors[:, 1]), gaze_vectors[:, 2]))
+            out[target_id][d_type] = np.column_stack((total, azi, ele))
+    return frame_idxs, timestamps, out
+
+def collect_gaze_data(plane_gazes: dict[int, list[gaze_worldref.Gaze]], d_type: DataType, viewing_distance: float|None = None) -> tuple[list[int], list[float], np.ndarray, np.ndarray]:
     if d_type == DataType.viewpos_vidpos_homography and viewing_distance is None:
         raise ValueError(f'When using data type {DataType.viewpos_vidpos_homography}, a viewing distance (in mm) should be provided.')
 
@@ -237,12 +268,13 @@ def collect_gaze_data(plane_gazes: dict[int, list[gaze_worldref.Gaze]], d_type: 
         ori     = np.zeros((len(ts),3))
     else:
         ori     = np.vstack([getattr(s,fields[0]) for v in plane_gazes.values() for s in v])
-    gazePlane   = np.vstack([getattr(s,fields[2]) for v in plane_gazes.values() for s in v])
     if fields[1] is None:
         if not d_type==DataType.viewpos_vidpos_homography:
             raise NotImplementedError(f'This field should be set, is a special case not implemented? Contact developer')
-        gaze    = np.hstack((gazePlane[:,0:2], np.full((gazePlane.shape[0],1),viewing_distance)))
+        assert fields[2] is not None, 'Field 2 should never be None. Contact developer'
+        gazePlane   = np.vstack([getattr(s,fields[2]) for v in plane_gazes.values() for s in v])
+        gaze        = np.hstack((gazePlane[:,0:2], np.full((gazePlane.shape[0],1),viewing_distance)))
     else:
         gaze    = np.vstack([getattr(s,fields[1]) for v in plane_gazes.values() for s in v])
 
-    return frame_idxs, ts, ori, gaze, gazePlane
+    return frame_idxs, ts, ori, gaze
