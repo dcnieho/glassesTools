@@ -116,7 +116,7 @@ class Plane(_MarkerAssembly):
             R   = np.array([[math.cos(rotr), math.sin(rotr)], [-math.sin(rotr), math.cos(rotr)]])
             # get marker size
             markerHalfSizeMm = row[['size']].values[0]/2.*pos_size_scale_fac if 'size' in row else markerHalfSizeMmDefault
-            # top left first, and clockwise: same order as detected ArUco marker corners
+            # Canonical marker order: top-left first, then clockwise.
             tl = c + np.matmul(R, np.array([-markerHalfSizeMm, -markerHalfSizeMm]))
             tr = c + np.matmul(R, np.array([ markerHalfSizeMm, -markerHalfSizeMm]))
             br = c + np.matmul(R, np.array([ markerHalfSizeMm,  markerHalfSizeMm]))
@@ -148,6 +148,7 @@ class Plane(_MarkerAssembly):
 
         img = np.zeros((height, width), np.uint8)
         img[:] = 255
+        from . import aruco
         # collect all markers
         corner_points = []
         ids = []
@@ -186,8 +187,7 @@ class Plane(_MarkerAssembly):
         # place markers
         for i,sz,pos in zip(ids,pix_sz,np.moveaxis(corner_points, -1, 0)):
             # make marker
-            marker_image = np.zeros((sz, sz), dtype=np.uint8)
-            marker_image = self.aruco_dict.generateImageMarker(i, sz, marker_image, self.aruco_settings['detector_params']['markerBorderBits'])
+            marker_image = aruco.get_marker_image(sz, i, self.aruco_dict_id, self.aruco_settings['detector_params']['markerBorderBits'])
 
             # put in image
             if pos[0,1]==pos[1,1] and pos[1,0]==pos[2,0] and pos[0,0]<pos[1,0]:

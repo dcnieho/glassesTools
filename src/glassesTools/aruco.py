@@ -21,6 +21,15 @@ class DetectionOutput(typing.NamedTuple):
 default_dict = cv2.aruco.DICT_4X4_250
 
 dict_id_to_str: dict[int,str] = {getattr(cv2.aruco,k):k for k in ['DICT_4X4_50', 'DICT_4X4_100', 'DICT_4X4_250', 'DICT_4X4_1000', 'DICT_5X5_50', 'DICT_5X5_100', 'DICT_5X5_250', 'DICT_5X5_1000', 'DICT_6X6_50', 'DICT_6X6_100', 'DICT_6X6_250', 'DICT_6X6_1000', 'DICT_7X7_50', 'DICT_7X7_100', 'DICT_7X7_250', 'DICT_7X7_1000', 'DICT_ARUCO_ORIGINAL', 'DICT_APRILTAG_16H5', 'DICT_APRILTAG_25H9', 'DICT_APRILTAG_36H10', 'DICT_APRILTAG_36H11', 'DICT_ARUCO_MIP_36H12']}
+_apriltag_dict_ids = frozenset((cv2.aruco.DICT_APRILTAG_16H5, cv2.aruco.DICT_APRILTAG_25H9, cv2.aruco.DICT_APRILTAG_36H10, cv2.aruco.DICT_APRILTAG_36H11))
+
+def is_apriltag_dictionary(dictionary_id: int) -> bool:
+    return dictionary_id in _apriltag_dict_ids
+
+def _to_opencv_marker_corner_order(corners: np.ndarray) -> np.ndarray:
+    """Reorder canonical AprilTag corners for OpenCV's AprilTag detector and board APIs."""
+    return np.roll(corners, 2, axis=-2)
+
 def str_to_dict_id(aruco_dict_name: str):
     if not hasattr(cv2.aruco,aruco_dict_name):
         raise ValueError(f'ArUco dictionary with name "{aruco_dict_name}" is not known.')
@@ -954,7 +963,10 @@ def get_marker_image(size: int, m_id: int, ArUco_dict_id: int, marker_border_bit
     if m_id>=get_dict_size(ArUco_dict_id):
         return None
     marker_image = np.zeros((size, size), dtype=np.uint8)
-    return cv2.aruco.generateImageMarker(cv2.aruco.getPredefinedDictionary(ArUco_dict_id), m_id, size, marker_image, marker_border_bits)
+    marker_image = cv2.aruco.generateImageMarker(cv2.aruco.getPredefinedDictionary(ArUco_dict_id), m_id, size, marker_image, marker_border_bits)
+    if is_apriltag_dictionary(ArUco_dict_id):
+        marker_image = cv2.rotate(marker_image, cv2.ROTATE_180)
+    return marker_image
 
 def deploy_marker_images(output_dir: str|pathlib.Path, size: int, ArUco_dict_id: int, marker_border_bits: int=1):
     # Generate the markers
@@ -1014,6 +1026,8 @@ class Detector:
                                        [ marker_setup.size/2,  marker_setup.size/2, 0],
                                        [ marker_setup.size/2, -marker_setup.size/2, 0],
                                        [-marker_setup.size/2, -marker_setup.size/2, 0]])
+            if is_apriltag_dictionary(mark.aruco_dict_id):
+                marker_points = _to_opencv_marker_corner_order(marker_points)
         self._indiv_marker_points[mark.m_id] = marker_points
 
     def _check_dict(self, dict_id: int, what: str):
@@ -1420,7 +1434,7 @@ class Manager:
             self._working_set.visualized.add(detector_id)
 
 
-def create_assembly_geometry(marker_corners: list[np.ndarray], ids: list[int], aruco_dict: cv2.aruco.Dictionary):
+def create_assembly_geometry(marker_corners: list[np.ndarray], ids: list[int], aruco_dict: cv2.aruco.Dictionary, is_apriltag: bool = False):
     marker_corners = np.asarray(marker_corners, dtype=np.float32)
     if marker_corners.ndim != 3 or marker_corners.shape[1] != 4 or marker_corners.shape[2] not in (2, 3):
         raise ValueError('Marker corners must have shape (N, 4, 2) or (N, 4, 3)')
@@ -1431,6 +1445,8 @@ def create_assembly_geometry(marker_corners: list[np.ndarray], ids: list[int], a
     if marker_corners.shape[2] == 2:
         # Nx4x2 -> Nx4x3 (at Z=0 to all points)
         marker_corners = np.pad(marker_corners, ((0, 0), (0, 0), (0, 1)))
+    if is_apriltag:
+        marker_corners = _to_opencv_marker_corner_order(marker_corners)
     return cv2.aruco.Board(marker_corners, aruco_dict, np.asarray(ids))
 
 def refine_detection(image: cv2.UMat, detected_corners, detected_ids, rejected_corners, det: cv2.aruco.ArucoDetector, board: cv2.aruco.Board, frame_info: dict, camera_parameters: ocv.CameraParams):

@@ -35,7 +35,7 @@ class MarkerAssembly:
         self._all_marker_ids = list(self.marker_corners)
         self._origin = np.zeros(3, dtype=float)
         self.aruco_dict_id = aruco_dict_id
-        self.aruco_dict = cv2.aruco.getPredefinedDictionary(aruco_dict_id)
+        self.aruco_dict: cv2.aruco.Dictionary = cv2.aruco.getPredefinedDictionary(aruco_dict_id)
         from . import aruco
         self.aruco_settings = aruco.resolve_settings(aruco_settings)
         self.min_num_markers = min_num_markers
@@ -66,6 +66,7 @@ class MarkerAssembly:
             for line_number, row in enumerate(reader, start=2):
                 try:
                     marker_id = int(row['ID'])
+                    # Canonical corner indices start at top-left and proceed clockwise.
                     corner_idx = int(row['corner'])
                     point = [float(row[axis]) for axis in ('x', 'y', 'z')]
                 except (TypeError, ValueError) as exc:
@@ -111,15 +112,14 @@ class MarkerAssembly:
         return image
 
     def _generate_reference_image(self, im_size: int) -> np.ndarray:
+        from . import aruco
         # set up a white canvas
         tile_size = im_size // 2
         canvas = np.full((tile_size * 2, tile_size * 2, 3), 255, dtype=np.uint8)
         # get marker images
         marker_render_size = 256
         marker_images = {
-            marker_id: self.aruco_dict.generateImageMarker(
-                marker_id, marker_render_size,
-                borderBits=self.aruco_settings['detector_params']['markerBorderBits'])
+            marker_id: aruco.get_marker_image(marker_render_size, marker_id, self.aruco_dict_id, self.aruco_settings['detector_params']['markerBorderBits'])
             for marker_id in self.marker_corners
         }
         coverage_source = np.full((marker_render_size, marker_render_size), 255, dtype=np.uint8)
@@ -278,7 +278,7 @@ class MarkerAssembly:
 
     def get_aruco_board(self) -> cv2.aruco.Board:
         from . import aruco
-        return aruco.create_assembly_geometry(list(self.marker_corners.values()), self._all_marker_ids, self.aruco_dict)
+        return aruco.create_assembly_geometry(list(self.marker_corners.values()), self._all_marker_ids, self.aruco_dict, is_apriltag=aruco.is_apriltag_dictionary(self.aruco_dict_id))
 
     def get_assembly_setup(self):
         from . import aruco
