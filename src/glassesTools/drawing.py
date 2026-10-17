@@ -19,7 +19,13 @@ class CircleStyle(typing.NamedTuple):
     fill_color: RgbColor | None = None
 
 
+class LineStyle(typing.NamedTuple):
+    color: RgbColor | None = RgbColor(0, 255, 0)
+    thickness: int = 1
+
+
 DEFAULT_CIRCLE_STYLE = CircleStyle()
+DEFAULT_LINE_STYLE = LineStyle()
 
 
 def draw_circle(img: np.ndarray, center, style: CircleStyle | None = None, sub_pixel_fac=1):
@@ -29,6 +35,10 @@ def draw_circle(img: np.ndarray, center, style: CircleStyle | None = None, sub_p
     if style.edge_color is not None and style.edge_thickness > 0:
         openCVCircle(img, center, style.radius, style.edge_color[::-1], style.edge_thickness, sub_pixel_fac)
 
+def draw_line(img: np.ndarray, start_point, end_point, style: LineStyle | None = None, sub_pixel_fac=1):
+    style = style or DEFAULT_LINE_STYLE
+    if style.color is not None and style.thickness > 0:
+        openCVLine(img, start_point, end_point, style.color[::-1], style.thickness, sub_pixel_fac)
 
 class MarkerIDStyle(typing.NamedTuple):
     draw: bool = True
@@ -52,6 +62,7 @@ class MarkerStyles(typing.NamedTuple):
 
 for style_type, compatible_names in (
     (CircleStyle, None),
+    (LineStyle, None),
     (RgbColor, ['__config.RgbColor__']),
     (MarkerIDStyle, None),
     (MarkerStyle, None),
