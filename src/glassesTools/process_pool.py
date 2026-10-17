@@ -331,9 +331,9 @@ class JobDescription(typing.Generic[_UserDataT]):
     progress:           JobProgress
     done_callback:      typing.Callable[[ProcessFuture, int, _UserDataT, State], None]
 
-    exclusive_id:       typing.Optional[int]      = None # if set, only one task with a given id can be run at a time, rest are kept in waiting. E.g. to ensure only one task needing a gui is run at a time
-    priority:           int                       = 999  # jobs with a higher priority are scheduled first, unless they cannot be because they're exclusive (exclusive_id is set) and task of that exclusivity is already running, or because their dependencies are not met yet
+    priority:           int                       = 999  # jobs with a higher priority are scheduled first, unless they cannot be because an exclusivity resource is already in use
     depends_on:         typing.Optional[set[int]] = None # set of job ids that need to be completed before this one can be launched
+    exclusive_ids:      tuple[tuple[str, ...], ...] = ()
 
     _pool_job_id:       typing.Optional[int]            = None
     _future:            typing.Optional[ProcessFuture]  = dataclasses.field(init=False, default=None)
@@ -391,10 +391,16 @@ class JobScheduler(typing.Generic[_UserDataT]):
     def add_job(self,
                 user_data: _UserDataT, payload: JobPayload, done_callback: typing.Callable[[ProcessFuture, int, _UserDataT, State], None],
                 progress_indicator: JobProgress|None = None,
-                exclusive_id: typing.Optional[int] = None, priority: int|None = None, depends_on: typing.Optional[set[int]] = None) -> int:
+                priority: int|None = None, depends_on: typing.Optional[set[int]] = None,
+                exclusive_ids: typing.Iterable[tuple[str, ...]]|None = None) -> int:
         with self._job_id_provider:
             job_id = self._job_id_provider.get_count()
-        self.jobs[job_id] = JobDescription(user_data, payload, progress_indicator, done_callback, exclusive_id, priority, depends_on)
+        self.jobs[job_id] = JobDescription(
+            user_data, payload, progress_indicator, done_callback,
+            priority=priority,
+            depends_on=depends_on,
+            exclusive_ids=tuple(dict.fromkeys(exclusive_ids or ())),    # dict.fromkeys removes duplicates while preserving order
+        )
         self.jobs[job_id]._warning_store = self._manager.WarningStore()
         self._pending_jobs.append(job_id)
         return job_id
@@ -448,7 +454,7 @@ class JobScheduler(typing.Generic[_UserDataT]):
     def update(self):
         # first count how many are scheduled to the pool and whether all tasks are still valid
         num_scheduled_to_pool = 0
-        exclusive_ids: set[int] = set()
+        exclusive_ids: set[tuple[str, ...]] = set()
         for job_id in self.jobs:
             job = self.jobs[job_id]
             # check job still valid or should be canceled
@@ -462,14 +468,16 @@ class JobScheduler(typing.Generic[_UserDataT]):
             # check how many scheduled jobs we have
             if job.is_scheduled():
                 num_scheduled_to_pool += 1
-                if job.exclusive_id is not None:
-                    exclusive_ids.add(job.exclusive_id)
+                exclusive_ids.update(job.exclusive_ids)
 
         # if we have less than max number of tasks scheduled to the pool, see if anything new to schedule to the pool
         while num_scheduled_to_pool < self._pool.num_workers:
             # find suitable next task to schedule
-            # order tasks by priority, filtering out those who have a colliding exclusive_id
-            job_ids = [i for i in sorted(self._pending_jobs, key=lambda ii: 999 if self.jobs[ii].priority is None else self.jobs[ii].priority) if self.jobs[i].exclusive_id not in exclusive_ids]
+            # Order by priority, leaving jobs queued while any requested resource is occupied.
+            job_ids = [
+                i for i in sorted(self._pending_jobs, key=lambda ii: 999 if self.jobs[ii].priority is None else self.jobs[ii].priority)
+                if not _exclusive_ids_conflict(self.jobs[i].exclusive_ids, exclusive_ids)
+            ]
             if not job_ids:
                 break
             job_id = job_ids[0]
@@ -484,9 +492,24 @@ class JobScheduler(typing.Generic[_UserDataT]):
                                to_schedule.payload.fn, to_schedule._warning_store,
                                *to_schedule.payload.args, **extra_kwargs, **to_schedule.payload.kwargs)
             self._pending_jobs.remove(job_id)
-            if to_schedule.exclusive_id is not None:
-                exclusive_ids.add(to_schedule.exclusive_id)
+            exclusive_ids.update(to_schedule.exclusive_ids)
             num_scheduled_to_pool += 1
+
+
+def _exclusive_ids_conflict(requested: typing.Iterable[tuple[str, ...]], active: typing.Iterable[tuple[str, ...]]) -> bool:
+    """Tuple IDs are resource paths; a path conflicts with itself and its descendants."""
+    for requested_id in requested:
+        for active_id in active:
+            if requested_id == active_id:
+                # The same session, or the same recording, was requested twice.
+                return True
+            if len(requested_id) < len(active_id) and active_id[:len(requested_id)] == requested_id:
+                # Requested session ('session', 'S1') contains active recording ('session', 'S1', 'recording', 'R1').
+                return True
+            if len(active_id) < len(requested_id) and requested_id[:len(active_id)] == active_id:
+                # Active recording ('session', 'S1', 'recording', 'R1') is contained by requested session ('session', 'S1').
+                return True
+    return False
 
 
 def _get_status_from_future(fut: ProcessFuture) -> State:
