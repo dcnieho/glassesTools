@@ -103,8 +103,8 @@ def checkPupilRecording(inputDir: str|pathlib.Path):
     """
     This checks that the folder is properly prepared,
     i.e., either:
-    - opened in pupil player and an export was run (currently Pupil Core or Pupil Invisible) or in neon player and export was run (Pupil Neon)
-    - exported from Pupil Cloud (currently Pupil Invisible or Pupil Neon)
+    - opened in pupil player and an export was run (currently Pupil Core or Pupil Invisible) or in older Neon Player and export was run (Pupil Neon)
+    - exported from Pupil Cloud (currently Pupil Invisible or Pupil Neon), or from newer Neon Player which mimics a cloud export
     """
     # check we have an info.player.json file
     if not (inputDir / 'info.player.json').is_file():
@@ -378,15 +378,17 @@ def getCameraCalFromOnline(inputDir: str|pathlib.Path, outputDir: str|pathlib.Pa
 def getCameraCalFromCloudExport(inputDir: str|pathlib.Path, outputDir: str|pathlib.Path, recInfo: Recording) -> list[int]:
     file = inputDir / 'scene_camera.json'
     if not file.is_file():
+        file = inputDir / 'calibration.json'  # this is for Neon Player exports
+    if not file.is_file():
         return None
     with open(file, 'r') as j:
         camInfo = json.load(j)
 
-    camInfo['cameraMatrix'] = np.array(camInfo.pop('camera_matrix'))
-    if 'dist_coefs' in camInfo:
-        camInfo['distCoeff']    = np.array(camInfo.pop('dist_coefs')).flatten()
-    else:
-        camInfo['distCoeff']    = np.array(camInfo.pop('distortion_coefficients')).flatten()
+    cam_matrix_field = 'camera_matrix' if 'camera_matrix' in camInfo else 'scene_camera_matrix'
+    dist_coefs_field = 'dist_coefs' if 'dist_coefs' in camInfo else 'distortion_coefficients' if 'distortion_coefficients' in camInfo else 'scene_distortion_coefficients'
+
+    camInfo['cameraMatrix'] = np.array(camInfo.pop(cam_matrix_field))
+    camInfo['distCoeff']    = np.array(camInfo.pop(dist_coefs_field))
 
     # get resolution from the scene video
     camInfo['resolution']   = getSceneCameraResolution(inputDir, recInfo)
@@ -397,6 +399,10 @@ def getCameraCalFromCloudExport(inputDir: str|pathlib.Path, outputDir: str|pathl
     return camInfo['resolution']
 
 def storeCameraCalibration(camInfo: dict[str, typing.Any], outputDir: str|pathlib.Path):
+    # convert lists to numpy arrays for storage in xml file, OpenCV's FileStorage doesn't support nested lists
+    for key, value in camInfo.items():
+        if isinstance(value, list):
+            camInfo[key] = np.asarray(value)
     fs = cv2.FileStorage(outputDir / naming.scene_camera_calibration_fname, cv2.FILE_STORAGE_WRITE)
     for key,value in camInfo.items():
         fs.write(name=key,val=value)
@@ -582,7 +588,10 @@ def readGazeDataPupilPlayer(file: str|pathlib.Path, sceneVideoDimensions: list[i
 def formatGazeDataCloudExport(inputDir: str|pathlib.Path, exportFile: str|pathlib.Path):
     df = readGazeDataCloudExport(exportFile)
 
-    frameTimestamps = pd.read_csv(inputDir/'world_timestamps.csv')
+    in_file = inputDir/'world_timestamps.csv'
+    if not in_file.is_file():
+        in_file = inputDir/'scene_timestamps.csv'   # this is for Neon Player exports
+    frameTimestamps = pd.read_csv(in_file)
     frameTimestamps = frameTimestamps.rename(columns={'timestamp [ns]': 'timestamp'})
     frameTimestamps = frameTimestamps.drop(columns=[x for x in frameTimestamps.columns if x not in ['timestamp']])
     frameTimestamps['frame_idx'] = frameTimestamps.index
