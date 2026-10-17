@@ -13,7 +13,7 @@ class Recording:
 
     name                        : str           = ""
     source_directory            : pathlib.Path  = ""
-    working_directory           : pathlib.Path  = ""
+    working_directory           : pathlib.Path | None = None
     start_time                  : Timestamp     = Timestamp(0)
     duration                    : float         = None
     eye_tracker                 : EyeTracker    = EyeTracker.Unknown
@@ -27,6 +27,11 @@ class Recording:
     scene_camera_serial         : str           = ""
     scene_video_file            : str           = ""
 
+    def __post_init__(self):
+        if self.working_directory:
+            self.working_directory = pathlib.Path(self.working_directory)
+        else:
+            self.working_directory = None
 
     def store_as_json(self, path: str | pathlib.Path):
         path = pathlib.Path(path)
