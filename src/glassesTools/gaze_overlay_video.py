@@ -21,6 +21,16 @@ class Status(Enum):
     Skip = auto()
     Finished = auto()
 
+class _FrameCache(typing.NamedTuple):
+    status: Status
+    frame: np.ndarray | None = None
+    frame_idx: int | None = None
+    timestamp: float | None = None
+    frame_info: dict | None = None
+
+    def as_result(self) -> tuple[Status, tuple[np.ndarray | None, int | None, float | None, dict | None]]:
+        return self.status, (self.frame, self.frame_idx, self.timestamp, self.frame_info)
+
 class VideoMaker:
     def __init__(self, output_path: str|pathlib.Path, video_file: str|pathlib.Path, frame_timestamp_file: str|pathlib.Path|timestamps.VideoTimestamps, camera_calibration_file: str|pathlib.Path|ocv.CameraParams, gaze_data_file: str|pathlib.Path|dict[int,list[gaze_headref.Gaze]], pixel_format: str = 'yuv420p'):
         self.src_video   = pathlib.Path(video_file)
@@ -32,7 +42,7 @@ class VideoMaker:
         self.cam_params = camera_calibration_file if isinstance(camera_calibration_file,ocv.CameraParams) else ocv.CameraParams.read_from_file(camera_calibration_file)
         self.gaze       = gaze_data_file if isinstance(gaze_data_file,dict) else gaze_headref.read_dict_from_file(gaze_data_file, ts_column_suffixes=['VOR',''])[0]
 
-        self._cache: tuple[Status, tuple[np.ndarray, int, float]] = None  # self._cache[1][1] is frame number
+        self._cache: _FrameCache | None = None
 
         self.gui                    : video_player.GUI  = None
         self.has_gui                                    = False
@@ -72,26 +82,26 @@ class VideoMaker:
     def set_gaze_styles(self, styles: gaze_headref.OverlayGazeStyles | None = None):
         self.gaze_styles = styles or gaze_headref.DEFAULT_OVERLAY_GAZE_STYLES
 
-    def _read_frame(self, wanted_frame_idx:int|None = None) -> tuple[Status, tuple[np.ndarray, int, float]]:
+    def _read_frame(self, wanted_frame_idx:int|None = None) -> tuple[Status, tuple[np.ndarray | None, int | None, float | None, dict | None]]:
         if self._first_frame and self.has_gui:
             self.gui.set_playing(True)
             self._first_frame = False
 
-        if wanted_frame_idx is not None and self._cache is not None and self._cache[1][1]==wanted_frame_idx:
-            return self._cache
+        if wanted_frame_idx is not None and self._cache is not None and self._cache.frame_idx==wanted_frame_idx:
+            return self._cache.as_result()
 
         should_exit, frame, frame_idx, frame_ts, frame_info = self.video.read_frame(report_gap=True, wanted_frame_idx=wanted_frame_idx)
 
         if should_exit:
-            self._cache = Status.Finished, (None, None, None)
-            return self._cache
+            self._cache = _FrameCache(Status.Finished)
+            return self._cache.as_result()
 
         if self.has_gui:
             requests = self.gui.get_requests()
             for r,_ in requests:
                 if r=='exit':   # only requests we need to handle
-                    self._cache = Status.Finished, (None, None, None)
-                    return self._cache
+                    self._cache = _FrameCache(Status.Finished)
+                    return self._cache.as_result()
                 if r=='close':
                     self.has_gui = False
                     self.gui.stop()
@@ -102,28 +112,30 @@ class VideoMaker:
         # for VFR video files
         if frame is None:
             # we don't have a valid frame or nothing to do, continue to next
-            self._cache = Status.Skip, (frame, frame_idx, frame_ts, frame_info)
-            return self._cache
+            self._cache = _FrameCache(Status.Skip, frame, frame_idx, frame_ts, frame_info)
+            return self._cache.as_result()
 
-        self._cache = Status.Ok, (frame, frame_idx, frame_ts, frame_info)
-        return self._cache
+        self._cache = _FrameCache(Status.Ok, frame, frame_idx, frame_ts, frame_info)
+        return self._cache.as_result()
 
     def process_one_frame(self) -> Status:
         status, (frame, frame_idx, frame_ts, frame_info) = self._read_frame()
         if status==Status.Finished:
             return status
+        if frame_idx is None or frame_ts is None:
+            return Status.Finished
         if frame is None:
             # get black frame
             frame = np.zeros(self._res,'uint8')
 
         # draw gaze
-        if 'offset_x' in frame_info and 'offset_y' in frame_info:
+        if frame_info is not None and 'offset_x' in frame_info and 'offset_y' in frame_info:
             ROI_offset = (frame_info['offset_x'], frame_info['offset_y'])
         else:
             ROI_offset = (0,0)
         if frame_idx in self.gaze:
             for g in self.gaze[frame_idx]:
-                  g.draw(frame, self.cam_params, sub_pixel_fac=self.sub_pixel_fac, styles=self.gaze_styles, ROI_offset=ROI_offset)
+                g.draw(frame, self.cam_params, sub_pixel_fac=self.sub_pixel_fac, styles=self.gaze_styles, ROI_offset=ROI_offset)
 
         # now that all processing is done, handle gui
         if self.has_gui:
@@ -134,6 +146,8 @@ class VideoMaker:
 
         if self.progress_updater:
             self.progress_updater()
+
+        return status
 
     def finish_video(self):
         # nothing more to show, so clean up GUI if any
@@ -180,7 +194,5 @@ class VideoMaker:
             status = self.process_one_frame()
             if status==Status.Finished:
                 break
-            if status==Status.Skip:
-                continue
 
         self.finish_video()
