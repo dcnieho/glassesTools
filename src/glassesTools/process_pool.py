@@ -199,25 +199,48 @@ class WarningStore:
             self.warnings[warning_index].notified = True
 
 
-def _run_with_warning_capture(fn: typing.Callable[..., typing.Any], warning_store, *args, **kwargs):
-    with warnings.catch_warnings():
-        warnings.simplefilter('always')
-        original_showwarning = warnings.showwarning
+class JobResourceControl:
+    def __init__(self, exclusive_ids: typing.Iterable[tuple[str, ...]]):
+        self._exclusive_ids = set(exclusive_ids)
 
-        def _showwarning(message, category, filename, lineno, file=None, line=None):
-            if issubclass(category, ProcessingWarning):
-                warning_store.append(JobWarning(
-                    message=str(message),
-                    category=category.__name__,
-                    filename=filename,
-                    lineno=lineno,
-                    line=line.rstrip() if line is not None else None,
-                ))
-            else:
-                original_showwarning(message, category, filename, lineno, file=file, line=line)
+    def release(self, resource_id: tuple[str, ...]):
+        self._exclusive_ids.discard(resource_id)
 
-        warnings.showwarning = _showwarning
-        return fn(*args, **kwargs)
+    def get_active_ids(self) -> tuple[tuple[str, ...], ...]:
+        return tuple(self._exclusive_ids)
+
+_current_job_resource_control = None
+def release_current_job_resource(resource_id: tuple[str, ...]) -> bool:
+    if _current_job_resource_control is None:
+        return False
+    _current_job_resource_control.release(resource_id)
+    return True
+
+def _run_with_warning_capture(fn: typing.Callable[..., typing.Any], warning_store, resource_control, *args, **kwargs):
+    global _current_job_resource_control
+    previous_resource_control = _current_job_resource_control
+    _current_job_resource_control = resource_control
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter('always')
+            original_showwarning = warnings.showwarning
+
+            def _showwarning(message, category, filename, lineno, file=None, line=None):
+                if issubclass(category, ProcessingWarning):
+                    warning_store.append(JobWarning(
+                        message=str(message),
+                        category=category.__name__,
+                        filename=filename,
+                        lineno=lineno,
+                        line=line.rstrip() if line is not None else None,
+                    ))
+                else:
+                    original_showwarning(message, category, filename, lineno, file=file, line=line)
+
+            warnings.showwarning = _showwarning
+            return fn(*args, **kwargs)
+    finally:
+        _current_job_resource_control = previous_resource_control
 
 class _EMA(object):
     """
@@ -321,6 +344,7 @@ class JobProgress:
 
     def set_finished(self):
         self.update(self.total-self.n)
+multiprocessing.managers.BaseManager.register('JobResourceControl', JobResourceControl)
 multiprocessing.managers.BaseManager.register('JobProgress', JobProgress)
 multiprocessing.managers.BaseManager.register('WarningStore', WarningStore)
 
@@ -331,9 +355,10 @@ class JobDescription(typing.Generic[_UserDataT]):
     progress:           JobProgress
     done_callback:      typing.Callable[[ProcessFuture, int, _UserDataT, State], None]
 
-    priority:           int                       = 999  # jobs with a higher priority are scheduled first, unless they cannot be because an exclusivity resource is already in use
-    depends_on:         typing.Optional[set[int]] = None # set of job ids that need to be completed before this one can be launched
+    priority:           int                         = 999   # jobs with a higher priority are scheduled first, unless they cannot be because an exclusivity resource is already in use
+    depends_on:         typing.Optional[set[int]]   = None  # set of job ids that need to be completed before this one can be launched
     exclusive_ids:      tuple[tuple[str, ...], ...] = ()
+    resource_control:   typing.Any                  = None
 
     _pool_job_id:       typing.Optional[int]            = None
     _future:            typing.Optional[ProcessFuture]  = dataclasses.field(init=False, default=None)
@@ -376,6 +401,11 @@ class JobDescription(typing.Generic[_UserDataT]):
     def is_finished(self):
         return self._final_state is not None
 
+    def get_active_exclusive_ids(self) -> tuple[tuple[str, ...], ...]:
+        if self.resource_control is None:
+            return self.exclusive_ids
+        return self.resource_control.get_active_ids()
+
 class JobScheduler(typing.Generic[_UserDataT]):
     def __init__(self, pool: ProcessPool, job_is_valid_checker : typing.Callable[[_UserDataT], bool]|None = None):
         self.jobs               : dict[int, JobDescription[_UserDataT]] = {}
@@ -395,11 +425,13 @@ class JobScheduler(typing.Generic[_UserDataT]):
                 exclusive_ids: typing.Iterable[tuple[str, ...]]|None = None) -> int:
         with self._job_id_provider:
             job_id = self._job_id_provider.get_count()
+        job_exclusive_ids = tuple(dict.fromkeys(exclusive_ids or ()))
         self.jobs[job_id] = JobDescription(
             user_data, payload, progress_indicator, done_callback,
             priority=priority,
             depends_on=depends_on,
-            exclusive_ids=tuple(dict.fromkeys(exclusive_ids or ())),    # dict.fromkeys removes duplicates while preserving order
+            exclusive_ids=job_exclusive_ids,
+            resource_control=self._manager.JobResourceControl(job_exclusive_ids),
         )
         self.jobs[job_id]._warning_store = self._manager.WarningStore()
         self._pending_jobs.append(job_id)
@@ -468,7 +500,7 @@ class JobScheduler(typing.Generic[_UserDataT]):
             # check how many scheduled jobs we have
             if job.is_scheduled():
                 num_scheduled_to_pool += 1
-                exclusive_ids.update(job.exclusive_ids)
+                exclusive_ids.update(job.get_active_exclusive_ids())
 
         # if we have less than max number of tasks scheduled to the pool, see if anything new to schedule to the pool
         while num_scheduled_to_pool < self._pool.num_workers:
@@ -489,10 +521,10 @@ class JobScheduler(typing.Generic[_UserDataT]):
             to_schedule._pool_job_id, to_schedule._future = \
                 self._pool.run(_run_with_warning_capture, to_schedule.user_data,
                                self._bind_scheduler_job_id(to_schedule.done_callback, job_id),
-                               to_schedule.payload.fn, to_schedule._warning_store,
+                               to_schedule.payload.fn, to_schedule._warning_store, to_schedule.resource_control,
                                *to_schedule.payload.args, **extra_kwargs, **to_schedule.payload.kwargs)
             self._pending_jobs.remove(job_id)
-            exclusive_ids.update(to_schedule.exclusive_ids)
+            exclusive_ids.update(to_schedule.get_active_exclusive_ids())
             num_scheduled_to_pool += 1
 
 

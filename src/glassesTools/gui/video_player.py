@@ -4,7 +4,7 @@ import numpy as np
 import functools
 from enum import Enum, auto
 import dataclasses
-from typing import Any
+from typing import Any, Callable
 import natsort
 import pathvalidate
 import cv2
@@ -137,6 +137,8 @@ class GUI:
 
         self._interruptible = True
         self._detachable = False
+        self._on_detach_callback: Callable[[], None] | None = None
+        self._detach_requested = False
         self._allow_pause = False
         self._allow_seek = False
         self._allow_annotate: set[str] = set()
@@ -220,8 +222,9 @@ class GUI:
     def set_interruptible(self, interruptible: bool):
         self._interruptible = interruptible
         self._add_remove_button(self._interruptible, Action.Quit)
-    def set_detachable(self, detachable: bool):
+    def set_detachable(self, detachable: bool, on_detach: Callable[[], None] | None = None):
         self._detachable = detachable
+        self._on_detach_callback = on_detach
         self._add_remove_button(self._detachable, Action.Close)
     def set_allow_pause(self, allow_pause: bool):
         self._allow_pause = allow_pause
@@ -486,6 +489,8 @@ class GUI:
     def update_image(self, frame: np.ndarray, pts: float, frame_nr: int, window_id:int = None):
         # since this has an independently running loop,
         # need to update image whenever new one available
+        if self._should_exit:
+            return
         if window_id is None:
             window_id = self._get_main_window_id()
         with self._new_frame_lock:
@@ -507,10 +512,13 @@ class GUI:
     def _thread_start_fun(self):
         self._lastT=0.
         self._should_exit = False
+        self._detach_requested = False
 
         def close_callback(window: glfw._GLFWwindow):
             if self._detachable:
                 self._requests.append(('close',True))
+                self._detach_requested = True
+                self._should_exit = True
             elif self._interruptible:
                 self._requests.append(('exit',True))
             else:
@@ -545,6 +553,8 @@ class GUI:
 
         immapp.run(params)
         self._running = False
+        if self._detach_requested and self._on_detach_callback is not None:
+            self._on_detach_callback()
 
     def _gui_func(self):
         # check if we should exit
@@ -900,6 +910,8 @@ class GUI:
                                 self._requests.append(('delta_time',  10. if imgui.is_key_down(imgui.Key.mod_shift) else  1.))
                             case Action.Close:
                                 self._requests.append(('close',None))
+                                self._detach_requested = True
+                                self._should_exit = True
                             case Action.Quit:
                                 self._requests.append(('exit',None))
                             case Action.Annotate_Make:
