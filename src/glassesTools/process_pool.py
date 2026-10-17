@@ -41,7 +41,7 @@ json.register_type(json.TypeEntry(State,'__enum.process.State__', utils.enum_val
 
 class ProcessWaiter(object):
     """Routes completion through to user callback."""
-    def __init__(self, job_id: int, user_data: _UserDataT, done_callback: typing.Callable[[ProcessFuture, _UserDataT, int, State], None]):
+    def __init__(self, job_id: int, user_data: _UserDataT, done_callback: typing.Callable[[ProcessFuture, int, _UserDataT, State], None]):
         self.done_callback  = done_callback
         self.job_id         = job_id
         self.user_data      = user_data
@@ -100,7 +100,7 @@ class ProcessPool:
         # NB: doesn't change number of workers on an active pool, only takes effect when pool is restarted
         self.num_workers = num_workers
 
-    def run(self, fn: typing.Callable, user_data: _UserDataT=None, done_callback: typing.Callable[[ProcessFuture, _UserDataT, int, State], None]=None, *args, **kwargs) -> tuple[int, ProcessFuture]:
+    def run(self, fn: typing.Callable, user_data: _UserDataT=None, done_callback: typing.Callable[[ProcessFuture, int, _UserDataT, State], None]|None=None, *args, **kwargs) -> tuple[int, ProcessFuture]:
         with self._lock:
             if self._pool is None or not self._pool.active:
                 context = multiprocessing.get_context("spawn")  # ensure consistent behavior on Windows (where this is default) and Unix (where fork is default, but that may bring complications)
@@ -329,7 +329,7 @@ class JobDescription(typing.Generic[_UserDataT]):
     user_data:          _UserDataT
     payload:            JobPayload
     progress:           JobProgress
-    done_callback:      typing.Callable[[ProcessFuture, _UserDataT, int, State], None]
+    done_callback:      typing.Callable[[ProcessFuture, int, _UserDataT, State], None]
 
     exclusive_id:       typing.Optional[int]      = None # if set, only one task with a given id can be run at a time, rest are kept in waiting. E.g. to ensure only one task needing a gui is run at a time
     priority:           int                       = 999  # jobs with a higher priority are scheduled first, unless they cannot be because they're exclusive (exclusive_id is set) and task of that exclusivity is already running, or because their dependencies are not met yet
@@ -389,7 +389,7 @@ class JobScheduler(typing.Generic[_UserDataT]):
         self._manager.start()
 
     def add_job(self,
-                user_data: _UserDataT, payload: JobPayload, done_callback: typing.Callable[[ProcessFuture, _UserDataT, int, State], None],
+                user_data: _UserDataT, payload: JobPayload, done_callback: typing.Callable[[ProcessFuture, int, _UserDataT, State], None],
                 progress_indicator: JobProgress|None = None,
                 exclusive_id: typing.Optional[int] = None, priority: int|None = None, depends_on: typing.Optional[set[int]] = None) -> int:
         with self._job_id_provider:
@@ -402,6 +402,16 @@ class JobScheduler(typing.Generic[_UserDataT]):
     def get_progress_indicator(self, **kwargs) -> JobProgress:
         return self._manager.JobProgress(**kwargs)
 
+    @staticmethod
+    def _bind_scheduler_job_id(done_callback, scheduler_job_id: int):
+        if done_callback is None:
+            return None
+
+        def _done_callback(future, _pool_job_id, user_data, state):
+            done_callback(future, scheduler_job_id, user_data, state)
+
+        return _done_callback
+
     def cancel_job(self, job_id: int):
         if job_id not in self.jobs:
             return
@@ -413,7 +423,7 @@ class JobScheduler(typing.Generic[_UserDataT]):
                 self._pending_jobs.remove(job_id)
             self.jobs[job_id]._final_state = State.Canceled
             if self.jobs[job_id].done_callback:
-                self.jobs[job_id].done_callback(None, None, self.jobs[job_id].user_data, State.Canceled)
+                self.jobs[job_id].done_callback(None, job_id, self.jobs[job_id].user_data, State.Canceled)
         # TODO: also cancel all jobs that depend on this job
 
     def cancel_all_jobs(self):
@@ -469,7 +479,10 @@ class JobScheduler(typing.Generic[_UserDataT]):
                 extra_kwargs['progress_indicator'] = to_schedule.progress
 
             to_schedule._pool_job_id, to_schedule._future = \
-                self._pool.run(_run_with_warning_capture, to_schedule.user_data, to_schedule.done_callback, to_schedule.payload.fn, to_schedule._warning_store, *to_schedule.payload.args, **extra_kwargs, **to_schedule.payload.kwargs)
+                self._pool.run(_run_with_warning_capture, to_schedule.user_data,
+                               self._bind_scheduler_job_id(to_schedule.done_callback, job_id),
+                               to_schedule.payload.fn, to_schedule._warning_store,
+                               *to_schedule.payload.args, **extra_kwargs, **to_schedule.payload.kwargs)
             self._pending_jobs.remove(job_id)
             if to_schedule.exclusive_id is not None:
                 exclusive_ids.add(to_schedule.exclusive_id)
