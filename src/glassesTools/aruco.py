@@ -1171,27 +1171,31 @@ class Detector:
         img_points = detect_result.individual['img_points'][detect_result.individual['ids'].tolist().index(marker_id)]
         return self._indiv_marker_points[marker_id], img_points
 
-    def visualize(self, frame, detect_result: DetectionOutput | None = None, sub_pixel_fac=8, assembly_marker_color=(0,255,0), recovered_assembly_marker_color=(255,255,0), individual_marker_color=(255,0,255), unexpected_marker_color=(150,253,253), rejected_marker_color=None):
+    def visualize(self, frame, detect_result: DetectionOutput | None = None, sub_pixel_fac=8,
+                  styles: drawing.MarkerStyles | None = None,
+                  recovered_assembly_color: drawing.RgbColor | None = drawing.RgbColor(0, 255, 255),
+                  rejected_color: drawing.RgbColor | None = None):
         if detect_result is None:
             detect_result = self._last_detect_result
+        styles = styles or drawing.DEFAULT_MAPPED_MARKER_STYLES
 
         # for debug, can draw rejected markers on frame
-        if rejected_marker_color is not None:
-            cv2.aruco.drawDetectedMarkers(frame, detect_result.rejected, None, borderColor=rejected_marker_color)
+        if rejected_color is not None:
+            cv2.aruco.drawDetectedMarkers(frame, detect_result.rejected, None, borderColor=rejected_color[::-1])
 
         # draw detected markers on the frame
-        if assembly_marker_color is not None:
+        if styles.assembly is not None:
             for p in detect_result.assemblies:
                 special_highlight = []
                 if not detect_result.assemblies[p] or 'ids' not in detect_result.assemblies[p] or len(detect_result.assemblies[p]['ids'])==0:
                     continue
-                if recovered_assembly_marker_color is not None and detect_result.assemblies[p]['recovered_ids'] is not None and len(detect_result.assemblies[p]['recovered_ids'])>0:
-                    special_highlight = [detect_result.assemblies[p]['recovered_ids'],recovered_assembly_marker_color]
-                drawing.arucoDetectedMarkers(frame, detect_result.assemblies[p]['img_points'], detect_result.assemblies[p]['ids'], border_color=assembly_marker_color, sub_pixel_fac=sub_pixel_fac, special_highlight=special_highlight)
-        if individual_marker_color is not None and detect_result.individual['ids'] is not None and len(detect_result.individual['ids']>0):
-            drawing.arucoDetectedMarkers(frame, detect_result.individual['img_points'], detect_result.individual['ids'], border_color=individual_marker_color, sub_pixel_fac=sub_pixel_fac)
-        if unexpected_marker_color is not None and detect_result.unexpected['ids'] is not None and len(detect_result.unexpected['ids']>0):
-            drawing.arucoDetectedMarkers(frame, detect_result.unexpected['img_points'], detect_result.unexpected['ids'], border_color=unexpected_marker_color, sub_pixel_fac=sub_pixel_fac)
+                if recovered_assembly_color is not None and detect_result.assemblies[p]['recovered_ids'] is not None and len(detect_result.assemblies[p]['recovered_ids'])>0:
+                    special_highlight = [detect_result.assemblies[p]['recovered_ids'], recovered_assembly_color]
+                drawing.arucoDetectedMarkers(frame, detect_result.assemblies[p]['img_points'], detect_result.assemblies[p]['ids'], styles.assembly, sub_pixel_fac, special_highlight)
+        if styles.individual is not None and detect_result.individual['ids'] is not None and len(detect_result.individual['ids']>0):
+            drawing.arucoDetectedMarkers(frame, detect_result.individual['img_points'], detect_result.individual['ids'], styles.individual, sub_pixel_fac)
+        if styles.unexpected is not None and detect_result.unexpected['ids'] is not None and len(detect_result.unexpected['ids']>0):
+            drawing.arucoDetectedMarkers(frame, detect_result.unexpected['img_points'], detect_result.unexpected['ids'], styles.unexpected, sub_pixel_fac)
 
 class Manager:
     # Consolidates marker assemblies, individual markers and detector settings into a minimal
@@ -1213,12 +1217,10 @@ class Manager:
         # cache
         self._working_set                                   = WorkingSet()
 
-        # colors for drawing (in BGR order)
-        self._assembly_marker_color             = (  0,255,  0)
-        self._recovered_assembly_marker_color   = (255,255,  0)
-        self._individual_marker_color           = (255,  0,255)
-        self._unexpected_marker_color           = (128,255,255)
-        self._rejected_marker_color             = None # by default not drawn. If wanted, (0,0,255) is a good color
+        # RGB colors for marker visualization
+        self._recovered_assembly_color  : drawing.RgbColor | None = drawing.RgbColor(0, 255, 255)
+        self._rejected_color            : drawing.RgbColor | None = None
+        self._visualization_styles                                = drawing.DEFAULT_MAPPED_MARKER_STYLES
 
     def add_assembly(self, name: str, setup: AssemblySetup,
                      processing_intervals: tuple[annotation.EventType, list[int]|list[list[int]]]|None = None):
@@ -1235,23 +1237,12 @@ class Manager:
         self.individual_markers[mark]                = marker_setup
         self.individual_markers_proc_intervals[mark] = processing_intervals
 
-    def set_visualization_colors(self, assembly_marker_color=(0,255,0), recovered_assembly_marker_color=(0,255,255), individual_marker_color=(255,0,255), unexpected_marker_color=(255,255,128), rejected_marker_color=None):
-        # user should provide colors in RGB, internally we store as BGR
-        if assembly_marker_color is not None:
-            assembly_marker_color = assembly_marker_color[::-1]
-        self._assembly_marker_color = assembly_marker_color
-        if recovered_assembly_marker_color is not None:
-            recovered_assembly_marker_color = recovered_assembly_marker_color[::-1]
-        self._recovered_assembly_marker_color = recovered_assembly_marker_color
-        if individual_marker_color is not None:
-            individual_marker_color = individual_marker_color[::-1]
-        self._individual_marker_color = individual_marker_color
-        if unexpected_marker_color is not None:
-            unexpected_marker_color = unexpected_marker_color[::-1]
-        self._unexpected_marker_color = unexpected_marker_color
-        if rejected_marker_color is not None:
-            rejected_marker_color = rejected_marker_color[::-1]
-        self._rejected_marker_color = rejected_marker_color
+    def set_visualization_styles(self, styles: drawing.MarkerStyles | None = None,
+                                 recovered_assembly_color: drawing.RgbColor | None = drawing.RgbColor(0, 255, 255),
+                                 rejected_color: drawing.RgbColor | None = None):
+        self._visualization_styles = styles or drawing.DEFAULT_MAPPED_MARKER_STYLES
+        self._recovered_assembly_color = recovered_assembly_color
+        self._rejected_color = rejected_color
 
     def consolidate_setup(self, allow_duplicated_markers: bool = False):
         # get list of all ArUco dicts and markers we're dealing with
@@ -1413,7 +1404,7 @@ class Manager:
             return
         detect_tuple = self._get_detector_cache(aruco_dict_id, frame_idx, None, frame_info, None)
         if detect_tuple is not None:
-            frame = self._detectors[aruco_dict_id].visualize(frame, self._visualization_output(aruco_dict_id, detect_tuple), assembly_marker_color=self._assembly_marker_color, recovered_assembly_marker_color=self._recovered_assembly_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
+            frame = self._detectors[aruco_dict_id].visualize(frame, self._visualization_output(aruco_dict_id, detect_tuple), styles=self._visualization_styles, recovered_assembly_color=self._recovered_assembly_color, rejected_color=self._rejected_color)
             self._working_set.visualized.add(aruco_dict_id)
 
     def _visualize_individual_marker(self, mark: marker.MarkerID, frame_idx: int, frame: np.ndarray, frame_info: dict):
@@ -1425,7 +1416,7 @@ class Manager:
             return
         detect_tuple = self._get_detector_cache(detector_id, frame_idx, None, frame_info, None)
         if detect_tuple is not None:
-            frame = self._detectors[detector_id].visualize(frame, self._visualization_output(detector_id, detect_tuple), assembly_marker_color=self._assembly_marker_color, recovered_assembly_marker_color=self._recovered_assembly_marker_color, individual_marker_color=self._individual_marker_color, unexpected_marker_color=self._unexpected_marker_color, rejected_marker_color=self._rejected_marker_color)
+            frame = self._detectors[detector_id].visualize(frame, self._visualization_output(detector_id, detect_tuple), styles=self._visualization_styles, recovered_assembly_color=self._recovered_assembly_color, rejected_color=self._rejected_color)
             self._working_set.visualized.add(detector_id)
 
 

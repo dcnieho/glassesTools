@@ -78,13 +78,11 @@ class Plane(_MarkerAssembly):
 
         super().set_origin(np.array([origin.x, origin.y, 0.]))
 
-    def draw(self, img, x, y, sub_pixel_fac=1, color=None, size=6):
+    def draw(self, img, x, y, style: drawing.CircleStyle | None = None, sub_pixel_fac=1):
         if not math.isnan(x):
             xy = transforms.to_image_pos(x, y, self.bbox, [img.shape[1], img.shape[0]])
-            if color is None:
-                drawing.openCVCircle(img, xy, 8, (0,255,0), -1, sub_pixel_fac)
-                color = (0,0,0)
-            drawing.openCVCircle(img, xy, size, color, -1, sub_pixel_fac)
+            style = style or drawing.CircleStyle(8, drawing.RgbColor(0, 0, 0), 2, drawing.RgbColor(0, 255, 0))
+            drawing.draw_circle(img, xy, style, sub_pixel_fac)
 
     def _load_markers(self, markers: str|pathlib.Path|pd.DataFrame, pos_size_scale_fac: float, package_to_read_from: str|None):
         from . import aruco

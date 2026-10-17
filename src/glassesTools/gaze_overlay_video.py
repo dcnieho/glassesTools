@@ -41,12 +41,7 @@ class VideoMaker:
         self.do_visualize                               = False
         self.sub_pixel_fac                              = 8
 
-        self.vid_pos_color          : tuple[int,int,int]= (  0,255,  0)
-        self.vid_pos_radius         : int               = 8
-        self.vid_pos_thickness      : int               = 2
-        self.world_pos_color        : tuple[int,int,int]= (255,  0,255)
-        self.world_pos_radius       : int               = 5
-        self.world_pos_thickness    : int               = -1
+        self.gaze_styles            : gaze_headref.OverlayGazeStyles = gaze_headref.DEFAULT_OVERLAY_GAZE_STYLES
 
         self._first_frame                               = True
 
@@ -74,23 +69,8 @@ class VideoMaker:
     def set_progress_updater(self, progress_updater: typing.Callable[[], None]):
         self.progress_updater = progress_updater
 
-    def set_vid_pos_look(self, color: tuple[int, int, int]|None=None, radius: int|None=None, thickness: int|None=None):
-        if color is not None:
-            # provided colors are in RGB, internally we store as BGR
-            self.vid_pos_color = color[::-1]
-        if radius is not None:
-            self.vid_pos_radius = radius
-        if thickness is not None:
-            self.vid_pos_thickness = thickness
-
-    def set_world_pos_look(self, color: tuple[int, int, int]|None=None, radius: int|None=None, thickness: int|None=None):
-        if color is not None:
-            # provided colors are in RGB, internally we store as BGR
-            self.world_pos_color = color[::-1]
-        if radius is not None:
-            self.world_pos_radius = radius
-        if thickness is not None:
-            self.world_pos_thickness = thickness
+    def set_gaze_styles(self, styles: gaze_headref.OverlayGazeStyles | None = None):
+        self.gaze_styles = styles or gaze_headref.DEFAULT_OVERLAY_GAZE_STYLES
 
     def _read_frame(self, wanted_frame_idx:int|None = None) -> tuple[Status, tuple[np.ndarray, int, float]]:
         if self._first_frame and self.has_gui:
@@ -143,11 +123,7 @@ class VideoMaker:
             ROI_offset = (0,0)
         if frame_idx in self.gaze:
             for g in self.gaze[frame_idx]:
-                g.draw(frame, self.cam_params, sub_pixel_fac=self.sub_pixel_fac,
-                       clr=self.vid_pos_color, radius=self.vid_pos_radius, thickness=self.vid_pos_thickness,
-                       draw_3d_gaze_point=self.world_pos_color is not None,
-                       world_clr=self.world_pos_color, world_radius=self.world_pos_radius, world_thickness=self.world_pos_thickness,
-                       ROI_offset=ROI_offset)
+                  g.draw(frame, self.cam_params, sub_pixel_fac=self.sub_pixel_fac, styles=self.gaze_styles, ROI_offset=ROI_offset)
 
         # now that all processing is done, handle gui
         if self.has_gui:

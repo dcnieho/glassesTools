@@ -1,8 +1,27 @@
 import numpy as np
-import cv2
 import pathlib
+import typing
 
-from . import data_files, drawing, ocv, transforms
+from . import data_files, drawing, json, ocv, transforms
+
+
+DEFAULT_VIDEO_GAZE_POINT_STYLE = drawing.CircleStyle(8, drawing.RgbColor(0, 255, 0), 2, None)
+DEFAULT_WORLD_GAZE_POINT_STYLE = drawing.CircleStyle(5, None, 0, drawing.RgbColor(255, 0, 255))
+
+
+class OverlayGazeStyles(typing.NamedTuple):
+    video_position: drawing.CircleStyle | None = DEFAULT_VIDEO_GAZE_POINT_STYLE
+    world_position: drawing.CircleStyle | None = DEFAULT_WORLD_GAZE_POINT_STYLE
+
+
+json.register_type(json.TypeEntry(
+    OverlayGazeStyles,
+    'glassesTools.gaze_headref.OverlayGazeStyles',
+    lambda value: value._asdict(),
+    lambda value: OverlayGazeStyles(**value),
+))
+
+DEFAULT_OVERLAY_GAZE_STYLES = OverlayGazeStyles()
 
 
 class Gaze:
@@ -48,13 +67,15 @@ class Gaze:
         self.gaze_dir_r   : np.ndarray  = gaze_dir_r
         self.gaze_ori_r   : np.ndarray  = gaze_ori_r
 
-    def draw(self, img:np.ndarray, camera_params:ocv.CameraParams=None, sub_pixel_fac=1, clr=(0,255,0), draw_3d_gaze_point=True, world_clr=(0,255,255), radius=8, world_radius=5, thickness=2, world_thickness=-1, ROI_offset=[0.,0.]):
-        drawing.openCVCircle(img, self.gaze_pos_vid, radius, clr, thickness, sub_pixel_fac)
+    def draw(self, img: np.ndarray, camera_params: ocv.CameraParams | None = None, sub_pixel_fac=1, styles: OverlayGazeStyles | None = None, ROI_offset=(0., 0.)):
+        styles = styles or DEFAULT_OVERLAY_GAZE_STYLES
+        if styles.video_position is not None:
+            drawing.draw_circle(img, self.gaze_pos_vid, styles.video_position, sub_pixel_fac)
         # draw 3D gaze point as well, usually coincides with 2D gaze point, but not always. E.g. the Adhawk MindLink may
         # apply a correction for parallax error to the projected gaze point using the vergence signal.
-        if draw_3d_gaze_point and self.gaze_pos_3d is not None and camera_params is not None and camera_params.has_intrinsics():
+        if styles.world_position is not None and self.gaze_pos_3d is not None and camera_params is not None and camera_params.has_intrinsics():
             a = transforms.project_points(np.array(self.gaze_pos_3d).reshape(1,3), camera_params, rot_vec=camera_params.rotation_vec, trans_vec=camera_params.position, ROI_offset=ROI_offset).flatten()
-            drawing.openCVCircle(img, a, world_radius, world_clr, world_thickness, sub_pixel_fac)
+            drawing.draw_circle(img, a, styles.world_position, sub_pixel_fac)
 
 
 def read_dict_from_file(file_name:str|pathlib.Path, episodes:list[list[int]]|None=None, ts_column_suffixes: list[str]|None=None) -> tuple[dict[int,list[Gaze]], int]:

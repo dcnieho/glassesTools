@@ -7,6 +7,25 @@ import enum
 
 from . import data_files, drawing, gaze_headref, json, ocv, plane, pose, transforms, utils
 
+
+class MappedGazeStyles(typing.NamedTuple):
+    original_scene_video: drawing.CircleStyle | None = drawing.CircleStyle(6, None, 1, None)
+    video_position: drawing.CircleStyle | None = drawing.CircleStyle(6, None, 0, drawing.RgbColor(255, 255, 0))
+    world_position: drawing.CircleStyle | None = drawing.CircleStyle(3, None, 0, drawing.RgbColor(255, 0, 255))
+    left_eye: drawing.CircleStyle | None = drawing.CircleStyle(3, None, 0, drawing.RgbColor(0, 0, 255))
+    right_eye: drawing.CircleStyle | None = drawing.CircleStyle(3, None, 0, drawing.RgbColor(255, 0, 0))
+    average: drawing.CircleStyle | None = drawing.CircleStyle(6, None, 0, drawing.RgbColor(255, 0, 255))
+
+
+json.register_type(json.TypeEntry(
+    MappedGazeStyles,
+    'glassesTools.gaze_worldref.MappedGazeStyles',
+    lambda value: value._asdict(),
+    lambda value: MappedGazeStyles(**value),
+))
+
+DEFAULT_MAPPED_GAZE_STYLES = MappedGazeStyles()
+
 class Type(utils.AutoName):
     Scene_Video_Position    = enum.auto()
     World_3D_Point          = enum.auto()
@@ -127,59 +146,52 @@ class Gaze:
                     gaze_point = (gaze_point[0]+gaze_point[1])/2
         return gaze_point
 
-    def draw_on_world_video(self, img, camera_params: ocv.CameraParams, ROI_offset: tuple[int, int]=(0,0), sub_pixel_fac=1, pose: pose.Pose=None,
-                            clr_vidPos=(255,255,0), clr_world_pos=(255,0,255), clr_left=(0,0,255), clr_right=(255,0,0), clr_average=(255,0,255)):
-        # project to camera, display
+    def draw_on_world_video(self, img, camera_params: ocv.CameraParams, ROI_offset: tuple[int, int]=(0,0), sub_pixel_fac=1, pose: pose.Pose | None=None, styles: MappedGazeStyles | None=None):
+        styles = styles or DEFAULT_MAPPED_GAZE_STYLES
+
         def _project(pos):
             return transforms.project_points(pos.reshape(1,3), camera_params, ROI_offset=ROI_offset).flatten()
-        def _draw(img,cam_pos,sz,clr):
-            if not math.isnan(cam_pos[0]):
-                drawing.openCVCircle(img, cam_pos, sz, clr, -1, sub_pixel_fac)
-        def project_and_draw(img,pos,sz,clr):
-            _draw(img,_project(pos),sz,clr)
+
+        def _draw(position, style):
+            if style is None or math.isnan(position[0]):
+                return
+            drawing.draw_circle(img, position, style, sub_pixel_fac)
+
+        def project_and_draw(position, style):
+            _draw(_project(position), style)
 
         if not camera_params.has_intrinsics():
             if pose is not None and pose.homography_successful():
-                # gaze position on plane by homography
-                _draw(img,pose.plane_to_cam_homography(self.gazePosPlane2D_vidPos_homography,camera_params,ROI_offset),3,clr_vidPos)
-            # rest requires camera cal, so return
+                position = pose.plane_to_cam_homography(self.gazePosPlane2D_vidPos_homography, camera_params, ROI_offset)
+                _draw(position, styles.video_position)
             return
 
-        # gaze ray
-        if self.gazePosCam_vidPos_ray is not None and clr_vidPos is not None:
-            project_and_draw(img, self.gazePosCam_vidPos_ray, 3, clr_vidPos)
-        # binocular gaze point
-        if self.gazePosCamWorld is not None and clr_world_pos is not None:
-            project_and_draw(img, self.gazePosCamWorld, 3, clr_world_pos)
-        # left eye
-        if self.gazePosCamLeft is not None and clr_left is not None:
-            project_and_draw(img, self.gazePosCamLeft, 3, clr_left)
-        # right eye
-        if self.gazePosCamRight is not None and clr_right is not None:
-            project_and_draw(img, self.gazePosCamRight, 3, clr_right)
-        # average
-        if clr_average is not None and (pointCam:=self.get_gaze_point(Type.Average_Gaze_Vector, 'camera')) is not None:
-            project_and_draw(img, pointCam, 6, clr_average)
+        if self.gazePosCam_vidPos_ray is not None:  # ray from gaze point on scene video
+            project_and_draw(self.gazePosCam_vidPos_ray, styles.video_position)
+        if self.gazePosCamWorld is not None:        # binocular gaze point
+            project_and_draw(self.gazePosCamWorld, styles.world_position)
+        if self.gazePosCamLeft is not None:         # left eye gaze point
+            project_and_draw(self.gazePosCamLeft, styles.left_eye)
+        if self.gazePosCamRight is not None:        # right eye gaze point
+            project_and_draw(self.gazePosCamRight, styles.right_eye)
+        if (pointCam:=self.get_gaze_point(Type.Average_Gaze_Vector, 'camera')) is not None:
+            # draw average gaze point (average of left and right eye gaze points)
+            project_and_draw(pointCam, styles.average)
 
-    def draw_on_plane(self, img, reference, sub_pixel_fac=1):
-        # binocular gaze point
-        if self.gazePosPlane2DWorld is not None:
-            reference.draw(img, *self.gazePosPlane2DWorld, sub_pixel_fac, (0,255,255), 3)
-        # left eye
-        if self.gazePosPlane2DLeft is not None:
-            reference.draw(img, *self.gazePosPlane2DLeft, sub_pixel_fac, (0,0,255), 3)
-        # right eye
-        if self.gazePosPlane2DRight is not None:
-            reference.draw(img, *self.gazePosPlane2DRight, sub_pixel_fac, (255,0,0), 3)
-        # average
-        if (average:=self.get_gaze_point(Type.Average_Gaze_Vector)) is not None:
-            if not math.isnan(average[0]):
-                reference.draw(img, *average, sub_pixel_fac, (255,0,255))
-        # video gaze position
-        if self.gazePosPlane2D_vidPos_homography is not None:
-            reference.draw(img, *self.gazePosPlane2D_vidPos_homography, sub_pixel_fac, (0,255,0), 5)
-        if self.gazePosPlane2D_vidPos_ray is not None:
-            reference.draw(img, *self.gazePosPlane2D_vidPos_ray, sub_pixel_fac, (255,255,0), 3)
+    def draw_on_plane(self, img, reference, sub_pixel_fac=1, styles: MappedGazeStyles | None=None):
+        styles = styles or DEFAULT_MAPPED_GAZE_STYLES
+
+        def draw_position(position, style):
+            if position is None or style is None or math.isnan(position[0]):
+                return
+            reference.draw(img, position[0], position[1], style=style, sub_pixel_fac=sub_pixel_fac)
+
+        draw_position(self.gazePosPlane2DWorld, styles.world_position)
+        draw_position(self.gazePosPlane2DLeft, styles.left_eye)
+        draw_position(self.gazePosPlane2DRight, styles.right_eye)
+        draw_position(self.get_gaze_point(Type.Average_Gaze_Vector), styles.average)
+        draw_position(self.gazePosPlane2D_vidPos_homography, styles.video_position)
+        draw_position(self.gazePosPlane2D_vidPos_ray, styles.video_position)
 
 def read_dict_from_file(file_name:str|pathlib.Path, episodes:list[list[int]]|None=None, ts_column_suffixes: list[str]|None=None) -> dict[int,list[Gaze]]:
     return data_files.read_file(file_name,
