@@ -50,6 +50,8 @@ class GUI:
         self._window_flags = int(
                                     imgui.WindowFlags_.no_title_bar |
                                     imgui.WindowFlags_.no_collapse |
+                                    imgui.WindowFlags_.no_move |
+                                    imgui.WindowFlags_.no_resize |
                                     imgui.WindowFlags_.no_scrollbar |
                                     imgui.WindowFlags_.no_scroll_with_mouse
                                 )
@@ -88,6 +90,7 @@ class GUI:
         params.ini_disable = True
         params.app_window_params.hidden = True
         params.fps_idling.fps_idle = 0
+        params.imgui_window_params.default_imgui_window_type = hello_imgui.DefaultImGuiWindowType.no_default_window
         params.callbacks.show_gui  = self._gui_func
         params.callbacks.post_init = post_init
 
@@ -157,6 +160,10 @@ class GUI:
         # check we have data to plot
         if not self.gaze_data:
             return
+
+        imgui.set_next_window_pos(imgui.ImVec2(0, 0), imgui.Cond_.always)
+        imgui.set_next_window_size(imgui.get_io().display_size, imgui.Cond_.always)
+        imgui.begin('##signal_sync', None, self._window_flags)
 
         # check we should do some initializing (do this now, can't be done in post_init during the first frame)
         if self._should_init:
@@ -234,9 +241,11 @@ class GUI:
                 ws = imgui.get_window_size()
                 ts = imgui.calc_text_size('(?)')
                 fp = imgui.get_style().frame_padding
-                imgui.set_cursor_pos((ws.x-ts.x-fp.x, ws.y+imgui.get_scroll_y()-ts.y-fp.y))
-                imgui.text('(?)')
-                if imgui.is_item_hovered():
+                window_pos = imgui.get_window_pos()
+                help_pos = imgui.ImVec2(window_pos.x+ws.x-ts.x-fp.x, window_pos.y+ws.y-ts.y-fp.y)
+                imgui.get_window_draw_list().add_text(help_pos, imgui.get_color_u32(imgui.Col_.text), '(?)')
+                help_max = imgui.ImVec2(help_pos.x+ts.x, help_pos.y+ts.y)
+                if imgui.is_mouse_hovering_rect(help_pos, help_max):
                     imgui.begin_tooltip()
                     imgui.push_text_wrap_pos(min(imgui.get_font_size() * 35, ws.x))
                     imgui.text_unformatted(
@@ -249,6 +258,7 @@ class GUI:
                         )
                     imgui.pop_text_wrap_pos()
                     imgui.end_tooltip()
+        imgui.end()
 
     def _do_data_drag(self, ax_idx: int):
         ax = 'x' if ax_idx==0 else 'y'
