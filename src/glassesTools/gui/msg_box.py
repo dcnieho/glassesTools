@@ -17,24 +17,26 @@ def msgbox(title: str, msg: str, type: MsgBox=None, buttons: dict[str, Callable]
         spacing = 2 * imgui.get_style().item_spacing.x
         if type is MsgBox.question:
             icon = ifa6.ICON_FA_CIRCLE_QUESTION
-            color = (0.45, 0.09, 1.00)
+            color = (0.45, 0.09, 1.00, 1.00)
         elif type is MsgBox.info:
             icon = ifa6.ICON_FA_CIRCLE_INFO
-            color = (0.10, 0.69, 0.95)
+            color = (0.10, 0.69, 0.95, 1.00)
         elif type is MsgBox.warn:
             icon = ifa6.ICON_FA_TRIANGLE_EXCLAMATION
-            color = (0.95, 0.69, 0.10)
+            color = (0.95, 0.69, 0.10, 1.00)
         elif type is MsgBox.error:
             icon = ifa6.ICON_FA_TRIANGLE_EXCLAMATION
-            color = (0.95, 0.22, 0.22)
+            color = (0.95, 0.22, 0.22, 1.00)
         else:
             icon = None
         if icon:
             imgui.push_font(None, imgui.get_style().font_size_base*icon_font_size_multiplier)
             icon_size = imgui.calc_text_size(icon)
-            imgui.text_colored((*color,1.),icon)
+            imgui.text_colored(color,icon)
             imgui.pop_font()
             imgui.same_line(spacing=spacing)
+        else:
+            icon_size = imgui.ImVec2(0, 0)
         imgui.begin_group()
         msg_size_y = imgui.calc_text_size(msg).y
         if more:
