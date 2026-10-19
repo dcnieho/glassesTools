@@ -1,3 +1,4 @@
+import csv
 import pathlib
 import numpy as np
 import pandas as pd
@@ -19,7 +20,7 @@ def compute(
         output_directory: str|pathlib.Path,
         filename: str = naming.validation_offset_fname,
         d_types: list[data_types.DataType]|None=None, allow_data_type_fallback=False, include_data_loss=False,
-        camera_params: ocv.CameraParams|None=None,
+        include_unit_header_row=True, camera_params: ocv.CameraParams|None=None,
     ):
     output_directory = pathlib.Path(output_directory)
     if d_types is None:
@@ -119,7 +120,35 @@ def compute(
             out_df = pd.concat((out_df,df))
 
     if out_df is not None:
-        out_df.to_csv(output_directory / filename, mode='w', header=True, sep='\t', na_rep='nan', float_format="%.6f")
+        output_file = output_directory / filename
+        out_df = out_df.reset_index()
+        with output_file.open('w', encoding='utf-8', newline='') as output:
+            writer = csv.writer(output, delimiter='\t', lineterminator='\n', quoting=csv.QUOTE_MINIMAL)
+            writer.writerow(out_df.columns)
+            if include_unit_header_row:
+                column_info = {
+                    'marker_interval': 'validation interval number',
+                    'type': 'gaze data type',
+                    'target': 'validation target ID',
+                    'order': 'target presentation order within interval',
+                    'plane_target_direction_x': 'target azimuth (Fick) relative to validation plane center target (deg)',
+                    'plane_target_direction_y': 'target elevation (Fick) relative to validation plane center target (deg)',
+                    'acc_x': 'accuracy azimuth (Fick) component (deg)',
+                    'acc_y': 'accuracy elevation (Fick) component (deg)',
+                    'acc': 'accuracy magnitude (deg)',
+                    'rms_x': 'RMS precision, azimuth (Fick) (deg)',
+                    'rms_y': 'RMS precision, elevation (Fick) (deg)',
+                    'rms': 'RMS precision (deg)',
+                    'std_x': 'standard deviation, azimuth (Fick) (deg)',
+                    'std_y': 'standard deviation, elevation (Fick) (deg)',
+                    'std': 'standard deviation (deg)',
+                    'plane_distance': 'camera-to-validation-plane distance (mm)',
+                    'video_target_direction_x': 'target azimuth (Fick) relative to scene camera center (deg)',
+                    'video_target_direction_y': 'target elevation (Fick) relative to scene camera center (deg)',
+                    'data_loss': 'data loss (%)',
+                }
+                writer.writerow([column_info.get(column, '') for column in out_df.columns])
+            out_df.to_csv(output, header=False, index=False, sep='\t', na_rep='nan', float_format="%.6f")
 
 
 def _target_geometry(

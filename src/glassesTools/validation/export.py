@@ -1,8 +1,22 @@
+import csv
 import pathlib
 import pandas as pd
 import typing
 
 from .. import data_types
+
+def _read_data_quality_file(file: pathlib.Path) -> pd.DataFrame:
+    skiprows = []
+    with file.open(encoding='utf-8', newline='') as input_file:
+        reader = csv.reader(input_file, delimiter='\t')
+        header = next(reader, [])
+        first_data_row = next(reader, None)
+    if first_data_row is not None and 'marker_interval' in header:
+        try:
+            float(first_data_row[header.index('marker_interval')])
+        except (IndexError, ValueError):
+            skiprows = [1]
+    return pd.read_csv(file, delimiter='\t', skiprows=skiprows)
 
 def collect_data_quality(rec_dirs: typing.Sequence[str | pathlib.Path], file_name: str|dict[str,str]='dataQuality.tsv', col_for_parent=None):
     # 1. collect all data quality metrics from the provided directories
@@ -26,7 +40,7 @@ def collect_data_quality(rec_dirs: typing.Sequence[str | pathlib.Path], file_nam
         rec_files = [f for f in rec_files if f[0].is_file()]
     if not rec_files:
         return None, None, None
-    df = pd.concat((pd.read_csv(rec[0], delimiter='\t').assign(**rec[1]) for rec in rec_files), ignore_index=True)
+    df = pd.concat((_read_data_quality_file(rec[0]).assign(**rec[1]) for rec in rec_files), ignore_index=True)
     if df.empty:
         return None, None, None
     # set indices
@@ -50,7 +64,7 @@ def collect_data_quality(rec_dirs: typing.Sequence[str | pathlib.Path], file_nam
 
     return df, default_dq_type, targets
 
-def summarize_and_store_data_quality(df: pd.DataFrame, output_file_or_dir: str | pathlib.Path, dq_types: list[data_types.DataType], targets: list[int], average_over_targets = False, include_data_loss = False):
+def summarize_and_store_data_quality(df: pd.DataFrame, output_file_or_dir: str | pathlib.Path, dq_types: list[data_types.DataType], targets: list[int], average_over_targets = False, include_data_loss = False, include_unit_header_row = True):
     dq_types_have = sorted(list(df.index.levels[df.index.names.index('type')]), key=lambda dq: dq.value)
     targets_have  = list(df.index.levels[df.index.names.index('target')])
 
@@ -77,12 +91,45 @@ def summarize_and_store_data_quality(df: pd.DataFrame, output_file_or_dir: str |
     output_file_or_dir = pathlib.Path(output_file_or_dir)
     if output_file_or_dir.is_dir():
         output_file_or_dir = output_file_or_dir / 'dataQuality.tsv'
-    df.to_csv(output_file_or_dir, mode='w', header=True, sep='\t', na_rep='nan', float_format="%.6f")
+    if include_unit_header_row:
+        df = df.reset_index()
+        column_info = {
+            'session': 'session name',
+            'recording': 'recording name',
+            'plane': 'validation plane name',
+            'marker_interval': 'validation interval number',
+            'type': 'gaze data type',
+            'target': 'validation target ID',
+            'num_targets': 'number of included targets',
+            'order': 'target presentation order within interval',
+            'plane_target_direction_x': 'target azimuth (Fick) relative to validation plane center target (deg)',
+            'plane_target_direction_y': 'target elevation (Fick) relative to validation plane center target (deg)',
+            'acc_x': 'accuracy azimuth (Fick) component (deg)',
+            'acc_y': 'accuracy elevation (Fick) component (deg)',
+            'acc': 'accuracy magnitude (deg)',
+            'rms_x': 'RMS precision, azimuth (Fick) (deg)',
+            'rms_y': 'RMS precision, elevation (Fick) (deg)',
+            'rms': 'RMS precision (deg)',
+            'std_x': 'standard deviation, azimuth (Fick) (deg)',
+            'std_y': 'standard deviation, elevation (Fick) (deg)',
+            'std': 'standard deviation (deg)',
+            'plane_distance': 'camera-to-validation-plane distance (mm)',
+            'video_target_direction_x': 'target azimuth (Fick) relative to scene camera center (deg)',
+            'video_target_direction_y': 'target elevation (Fick) relative to scene camera center (deg)',
+            'data_loss': 'data loss (%)',
+        }
+        with output_file_or_dir.open('w', encoding='utf-8', newline='') as output:
+            writer = csv.writer(output, delimiter='\t', lineterminator='\n', quoting=csv.QUOTE_MINIMAL)
+            writer.writerow(df.columns)
+            writer.writerow([column_info.get(column, '') for column in df.columns])
+            df.to_csv(output, header=False, index=False, sep='\t', na_rep='nan', float_format="%.6f")
+    else:
+        df.to_csv(output_file_or_dir, mode='w', header=True, sep='\t', na_rep='nan', float_format="%.6f")
 
-def export_data_quality(rec_dirs: list[str | pathlib.Path], output_file_or_dir: str | pathlib.Path, dq_types: list[data_types.DataType] = None, targets: list[int] = None, average_over_targets = False, include_data_loss = False):
+def export_data_quality(rec_dirs: list[str | pathlib.Path], output_file_or_dir: str | pathlib.Path, dq_types: list[data_types.DataType] = None, targets: list[int] = None, average_over_targets = False, include_data_loss = False, include_unit_header_row = True):
     df, default_dq_type, targets_have = collect_data_quality(rec_dirs)
     if not dq_types:
         dq_types = [default_dq_type]
     if not targets:
         targets = targets_have
-    summarize_and_store_data_quality(df, output_file_or_dir, dq_types, targets, average_over_targets, include_data_loss)
+    summarize_and_store_data_quality(df, output_file_or_dir, dq_types, targets, average_over_targets, include_data_loss, include_unit_header_row)
