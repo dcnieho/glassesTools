@@ -526,13 +526,7 @@ class GUI:
                 glfw.set_window_should_close(window, False)
 
         def _load_fonts():
-            # load the default font. Do it manually as we want to use Roboto as the default font, and need to set DPI scaling parameters correctly
-            normal_size = 16.
-            font_params = hello_imgui.FontLoadingParams(adjust_size_to_dpi=False)
-            hello_imgui.load_font("fonts/Roboto/Roboto-Regular.ttf", normal_size, font_params)
-            # add icons
-            icon_font_params = hello_imgui.FontLoadingParams(adjust_size_to_dpi=False, merge_to_last_font=True)
-            hello_imgui.load_font("fonts/Font_Awesome_6_Free-Solid-900.otf", normal_size, icon_font_params)
+            hello_imgui.load_font_ttf_with_font_awesome_icons("fonts/Roboto/Roboto-Regular.ttf", 16.)
 
         def _setup_imgui_config():
             io = imgui.get_io()
@@ -559,6 +553,7 @@ class GUI:
         params.fps_idling.fps_idle = 0
         params.callbacks.setup_imgui_config = _setup_imgui_config
         params.callbacks.load_additional_fonts = _load_fonts
+        params.callbacks.default_icon_font = hello_imgui.DefaultIconFont.font_awesome6
         params.callbacks.show_gui  = self._gui_func
         params.callbacks.post_init = post_init
         params.callbacks.setup_imgui_style = setup_style
