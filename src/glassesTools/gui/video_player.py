@@ -116,6 +116,7 @@ class GUI:
     def __init__(self, use_thread=True):
         self._running = False
         self._should_exit = False
+        self._main_window_dpi_scale: float|None = None
         self._use_thread = use_thread # NB: on MacOSX the GUI needs to be on the main thread, see https://github.com/pthom/hello_imgui/issues/33
         self._thread: threading.Thread = None
         self._not_shown_yet: dict[int, bool] = {}
@@ -524,6 +525,20 @@ class GUI:
             else:
                 glfw.set_window_should_close(window, False)
 
+        def _load_fonts():
+            # load the default font. Do it manually as we want to use Roboto as the default font, and need to set DPI scaling parameters correctly
+            normal_size = 16.
+            font_params = hello_imgui.FontLoadingParams(adjust_size_to_dpi=False)
+            hello_imgui.load_font("fonts/Roboto/Roboto-Regular.ttf", normal_size, font_params)
+            # add icons
+            icon_font_params = hello_imgui.FontLoadingParams(adjust_size_to_dpi=False, merge_to_last_font=True)
+            hello_imgui.load_font("fonts/Font_Awesome_6_Free-Solid-900.otf", normal_size, icon_font_params)
+
+        def _setup_imgui_config():
+            io = imgui.get_io()
+            io.config_dpi_scale_fonts = True
+            io.config_dpi_scale_viewports = True
+
         def post_init():
             self._running = True
             imgui.get_io().config_viewports_no_decoration = False
@@ -542,10 +557,12 @@ class GUI:
         params.app_window_params.window_title = self._windows[GUI.main_window_id]
         params.app_window_params.hidden = True
         params.fps_idling.fps_idle = 0
-        params.callbacks.default_icon_font = hello_imgui.DefaultIconFont.font_awesome6
+        params.callbacks.setup_imgui_config = _setup_imgui_config
+        params.callbacks.load_additional_fonts = _load_fonts
         params.callbacks.show_gui  = self._gui_func
         params.callbacks.post_init = post_init
         params.callbacks.setup_imgui_style = setup_style
+        params.callbacks.pre_new_frame = self._scale_main_window_on_dpi_change
 
         # multiple window support
         params.imgui_window_params.config_windows_move_from_title_bar_only = True
@@ -555,6 +572,23 @@ class GUI:
         self._running = False
         if self._detach_requested and self._on_detach_callback is not None:
             self._on_detach_callback()
+
+    def _scale_main_window_on_dpi_change(self):
+        win = glfw_utils.glfw_window_hello_imgui()
+        dpi_scale, _ = glfw.get_window_content_scale(win)
+        if dpi_scale <= 0:
+            return
+        if self._main_window_dpi_scale is None:
+            self._main_window_dpi_scale = dpi_scale
+            return
+        if dpi_scale == self._main_window_dpi_scale:
+            return
+
+        width, height = glfw.get_window_size(win)
+        if width > 0 and height > 0:
+            scale = dpi_scale / self._main_window_dpi_scale
+            glfw.set_window_size(win, round(width * scale), round(height * scale))
+            self._main_window_dpi_scale = dpi_scale
 
     def _gui_func(self):
         # check if we should exit
@@ -623,7 +657,7 @@ class GUI:
             return
 
         # determine window size if needed
-        dpi_fac = hello_imgui.dpi_window_size_factor()
+        dpi_fac = imgui.get_window_dpi_scale()
         img_sz_pix = np.array([self._frame_size[w][1]*dpi_fac, self._frame_size[w][0]*dpi_fac])
         tl_total_height = tl_initial_height = tl_min_height = 0
         # calc size of timeline, if any

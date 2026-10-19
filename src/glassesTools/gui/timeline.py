@@ -2,7 +2,7 @@ import math
 import numpy as np
 from typing import Any
 from matplotlib import ticker
-from imgui_bundle import imgui, hello_imgui, icons_fontawesome_6 as ifa6
+from imgui_bundle import imgui, icons_fontawesome_6 as ifa6
 
 from .. import annotation, timestamps, utils
 
@@ -212,7 +212,7 @@ class Timeline:
 
     def _draw_time_ruler(self):
         style = imgui.get_style()
-        dpi_fac = hello_imgui.dpi_window_size_factor()
+        dpi_fac = imgui.get_window_dpi_scale()
 
         # get input state we'll need
         drag_delta = imgui.get_mouse_drag_delta(imgui.MouseButton_.left)
@@ -295,7 +295,7 @@ class Timeline:
         dragging = False
 
         if self._allow_seek or (event in self._allow_annotate) or has_context_menu or hover_info:
-            dpi_fac = hello_imgui.dpi_window_size_factor()
+            dpi_fac = imgui.get_window_dpi_scale()
             cursor_pos = imgui.get_cursor_screen_pos()
             imgui.set_cursor_screen_pos((x_pos-2*dpi_fac, cursor_pos.y))
             size = imgui.ImVec2(4*dpi_fac, y_ext)
@@ -346,7 +346,7 @@ class Timeline:
         action = None
 
         if self._allow_seek or (event in self._allow_annotate) or hover_info:
-            dpi_fac = hello_imgui.dpi_window_size_factor()
+            dpi_fac = imgui.get_window_dpi_scale()
             size = imgui.ImVec2(x_end-x_start-4*dpi_fac, y_ext)
             if size.x<0:
                 return x_pos, do_move, action
@@ -371,7 +371,7 @@ class Timeline:
         return x_pos, do_move, action
 
     def _draw_tracks(self, parent_cursor_pos, parent_size, height):
-        dpi_fac = hello_imgui.dpi_window_size_factor()
+        dpi_fac = imgui.get_window_dpi_scale()
         cursor_pos = imgui.get_cursor_screen_pos()
         size       = imgui.get_content_region_avail()
         size.y     = height
@@ -434,7 +434,7 @@ class Timeline:
         draw_list.pop_clip_rect()
 
     def _draw_annotation_line(self, name: str, event: str, idx: int, time: float, frame_idx: int, seq_nr: int, height: float, border_color: int) -> str|None:
-        dpi_fac = hello_imgui.dpi_window_size_factor()
+        dpi_fac = imgui.get_window_dpi_scale()
         cursor_pos = imgui.get_cursor_screen_pos()
         draw_list = imgui.get_window_draw_list()
         screen_position = self._time_to_pos(time, True)
@@ -449,7 +449,7 @@ class Timeline:
         return action
 
     def _draw_track(self, event: str, event_type: annotation.EventType, annotations_time: list[float], annotations_frame: list[int], height: float, color: imgui.ImColor, text_size: imgui.ImVec2):
-        dpi_fac = hello_imgui.dpi_window_size_factor()
+        dpi_fac = imgui.get_window_dpi_scale()
         grid_color = _color_u32_replace_alpha(imgui.Col_.separator, 0.85)
         cursor_pos = imgui.get_cursor_screen_pos()
         draw_list = imgui.get_window_draw_list()
@@ -580,7 +580,7 @@ class Timeline:
             cursor_pos = imgui.get_cursor_screen_pos()
             size       = imgui.get_content_region_avail()
             imgui.begin_child('##tracks',size=(self.draw_width,0), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scroll_with_mouse)
-            height = int(self.track_height*hello_imgui.dpi_window_size_factor())*len(self._annotations_frame)
+            height = int(self.track_height*imgui.get_window_dpi_scale())*len(self._annotations_frame)
             self._draw_tracks(cursor_pos, size, height)
             imgui.end_child()
         imgui.end_child()
