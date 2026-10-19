@@ -3,7 +3,7 @@ import numpy as np
 import pandas as pd
 import warnings
 
-from ETDQualitizer import _frechet_median_on_sphere, data_loss_from_invalid, rms_s2s, std
+from ETDQualitizer import frechet_median_on_sphere, data_loss_from_invalid, rms_s2s, std
 
 from .. import data_types, gaze_worldref, naming, pose
 
@@ -85,7 +85,7 @@ def compute(
                 for dt in d_types:
                     vectors = relative_vectors[t][dt][q_data]
                     azi, ele = data_types.target_relative_vectors_to_fick(vectors)
-                    median_vector = _frechet_median_on_sphere(vectors)
+                    median_vector = frechet_median_on_sphere(vectors)
                     median_azi, median_ele = data_types.target_relative_vectors_to_fick(median_vector)
                     acc = np.degrees(np.arctan2(np.hypot(median_vector[0], median_vector[1]), median_vector[2]))
                     rms, rms_x, rms_y = rms_s2s(azi, ele)
