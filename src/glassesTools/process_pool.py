@@ -407,12 +407,13 @@ class JobDescription(typing.Generic[_UserDataT]):
         return self.resource_control.get_active_ids()
 
 class JobScheduler(typing.Generic[_UserDataT]):
-    def __init__(self, pool: ProcessPool, job_is_valid_checker : typing.Callable[[_UserDataT], bool]|None = None):
+    def __init__(self, pool: ProcessPool, job_is_valid_checker : typing.Callable[[_UserDataT], bool]|None = None, job_preconditions_checker: typing.Callable[[_UserDataT], bool]|None = None):
         self.jobs               : dict[int, JobDescription[_UserDataT]] = {}
         self._job_id_provider   : CounterContext                        = CounterContext()
         self._pending_jobs      : list[int]                             = []    # jobs not scheduled or finished
 
         self._job_is_valid_checker  = job_is_valid_checker
+        self._job_preconditions_checker = job_preconditions_checker
         self._pool                  = pool
 
         self._manager               = multiprocessing.managers.BaseManager(ctx=multiprocessing.get_context("spawn"))
@@ -440,6 +441,41 @@ class JobScheduler(typing.Generic[_UserDataT]):
     def get_progress_indicator(self, **kwargs) -> JobProgress:
         return self._manager.JobProgress(**kwargs)
 
+    def get_waiting_reasons(self, job_id: int) -> list[str]:
+        job = self.jobs.get(job_id)
+        if job is None or job.get_state()!=State.Pending:
+            return []
+
+        reasons = []
+        if any(dependency_id not in self.jobs or self.jobs[dependency_id].get_state()!=State.Completed for dependency_id in (job.depends_on or ())):
+            reasons.append('Waiting for prerequisite job(s)')
+
+        scheduled = [(other_id, other) for other_id,other in self.jobs.items() if other_id!=job_id and other.is_scheduled()]
+        if len(scheduled)>=self._pool.num_workers:
+            reasons.append('No worker slots available')
+
+        for _,other in scheduled:
+            active_ids = other.get_active_exclusive_ids()
+            if not _exclusive_ids_conflict(job.exclusive_ids, active_ids):
+                continue
+            for requested in job.exclusive_ids:
+                for active in active_ids:
+                    if not _exclusive_ids_conflict((requested,), (active,)):
+                        continue
+                    if requested==('gui',) and active==('gui',):
+                        reasons.append('Waiting for the GUI resource')
+                    elif requested[:1]==('session',) and active[:1]==('session',) and (requested==active or requested[:len(active)]==active or active[:len(requested)]==requested):
+                        if len(active)==2:
+                            reasons.append('An action is active for this session')
+                        elif len(requested)==2:
+                            reasons.append('A recording action is active in this session')
+                        else:
+                            reasons.append('Another action is active for this recording')
+                    else:
+                        reasons.append('Waiting for an exclusive resource')
+
+        return list(dict.fromkeys(reasons))
+
     @staticmethod
     def _bind_scheduler_job_id(done_callback, scheduler_job_id: int):
         if done_callback is None:
@@ -454,15 +490,28 @@ class JobScheduler(typing.Generic[_UserDataT]):
         if job_id not in self.jobs:
             return
 
-        if self.jobs[job_id]._pool_job_id is not None:
-            self._pool.cancel_job(self.jobs[job_id]._pool_job_id)
+        job = self.jobs[job_id]
+        state = job.get_state()
+        if state in [State.Completed, State.Canceled, State.Failed]:
+            if state != State.Completed:
+                self._cancel_dependent_jobs(job_id)
+            return
+
+        if job._pool_job_id is not None:
+            if self._pool.cancel_job(job._pool_job_id):
+                self._cancel_dependent_jobs(job_id)
         else:
             if job_id in self._pending_jobs:
                 self._pending_jobs.remove(job_id)
-            self.jobs[job_id]._final_state = State.Canceled
-            if self.jobs[job_id].done_callback:
-                self.jobs[job_id].done_callback(None, job_id, self.jobs[job_id].user_data, State.Canceled)
-        # TODO: also cancel all jobs that depend on this job
+            job._final_state = State.Canceled
+            self._cancel_dependent_jobs(job_id)
+            if job.done_callback:
+                job.done_callback(None, job_id, job.user_data, State.Canceled)
+
+    def _cancel_dependent_jobs(self, job_id: int):
+        for dependent_id, dependent in tuple(self.jobs.items()):
+            if job_id in (dependent.depends_on or ()) and dependent.get_state() not in [State.Completed, State.Canceled, State.Failed]:
+                self.cancel_job(dependent_id)
 
     def cancel_all_jobs(self):
         # cancel any jobs that may still be running
@@ -494,7 +543,9 @@ class JobScheduler(typing.Generic[_UserDataT]):
                 if not self._job_is_valid_checker(job.user_data):
                     self.cancel_job(job_id)
             # remove finished job from pending jobs if its still there
-            job.get_state() # update state
+            job_state = job.get_state() # update state
+            if job_state in [State.Canceled, State.Failed]:
+                self._cancel_dependent_jobs(job_id)
             if job.is_finished() and job_id in self._pending_jobs:
                 self._pending_jobs.remove(job_id)
             # check how many scheduled jobs we have
@@ -506,14 +557,27 @@ class JobScheduler(typing.Generic[_UserDataT]):
         while num_scheduled_to_pool < self._pool.num_workers:
             # find suitable next task to schedule
             # Order by priority, leaving jobs queued while any requested resource is occupied.
-            job_ids = [
-                i for i in sorted(self._pending_jobs, key=lambda ii: 999 if self.jobs[ii].priority is None else self.jobs[ii].priority)
-                if not _exclusive_ids_conflict(self.jobs[i].exclusive_ids, exclusive_ids)
-            ]
-            if not job_ids:
+            job_id = None
+            for candidate_id in sorted(self._pending_jobs, key=lambda ii: 999 if self.jobs[ii].priority is None else self.jobs[ii].priority):
+                candidate = self.jobs[candidate_id]
+                dependency_states = [self.jobs[dependency_id].get_state() if dependency_id in self.jobs else None for dependency_id in (candidate.depends_on or ())]
+                if any(state in [None, State.Canceled, State.Failed] for state in dependency_states):
+                    self.cancel_job(candidate_id)
+                    continue
+                if any(state != State.Completed for state in dependency_states):
+                    continue
+                if _exclusive_ids_conflict(candidate.exclusive_ids, exclusive_ids):
+                    continue
+                job_id = candidate_id
                 break
-            job_id = job_ids[0]
+            if job_id is None:
+                # no jobs ready to be scheduled
+                break
             to_schedule = self.jobs[job_id]
+            if self._job_preconditions_checker is not None and not self._job_preconditions_checker(to_schedule.user_data):
+                # job preconditions turn out not to be met, so must have gone stale. cancel job
+                self.cancel_job(job_id)
+                continue
             extra_kwargs = {}
             if to_schedule.progress is not None:
                 extra_kwargs['progress_indicator'] = to_schedule.progress
