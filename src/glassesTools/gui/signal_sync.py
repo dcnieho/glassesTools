@@ -279,7 +279,7 @@ class GUI:
             if invalidate1 or invalidate2:
                 self._gaze_data_plot_pix[ax] = None
             distance = self._distance_to_gaze_signal(p, ax)
-            if distance < 4.*hello_imgui.dpi_window_size_factor():
+            if distance < 4.*imgui.get_window_dpi_scale():
                 # hovering
                 self._hovered = ax_idx
             elif self._hovered==ax_idx:

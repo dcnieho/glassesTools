@@ -5,7 +5,7 @@ import natsort
 import pathvalidate
 import threading
 from dataclasses import dataclass
-from imgui_bundle import hello_imgui, imgui, icons_fontawesome_6 as ifa6, imspinner
+from imgui_bundle import imgui, icons_fontawesome_6 as ifa6, imspinner
 
 from .. import file_actions, file_action_provider as fap, platform, utils
 from . import msg_box, utils as gui_utils
@@ -451,8 +451,9 @@ class FilePicker:
         imgui.same_line(spacing=imgui.get_style().item_spacing.x/2)
         # determine size
         space = imgui.get_content_region_avail().x
-        if space>250/.3*hello_imgui.dpi_window_size_factor():
-            filt_space = 250*hello_imgui.dpi_window_size_factor()
+        dpi_scale = imgui.get_window_dpi_scale()
+        if space>250/.3*dpi_scale:
+            filt_space = 250*dpi_scale
         else:
             filt_space = int(space*.3)
         imgui.set_next_item_width(-filt_space)

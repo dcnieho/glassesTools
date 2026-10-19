@@ -1,6 +1,6 @@
 from typing import Callable
 from enum import Enum, auto
-from imgui_bundle import hello_imgui, imgui, icons_fontawesome_6 as ifa6
+from imgui_bundle import imgui, icons_fontawesome_6 as ifa6
 
 from . import utils
 
@@ -49,7 +49,7 @@ def msgbox(title: str, msg: str, type: MsgBox=None, buttons: dict[str, Callable]
             if imgui.tree_node_ex("More info", flags=imgui.TreeNodeFlags_.span_avail_width):
                 size = imgui.get_io().display_size
                 more_size = imgui.calc_text_size(more)
-                _26 = hello_imgui.dpi_window_size_factor()*26 + imgui.get_style().scrollbar_size
+                _26 = imgui.get_window_dpi_scale()*26 + imgui.get_style().scrollbar_size
                 width = min(more_size.x + _26, size.x * 0.8 - icon_size.x)
                 height = min(more_size.y + _26, size.y * 0.7 - msg_size_y)
                 imgui.input_text_multiline(f"###more_info_{title}", more, (width, height), flags=imgui.InputTextFlags_.read_only)
