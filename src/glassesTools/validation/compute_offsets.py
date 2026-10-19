@@ -36,7 +36,7 @@ def compute(
     targets_for_homography = {t_id: np.append(targets[t_id][0:2], distance_mm_for_homography) for t_id in targets}
 
     # for output
-    out_df: pd.DataFrame = None
+    out_df: pd.DataFrame|None = None
 
     # for each frame during analysis interval, determine offset
     # (angle) of gaze (each eye) to each of the targets
@@ -70,8 +70,7 @@ def compute(
         for t in targets:
             if (idx+1,t) not in marker_intervals.index:
                 continue
-            frame_idxs  =           [k           for k,v in samples_per_frame.items() for _ in v]
-            ts          = np.asarray([s.timestamp for v in samples_per_frame.values() for s in v], dtype=float)
+            ts = np.asarray([s.timestamp for v in samples_per_frame.values() for s in v], dtype=float)
             st = marker_intervals.loc[(idx+1,t),'start_timestamp']
             et = marker_intervals.loc[(idx+1,t),  'end_timestamp']
             q_data = np.logical_and(ts>=st, ts<=et)
@@ -109,4 +108,5 @@ def compute(
         else:
             out_df = pd.concat((out_df,df))
 
-    out_df.to_csv(output_directory / filename, mode='w', header=True, sep='\t', na_rep='nan', float_format="%.6f")
+    if out_df is not None:
+        out_df.to_csv(output_directory / filename, mode='w', header=True, sep='\t', na_rep='nan', float_format="%.6f")
