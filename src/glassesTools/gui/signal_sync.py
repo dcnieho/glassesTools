@@ -32,7 +32,8 @@ class GUI:
         self._dragging  : list[bool] = [False, False]
         self._temp_off  = np.zeros((3,))
         self._should_rescale = True
-        self._running   : bool = False
+        self._window_dpi_scale: float|None = None
+        self._running    : bool = False
         self._show_window: bool = False
         self._new_window_title: str = None
         self.is_done    : bool = None
@@ -85,18 +86,43 @@ class GUI:
 
             glfw.set_window_close_callback(glfw_utils.glfw_window_hello_imgui(), close_callback)
 
+        def _load_fonts():
+            hello_imgui.load_font_ttf_with_font_awesome_icons("fonts/Roboto/Roboto-Regular.ttf", 16.)
+
+        def _setup_imgui_config():
+            imgui.get_io().config_dpi_scale_fonts = True
+            imgui.get_io().config_dpi_scale_viewports = True
+
         params = hello_imgui.RunnerParams()
         params.app_window_params.restore_previous_geometry = False
         params.ini_disable = True
         params.app_window_params.hidden = True
         params.fps_idling.fps_idle = 0
         params.imgui_window_params.default_imgui_window_type = hello_imgui.DefaultImGuiWindowType.no_default_window
+        params.imgui_window_params.enable_viewports = True
+        params.callbacks.load_additional_fonts = _load_fonts
+        params.callbacks.setup_imgui_config = _setup_imgui_config
+        params.callbacks.default_icon_font = hello_imgui.DefaultIconFont.font_awesome6
         params.callbacks.show_gui  = self._gui_func
         params.callbacks.post_init = post_init
+        params.callbacks.pre_new_frame = self._refit_window_on_dpi_change
 
         addons = immapp.AddOnsParams()
         addons.with_implot = True
         immapp.run(params, addons)
+
+    def _refit_window_on_dpi_change(self):
+        win = glfw_utils.glfw_window_hello_imgui()
+        dpi_scale, _ = glfw.get_window_content_scale(win)
+        if dpi_scale <= 0:
+            return
+        if self._window_dpi_scale is None:
+            self._window_dpi_scale = dpi_scale
+            return
+        if dpi_scale != self._window_dpi_scale:
+            self._window_dpi_scale = dpi_scale
+            # refit the window to the monitor it is now on
+            self._should_init = True
 
     def get_state(self):
         return (self._user_closed_window, self.is_done)
@@ -161,7 +187,9 @@ class GUI:
         if not self.gaze_data:
             return
 
-        imgui.set_next_window_pos(imgui.ImVec2(0, 0), imgui.Cond_.always)
+        main_viewport = imgui.get_main_viewport()
+        imgui.set_next_window_viewport(main_viewport.id_)
+        imgui.set_next_window_pos(main_viewport.pos, imgui.Cond_.always)
         imgui.set_next_window_size(imgui.get_io().display_size, imgui.Cond_.always)
         imgui.begin('##signal_sync', None, self._window_flags)
 
