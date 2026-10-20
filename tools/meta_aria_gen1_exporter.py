@@ -169,12 +169,14 @@ gaze_df.to_csv(os.path.join(output_folder, 'gaze.tsv'), sep='\t', float_format="
 
 # finally, get meta data
 md = provider.get_metadata()
-metadata = {}
-metadata['start_time'] = md.start_time_epoch_sec
-metadata['glasses_serial'] = md.device_serial
-metadata['duration'] = int((max(et_start_time, et_end_time)-min(rgb_start_time,rgb_end_time))/1000.)
-metadata['scene_camera_serial'] = rgb_config.sensor_serial
-metadata['name'] = vrs_file_stem
+metadata = {
+    "device": "Meta Aria Gen1",
+    'start_time': md.start_time_epoch_sec,
+    'glasses_serial': md.device_serial,
+    'duration': int((max(et_start_time, et_end_time)-min(rgb_start_time,rgb_end_time))/1000.),
+    'scene_camera_serial': rgb_config.sensor_serial,
+    'name': vrs_file_stem
+}
 # can get some extra metadata from vrs's json file, if present
 vrs_json_file = vrs_file+'.json'
 if os.path.isfile(vrs_json_file):
