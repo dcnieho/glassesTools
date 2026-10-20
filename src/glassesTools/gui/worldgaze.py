@@ -1,7 +1,31 @@
 import pathlib
+import time
+from collections.abc import Callable
 
 from .. import annotation, drawing, gaze_headref, gaze_worldref, intervals, ocv, plane, pose, timestamps
 from . import video_player
+
+
+_FRAME_PACING_MARGIN = 0.001
+class _FramePacer:
+    def __init__(self, clock: Callable[[], float] = time.perf_counter, sleep: Callable[[float], None] = time.sleep):
+        self._clock = clock
+        self._sleep = sleep
+        self.reset()
+
+    def reset(self):
+        self._start_timestamp: float | None = None
+        self._start_time: float | None = None
+
+    def wait(self, timestamp_ms: float) -> None:
+        if self._start_time is None:
+            self._start_timestamp = timestamp_ms
+            self._start_time = self._clock()
+            return
+
+        target_time = self._start_time + (timestamp_ms - self._start_timestamp) / 1000.
+        while (remaining := target_time - self._clock()) > _FRAME_PACING_MARGIN + 1e-9:
+            self._sleep(min(remaining - _FRAME_PACING_MARGIN, 0.01))
 
 
 def show_visualization(
@@ -28,8 +52,12 @@ def show_visualization(
         plane_win_id = {p: gui.add_window(p) for p in planes}
 
     max_frame_idx = max(head_gazes.keys())
-    should_exit = False
     first_frame = True
+    frame_pacer = _FramePacer()
+
+    def has_exit_request():
+        return any(request == 'exit' for request, _ in gui.get_requests())
+
     for frame_idx in range(max_frame_idx+1):
         done, frame, frame_idx, frame_ts, frame_info = cap.read_frame(report_gap=True)
         if first_frame and frame is not None:
@@ -38,12 +66,7 @@ def show_visualization(
         if done or intervals.beyond_last_interval(frame_idx, annotations):
             break
 
-        requests = gui.get_requests()
-        for r,p in requests:
-            if r=='exit':   # only request we need to handle
-                should_exit = True
-                break
-        if should_exit:
+        if has_exit_request():
             break
 
         # check we're in a current interval, else skip processing
@@ -53,11 +76,14 @@ def show_visualization(
         if show_only_intervals and not any(intervals.is_in_interval(frame_idx, annotations[e]) for e in annotations) or frame is None:
             # we don't have a valid frame or no need to show this frame
             # do update timeline of the viewers
+            frame_pacer.reset()
             gui.update_image(None, frame_ts/1000., frame_idx, window_id=gui.main_window_id)
             if show_planes:
                 for p in planes:
                     gui.update_image(None, frame_ts/1000., frame_idx, window_id=plane_win_id[p])
             continue
+
+        frame_pacer.wait(frame_ts)
 
         if show_planes:
             ref_img = {p: planes[p].get_ref_image(400) for p in planes}
