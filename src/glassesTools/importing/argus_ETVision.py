@@ -28,7 +28,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Pa
 
     ### check and copy needed files to the output directory
     print('  Check and copy raw data...')
-    ### check tobii recording and get export directory
+    ### check argus recording and get export directory
     if rec_info is not None:
         checkRecording(source_dir, rec_info)
     else:

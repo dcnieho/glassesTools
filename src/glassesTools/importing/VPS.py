@@ -32,7 +32,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, device: str|EyeTracker=Non
 
     ### check and copy needed files to the output directory
     print('  Check and copy raw data...')
-    ### check tobii recording and get export directory
+    ### check VPS recording and get export directory
     if rec_info is not None:
         checkRecording(device, source_dir, rec_info)
     else:
