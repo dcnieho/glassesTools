@@ -529,9 +529,8 @@ class GUI:
             hello_imgui.load_font_ttf_with_font_awesome_icons("fonts/Roboto/Roboto-Regular.ttf", 16.)
 
         def _setup_imgui_config():
-            io = imgui.get_io()
-            io.config_dpi_scale_fonts = True
-            io.config_dpi_scale_viewports = True
+            imgui.get_io().config_dpi_scale_fonts = True
+            imgui.get_io().config_dpi_scale_viewports = True
 
         def post_init():
             self._running = True
