@@ -36,7 +36,7 @@ def preprocessData(output_dir: str|pathlib.Path=None, device: str|EyeTracker=Non
     if rec_info is not None:
         checkRecording(device, source_dir, rec_info)
     else:
-        rec_info = getRecordingInfo(source_dir)
+        rec_info = getRecordingInfo(source_dir, device)
         if rec_info is None:
             raise RuntimeError(f"The folder {source_dir} is not recognized as a {device.value} recording.")
 
