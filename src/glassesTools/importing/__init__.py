@@ -11,7 +11,7 @@ from .. import eyetracker, naming
 from .adhawk_mindlink import preprocessData as adhawk_mindlink
 from .argus_ETVision import preprocessData as argus_ETVision
 from .generic import importData as generic
-from .meta_aria_gen1 import importData as meta_aria_gen1
+from .meta_aria import importData as meta_aria_gen1
 from .SeeTrue_STONE import preprocessData as SeeTrue_STONE
 from .SMI_ETG import preprocessData as SMI_ETG
 from .tobii_G2 import preprocessData as tobii_G2
@@ -28,6 +28,15 @@ def pupil_invisible(output_dir: str | pathlib.Path, source_dir: str | pathlib.Pa
 def pupil_neon(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
     from .pupilLabs import preprocessData
     return preprocessData(output_dir, EyeTracker.Pupil_Neon, source_dir, rec_info, copy_scene_video, source_dir_as_relative_path)
+
+
+def meta_aria_gen1(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
+    from .meta_aria import importData
+    return importData(output_dir, EyeTracker.Meta_Aria_Gen_1, source_dir, rec_info, copy_scene_video, source_dir_as_relative_path)
+
+def meta_aria_gen2(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
+    from .meta_aria import importData
+    return importData(output_dir, EyeTracker.Meta_Aria_Gen_2, source_dir, rec_info, copy_scene_video, source_dir_as_relative_path)
 
 
 def VPS_19(output_dir: str | pathlib.Path, source_dir: str | pathlib.Path = None, rec_info: Recording = None, copy_scene_video = True, source_dir_as_relative_path = False, cam_cal_file: str|pathlib.Path=None) -> Recording:
@@ -56,8 +65,11 @@ def get_recording_info(source_dir: str | pathlib.Path, device: str | EyeTracker,
             from .generic import getRecordingInfo
             rec_info = getRecordingInfo(source_dir, device_name)
         case EyeTracker.Meta_Aria_Gen_1:
-            from .meta_aria_gen1 import getRecordingInfo
-            rec_info = getRecordingInfo(source_dir)
+            from .meta_aria import getRecordingInfo
+            rec_info = getRecordingInfo(source_dir, device)
+        case EyeTracker.Meta_Aria_Gen_2:
+            from .meta_aria import getRecordingInfo
+            rec_info = getRecordingInfo(source_dir, device)
         case EyeTracker.Pupil_Core:
             from .pupilLabs import getRecordingInfo
             rec_info = getRecordingInfo(source_dir, device)
@@ -115,6 +127,8 @@ def do_import(output_dir: str | pathlib.Path = None, source_dir: str | pathlib.P
             rec_info = generic(output_dir, source_dir, rec_info, device_name, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path, cam_cal_file=cam_cal_file)
         case EyeTracker.Meta_Aria_Gen_1:
             rec_info = meta_aria_gen1(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
+        case EyeTracker.Meta_Aria_Gen_2:
+            rec_info = meta_aria_gen2(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Pupil_Core:
             rec_info = pupil_core(output_dir, source_dir, rec_info, copy_scene_video=copy_scene_video, source_dir_as_relative_path=source_dir_as_relative_path)
         case EyeTracker.Pupil_Invisible:
@@ -240,5 +254,6 @@ def _store_data(output_dir: pathlib.Path, gaze: pd.DataFrame|None, frame_ts: pd.
     rec_info.store_as_json(output_dir / rec_info_fname)
 
 
-__all__ = ['adhawk_mindlink','argus_ETVision','generic','pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3','VPS_19','VPS_Lite',
+
+__all__ = ['adhawk_mindlink','argus_ETVision','generic','meta_aria_gen1','meta_aria_gen2','pupil_core','pupil_invisible','pupil_neon','SeeTrue_STONE','SMI_ETG','tobii_G2','tobii_G3','VPS_19','VPS_Lite',
            'get_recording_info','do_import','check_source_dir','check_output_dir','check_folders','check_device']

@@ -7,9 +7,12 @@ from ..recording import Recording
 from ..eyetracker import EyeTracker
 from .. import naming, timestamps, video_utils
 
-def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
-    from . import check_folders, _store_data
-    output_dir, source_dir, rec_info, _ = check_folders(output_dir, source_dir, rec_info, EyeTracker.Meta_Aria_Gen_1)
+def importData(output_dir: str|pathlib.Path=None, device: str|EyeTracker=None, source_dir: str|pathlib.Path=None, rec_info: Recording=None, copy_scene_video = True, source_dir_as_relative_path = False) -> Recording:
+    from . import check_folders, check_device, _store_data
+    device, rec_info, _ = check_device(device, rec_info)
+    if not device in [EyeTracker.Meta_Aria_Gen_1, EyeTracker.Meta_Aria_Gen_2]:
+        raise ValueError(f'Provided device ({rec_info.eye_tracker.value}) is not a {EyeTracker.Meta_Aria_Gen_1.value} or a {EyeTracker.Meta_Aria_Gen_2.value}.')
+    output_dir, source_dir, rec_info, _ = check_folders(output_dir, source_dir, rec_info, device)
     print(f'processing: {source_dir.name} -> {output_dir}')
 
     ### check and copy needed files to the output directory
@@ -18,9 +21,9 @@ def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=N
     if rec_info is not None:
         checkRecording(source_dir, rec_info)
     else:
-        rec_info = getRecordingInfo(source_dir)
+        rec_info = getRecordingInfo(source_dir, device)
         if rec_info is None:
-            raise RuntimeError(f"The folder {source_dir} is not recognized as a {EyeTracker.Meta_Aria_Gen_1.value} recording.")
+            raise RuntimeError(f"The folder {source_dir} is not recognized as a {device.value} recording.")
 
     # make output dir
     if not output_dir.is_dir():
@@ -38,19 +41,28 @@ def importData(output_dir: str|pathlib.Path=None, source_dir: str|pathlib.Path=N
 
     return rec_info
 
-def getRecordingInfo(inputDir: str|pathlib.Path) -> Recording:
+def getRecordingInfo(inputDir: str|pathlib.Path, device: EyeTracker) -> Recording:
     # returns None if not a recording directory
     inputDir = pathlib.Path(inputDir)
-    recInfo = Recording(source_directory=inputDir, eye_tracker=EyeTracker.Meta_Aria_Gen_1)
+    recInfo = Recording(source_directory=inputDir, eye_tracker=device)
 
     # check expected files are present
     for f in ('metadata.json','worldCamera.mp4','gaze.tsv','calibration.xml'):
         if not (inputDir/f).is_file():
-            print(f'This directory does not contain a valid {EyeTracker.Meta_Aria_Gen_1.value} recording export. The {f} file is not found in the input directory {inputDir}. Make sure you run the meta_aria_gen1_exporter.py script on the recording\'s vrs file')
+            print(f'This directory does not contain a valid {device.value} recording export. The {f} file is not found in the input directory {inputDir}. Make sure you run the meta_aria_gen{device.value[-1]}_exporter.py script on the recording\'s vrs file')
             return None
 
     with open(inputDir/'metadata.json', 'r') as f:
         metadata = json.load(f)
+    # check device
+    if device==EyeTracker.Meta_Aria_Gen_1:
+        # N.B. older version of the Meta Aria Gen 1 exporter did not include the device field in metadata.json, so that is not an error if its missing
+        if 'device' in metadata and metadata['device'] != "Meta Aria Gen1":
+            return None
+    elif device==EyeTracker.Meta_Aria_Gen_2:
+        if 'device' not in metadata or metadata['device'] != "Meta Aria Gen2":
+            return None
+    # set metadata fields
     recInfo.name = metadata['name']
     recInfo.scene_camera_serial = metadata['scene_camera_serial']
     recInfo.duration = float(metadata['duration']/1000)     # in us, convert to ms
@@ -63,7 +75,7 @@ def getRecordingInfo(inputDir: str|pathlib.Path) -> Recording:
     return recInfo
 
 def checkRecording(inputDir: str|pathlib.Path, recInfo: Recording):
-    actualRecInfo = getRecordingInfo(inputDir)
+    actualRecInfo = getRecordingInfo(inputDir, recInfo.eye_tracker)
 
     if actualRecInfo is None or recInfo.name!=actualRecInfo.name:
         raise ValueError(f"A recording with the name \"{recInfo.name}\" was not found in the folder {inputDir}.")

@@ -7,6 +7,7 @@ class EyeTracker(utils.AutoName):
     Argus_ETVision  = enum.auto()
     Generic         = enum.auto()
     Meta_Aria_Gen_1 = enum.auto()
+    Meta_Aria_Gen_2 = enum.auto()
     Pupil_Core      = enum.auto()
     Pupil_Invisible = enum.auto()
     Pupil_Neon      = enum.auto()
@@ -23,6 +24,7 @@ EyeTracker.AdHawk_MindLink.color = utils.hex_to_rgba_0_1("#F0A3FF")
 EyeTracker.Argus_ETVision .color = utils.hex_to_rgba_0_1("#C20088")
 EyeTracker.Generic        .color = utils.hex_to_rgba_0_1("#393939")
 EyeTracker.Meta_Aria_Gen_1.color = utils.hex_to_rgba_0_1("#9DCC00")
+EyeTracker.Meta_Aria_Gen_2.color = utils.hex_to_rgba_0_1("#FFA405")
 EyeTracker.Pupil_Core     .color = utils.hex_to_rgba_0_1("#0075DC")
 EyeTracker.Pupil_Invisible.color = utils.hex_to_rgba_0_1("#993F00")
 EyeTracker.Pupil_Neon     .color = utils.hex_to_rgba_0_1("#4C005C")
@@ -34,7 +36,7 @@ EyeTracker.VPS_19         .color = utils.hex_to_rgba_0_1("#8F7C00")
 EyeTracker.VPS_Lite       .color = utils.hex_to_rgba_0_1("#003380")
 EyeTracker.Unknown        .color = utils.hex_to_rgba_0_1("#393939")
 # other colors left over:
-# #FFA405, #FFA8BB, #426600, #FF0010, #5EF1F2, #00998F, #E0FF66, #740AFF, #990000, #FFFF80, #FFE100, #FF5005
+# #FFA8BB, #426600, #FF0010, #5EF1F2, #00998F, #E0FF66, #740AFF, #990000, #FFFF80, #FFE100, #FF5005
 # colors taken from P. Green-Armytage (2010). "A Colour Alphabet and the Limits of Colour Coding". Colour: Design & Creativity 5 (10): 1–23.
 
 

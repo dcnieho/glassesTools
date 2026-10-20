@@ -26,6 +26,7 @@ glassesTools supports the following eye trackers:
 |Argus Science ETVision|`EyeTracker.Argus_ETVision`|
 |Generic|`EyeTracker.Generic`*|
 |Meta Project Aria Generation 1|`EyeTracker.Meta_Aria_Gen_1`|
+|Meta Project Aria Generation 2|`EyeTracker.Meta_Aria_Gen_2`|
 |Pupil Core|`EyeTracker.Pupil_Core`|
 |Pupil Invisible|`EyeTracker.Pupil_Invisible`|
 |Pupil Neon|`EyeTracker.Pupil_Neon`|
@@ -64,10 +65,21 @@ software before they can be imported using glassesTools. These are:
   - Open the [`meta_aria_gen1_exporter.py`](https://github.com/dcnieho/glassesTools/tree/master/tools/meta_aria_gen1_exporter.py) script
     and set the variable `vrs_file` to the full path to the recording's `.vrs` file. By default, it is assumed that the recording's
     `.vrs` file and the MPS results are in the same folder and have the default names used by Aria Studio, e.g.
-    `some_folder/recording.vrs` and `somefolder/mps_recording_vrs`. If the MPS results are located elsewhere, you can provide the
+    `some_folder/<recording>.vrs` and `somefolder/mps_<recording>_vrs`. If the MPS results are located elsewhere, you can provide the
     path to them using the `mps_folder` variable (optional).
   - Run the script (ensure you have the right packages installed, see the comment atop the script). An export of the recording will
-    be made in a format that can be read by glassesTools and by default stored in the folder `somefolder/export_recording`. If you
+    be made in a format that can be read by glassesTools and by default stored in the folder `somefolder/export_<recording>`. If you
+    wish to use another export folder, set the variable `output_folder` (optional).
+- *Meta Project Aria Generation 2*:
+  - Download the recording, a VRS file, to the computer via Aria Studio or the Client SDK.
+  - Optionally run MPS to get eye gaze. Note that for the Gen 2, eye gaze is already determined on-device, MPS provides an alternative.
+  - Open the [`meta_aria_gen2_exporter.py`](https://github.com/dcnieho/glassesTools/tree/master/tools/meta_aria_gen2_exporter.py) script
+    and set the variable `vrs_file` to the full path to the recording's `.vrs` file. If you want to use eye gaze from MPS instead of what is in the file, set `USE_MPS_GAZE` to True. By default, it is assumed that the recording's
+    `.vrs` file and the MPS results are in the same folder and have the default names used by the Aria tooling, e.g.
+    `some_folder/<recording>.vrs` and `somefolder/mps_<recording>_vrs`. If the MPS results are located elsewhere, you can provide the
+    path to them using the `mps_folder` variable (optional).
+  - Run the script (ensure you have the right packages installed, see the comment atop the script). An export of the recording will
+    be made in a format that can be read by glassesTools and by default stored in the folder `somefolder/export_<recording>`. If you
     wish to use another export folder, set the variable `output_folder` (optional).
 - *SMI ETG*: For SMI ETG recordings, access to BeGaze is required and the following steps should be performed:
   - Export gaze data: `Export` -> `Legacy: Export Raw Data to File`.
