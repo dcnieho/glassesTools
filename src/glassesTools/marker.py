@@ -112,10 +112,12 @@ def read_dataframe_from_file(marker_id: int, aruco_dict_id: int, folder: str|pat
     return pd.read_csv(file,sep='\t', dtype=defaultdict(lambda: float, **Pose._non_float))
 
 
+_MarkerKey = typing.TypeVar("_MarkerKey")
 @typing.overload
 def code_for_presence(markers: pd.DataFrame, allow_failed=False) -> pd.DataFrame: ...
-def code_for_presence(markers: dict[typing.Any, pd.DataFrame], allow_failed=False) -> dict[typing.Any, pd.DataFrame]: ...
-def code_for_presence(markers: pd.DataFrame|dict[typing.Any, pd.DataFrame], allow_failed=False) -> pd.DataFrame|dict[typing.Any, pd.DataFrame]:
+@typing.overload
+def code_for_presence(markers: dict[_MarkerKey, pd.DataFrame], allow_failed=False) -> dict[_MarkerKey, pd.DataFrame]: ...
+def code_for_presence(markers: pd.DataFrame|dict[_MarkerKey, pd.DataFrame], allow_failed=False) -> pd.DataFrame|dict[_MarkerKey, pd.DataFrame]:
     if isinstance(markers,dict):
         for i in markers:
             markers[i] = _code_for_presence_impl(markers[i], f'{i}_', allow_failed)
@@ -129,7 +131,8 @@ def _code_for_presence_impl(markers: pd.DataFrame, lbl_extra:str, allow_failed=F
         new_col_lbl,
         True if allow_failed else markers[[c for c in markers.columns if c not in ['frame_idx']]].notnull().all(axis='columns')
     )
-    markers = markers[['frame_idx',new_col_lbl]] if 'frame_idx' in markers else markers[[new_col_lbl]]
+    columns = ['frame_idx', new_col_lbl] if 'frame_idx' in markers.columns else [new_col_lbl]
+    markers = markers.filter(items=columns)
     markers = markers.astype({new_col_lbl: bool}) # ensure the new column is bool
     return markers
 
@@ -167,8 +170,10 @@ def get_appearance_starts_ends(m: pd.DataFrame, max_gap_duration: int, min_durat
         return m.loc[starts,'frame_idx'].to_numpy(copy=True), m.loc[ends-1,'frame_idx'].to_numpy(copy=True) # NB: -1 so that ends point to last frame during which marker was last seen (and to not index out of the array)
     elif m.index.name=='frame_idx':
         return m.index[starts].to_numpy(copy=True), m.index[ends-1].to_numpy(copy=True)
+    else:
+        raise ValueError(f'It was expected that the name of the index is "frame_idx" or the dataframe contains a column named "frame_idx". It was "{m.index.name}" instead. This may mean this dataframe does not contain the expected information. Cannot continue.')
 
-def get_sequence_interval(starts: dict[MarkerID,list[int]], ends: dict[MarkerID,list[int]], pattern: list[MarkerID], max_intermarker_gap_duration: int, side='start') -> np.ndarray:
+def get_sequence_interval(starts: dict[MarkerID,np.ndarray], ends: dict[MarkerID,np.ndarray], pattern: list[MarkerID], max_intermarker_gap_duration: int, side='start') -> np.ndarray:
     # find marker pattern (sequence of markers following in right order with gap no longer than max_intermarker_gap_duration)
     pairs: list[tuple[int,int]] = []
     for i in range(len(ends[pattern[0]])):
