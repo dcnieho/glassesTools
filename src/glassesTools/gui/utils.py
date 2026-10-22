@@ -10,6 +10,15 @@ from . import colors, msg_box
 from .. import platform, process_pool, utils
 
 
+def reset_table_display_order(column_count: int) -> bool:
+    table = imgui.internal.get_current_table()
+    if table is None or table.columns_count != column_count:
+        return False
+    for column_idx in range(column_count):
+        imgui.internal.table_set_column_display_order(table, column_idx, column_idx)
+    return True
+
+
 # https://gist.github.com/Willy-JL/f733c960c6b0d2284bcbee0316f88878
 def get_traceback(*exc_info: list):
     exc_info = exc_info or sys.exc_info()

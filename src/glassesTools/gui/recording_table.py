@@ -68,6 +68,8 @@ class RecordingTable:
         self._has_scroll_x = None
 
         self._columns: list[ColumnSpec] = []
+        self._column_layout_signature: tuple[tuple[int, str], ...]|None = None
+        self._reset_column_order_pending = False
         self._show_hide_commands: dict[int,bool] = {}
         self.build_columns(extra_columns)
 
@@ -89,6 +91,7 @@ class RecordingTable:
         )
 
     def build_columns(self, extra_columns: list[ColumnSpec]|None = None):
+        previous_layout = self._column_layout_signature
         col_names = ifa6.ICON_FA_EYE+" Eye Tracker", ifa6.ICON_FA_SIGNATURE+" Name", ifa6.ICON_FA_USER_TIE+" Participant", ifa6.ICON_FA_CLIPBOARD+" Project", ifa6.ICON_FA_STOPWATCH+" Duration", ifa6.ICON_FA_CLOCK+" Recording Start", ifa6.ICON_FA_FOLDER+" Working Directory", ifa6.ICON_FA_FOLDER+" Source Directory", ifa6.ICON_FA_TAGS+" Firmware Version", ifa6.ICON_FA_BARCODE+" Glasses Serial", ifa6.ICON_FA_BARCODE+" Recording Unit Serial", ifa6.ICON_FA_TAGS+" Recording Software Version", ifa6.ICON_FA_BARCODE+" Scene Camera Serial", ifa6.ICON_FA_CAMERA+" Video File"
         if self.has_selected_recordings:
             col_names = (ifa6.ICON_FA_SQUARE_CHECK+" Selector",)+col_names
@@ -111,6 +114,9 @@ class RecordingTable:
                 i_def_col += 1
             i_col += 1
         self._show_hide_commands.clear()
+        self._column_layout_signature = tuple((column.position, column.name) for column in self._columns)
+        if previous_layout is not None and self._column_layout_signature != previous_layout:
+            self._reset_column_order_pending = True
 
     def show_hide_columns(self, show_hide: dict[str, bool]):
         for c in show_hide:
@@ -232,6 +238,9 @@ class RecordingTable:
                 else:
                     imgui.table_setup_column(col.name, col.flags)
                 has_angled_headers = has_angled_headers or (col.flags & imgui.TableColumnFlags_.angled_header)
+
+            if self._reset_column_order_pending and gui_utils.reset_table_display_order(len(self._columns)):
+                self._reset_column_order_pending = False
 
             # show/hide columns through API
             for c_idx in self._show_hide_commands:
