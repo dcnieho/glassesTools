@@ -772,7 +772,7 @@ class FilePicker:
                             multi_selected_state = 0
 
                         if multi_selected_state==0:
-                            imgui.push_item_flag(imgui.internal.ItemFlagsPrivate_.mixed_value, True)
+                            imgui.push_item_flag(imgui.ItemFlags_.mixed_value, True)
                         clicked, new_state = gui_utils.my_checkbox("##header_checkbox", multi_selected_state==1, frame_size=(0,0), frame_padding_override=(imgui.get_style().frame_padding.x/2,0), do_vertical_align=False)
                         if multi_selected_state==0:
                             imgui.pop_item_flag()

@@ -285,7 +285,7 @@ class RecordingTable:
                             multi_selected_state = 0
 
                         if multi_selected_state==0:
-                            imgui.push_item_flag(imgui.internal.ItemFlagsPrivate_.mixed_value, True)
+                            imgui.push_item_flag(imgui.ItemFlags_.mixed_value, True)
                         clicked, new_state = gui_utils.my_checkbox("##header_checkbox", multi_selected_state==1, frame_size=(0,0), do_vertical_align=False)
                         if multi_selected_state==0:
                             imgui.pop_item_flag()
@@ -540,7 +540,7 @@ class EyeTrackerName:
             align = imgui.get_style().button_text_align
             pos = imgui.ImVec2(tuple((x-y)*a for x,y,a in zip((bb.get_width()-2*x_padding,bb.get_height()),label_size,align))) + (bb.min.x+x_padding, bb.min.y)
             imgui.get_current_context().current_window.draw_list.add_text(
-                imgui.get_current_context().font, 0., pos, imgui.get_color_u32(txt_clr), et, None, 0., bb.to_vec4())
+                imgui.get_current_context().font, 0., pos, imgui.get_color_u32(txt_clr), et, 0., bb.to_vec4())
 
         if align:
             imgui.end_group()
