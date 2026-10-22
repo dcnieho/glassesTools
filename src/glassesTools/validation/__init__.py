@@ -59,13 +59,15 @@ class Plane(_plane.TargetPlane):
             origin = _plane.Coordinate(*targets_center.loc[validationSetup['centerTarget']].values)  # NB: need origin in scaled space
             if is_dynamic:
                 # load with dynamic markers, if any
-                # split of columns indicating markers that signal appearance of a target
-                markers = pd.concat([targets.pop(c) for c in targets.columns if c.startswith('marker_')], axis=1)
-                marker_columns = {c:int(c.removeprefix('marker_')) for c in markers}
-                def _store_markers(r: pd.Series):
-                    for c in marker_columns:
-                        self.dynamic_markers[int(r[c])] = (int(r.name), marker_columns[c])
-                markers.apply(_store_markers, axis=1)
+                marker_columns = [targets.pop(c) for c in targets.columns if c.startswith('marker_')]
+                if marker_columns:
+                    # split of columns indicating markers that signal appearance of a target
+                    markers = pd.concat(marker_columns, axis=1)
+                    marker_columns = {c:int(c.removeprefix('marker_')) for c in markers}
+                    def _store_markers(r: pd.Series):
+                        for c in marker_columns:
+                            self.dynamic_markers[int(r[c])] = (int(r.name), marker_columns[c])
+                    markers.apply(_store_markers, axis=1)
         else:
             self.dynamic_markers.clear()
             origin = _plane.Coordinate(0.,0.)
