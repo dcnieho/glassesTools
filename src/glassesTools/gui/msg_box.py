@@ -25,7 +25,7 @@ def msgbox(title: str, msg: str, type: MsgBox=None, buttons: dict[str, Callable]
             icon = ifa6.ICON_FA_TRIANGLE_EXCLAMATION
             color = (0.95, 0.69, 0.10, 1.00)
         elif type is MsgBox.error:
-            icon = ifa6.ICON_FA_TRIANGLE_EXCLAMATION
+            icon = ifa6.ICON_FA_SQUARE_XMARK
             color = (0.95, 0.22, 0.22, 1.00)
         else:
             icon = None
