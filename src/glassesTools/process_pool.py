@@ -210,11 +210,9 @@ class JobResourceControl:
         return tuple(self._exclusive_ids)
 
 _current_job_resource_control = None
-def release_current_job_resource(resource_id: tuple[str, ...]) -> bool:
-    if _current_job_resource_control is None:
-        return False
-    _current_job_resource_control.release(resource_id)
-    return True
+def release_current_job_resource(resource_id: tuple[str, ...]):
+    if _current_job_resource_control is not None:
+        _current_job_resource_control.release(resource_id)
 
 def _run_with_warning_capture(fn: typing.Callable[..., typing.Any], warning_store, resource_control, *args, **kwargs):
     global _current_job_resource_control
