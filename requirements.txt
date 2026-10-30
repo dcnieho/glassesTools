@@ -12,7 +12,7 @@ aiopath
 pathvalidate
 I2MC>=2.2.7
 pebble
-pycolmap
+pycolmap>=4
 orjson
 av
 ETDQualitizer>=1.2.0
