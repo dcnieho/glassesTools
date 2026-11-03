@@ -10,8 +10,7 @@ from collections import defaultdict
 import cv2
 
 class ABCFixPoint:
-    def __init__(self, win, outer_diameter=0.7, inner_diameter=0.1,
-                 outer_color='black', inner_color='white', units='degFlatPos'):
+    def __init__(self, win, outer_diameter=0.7, inner_diameter=0.1, outer_color='black', inner_color='white', units='degFlatPos'):
         self.outer_dot      = visual.Circle(win, fillColor = outer_color,
                                             radius = outer_diameter/2,
                                             units = units)
@@ -49,29 +48,20 @@ class ABCFixPoint:
         self.inner_dot.draw()
 
 class SegmentationMarker:
-    def __init__(self, win: visual.Window, refresh_rate: int, duration: float,
-                 marker_size: float, units: str, margin: float, background_color: str):
+    def __init__(self, win: visual.Window, refresh_rate: int, duration: float, marker_size: float, units: str):
         self.win = win
         self.refresh_rate = refresh_rate
         self.duration = duration
         self.size = marker_size
         self.units = units
-        self.margin = margin
-        self.background_color = background_color
 
         self._marker    = visual.ImageStim(win, image=None, size=self.size, units=self.units)
-        self._marker_bg = visual.Rect(win,
-                                      units =self.units,
-                                      width =self.size*(1+self.margin*2),
-                                      height=self.size*(1+self.margin*2),
-                                      fillColor=self.background_color)
 
     def draw(self, m_id: int):
         check_escape(self.win)
         self._marker.image = get_aruco_marker(m_id, self.size, self.units, self.win)
         n_segment_marker_frames = int(self.duration*self.refresh_rate)
         for _ in range(n_segment_marker_frames):
-            self._marker_bg.draw()
             self._marker.draw()
             self.win.flip()
 
@@ -128,19 +118,11 @@ def prepare_validation(win: visual.Window, config: dict, screen_config: dict):
     # that these markers are evenly spaced and not more eccentric than necessary
     for m_id, marker in fiducial_positions.iterrows():
         aruco_im = visual.ImageStim(win, image=None, size=config["markers"]["size"], units=config["markers"]["units"])
-        aruco_bg = visual.Rect(win, units=config["markers"]["units"],
-                               width =config["markers"]["size"]*(1+config["markers"]["margin"]*2),
-                               height=config["markers"]["size"]*(1+config["markers"]["margin"]*2),
-                               fillColor=config["markers"]["background_color"])
 
-        aruco_bg.pos = [marker.x, marker.y]
         aruco_im.image = get_aruco_marker(m_id, config["markers"]["size"], config["markers"]["units"], win)
         aruco_im.pos = [marker.x, marker.y]
 
-        stimList.append(aruco_bg)
         stimList.append(aruco_im)
-
-        aruco_bg.draw()
         aruco_im.draw()
 
     # draw placeholder circles at all target positions
@@ -251,8 +233,7 @@ def run_validation(win: visual.Window, config: dict):
     load_aruco_dict(config["aruco"]["dict"], config["aruco"]["border_bits"])
 
     # prepare trial segmentation
-    segmenter = SegmentationMarker(win, config["screen"]["refresh_rate"], config["segment_marker"]["duration"],
-                                   config["segment_marker"]["size"], config["segment_marker"]["units"], config["segment_marker"]["margin"], config["segment_marker"]["background_color"])
+    segmenter = SegmentationMarker(win, config["screen"]["refresh_rate"], config["segment_marker"]["duration"], config["segment_marker"]["size"], config["segment_marker"]["units"])
     # prepare instruction
     textstim = visual.TextStim(win, text="", height=config["instruction_text"]["height"], color=config["instruction_text"]["color"], wrapWidth=9999.)
 
