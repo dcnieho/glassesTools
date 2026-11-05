@@ -12,7 +12,7 @@ class MsgBox(Enum):
     warn    = auto()
     error   = auto()
 
-def msgbox(title: str, msg: str, type: MsgBox=None, buttons: dict[str, Callable]='default', button_keymap: dict[int,imgui.Key]=None, more: str=None):
+def msgbox(title: str, msg: str|Callable[[], None], type: MsgBox=None, buttons: dict[str, Callable]='default', button_keymap: dict[int,imgui.Key]=None, more: str=None):
     def popup_content():
         spacing = 2 * imgui.get_style().item_spacing.x
         if type is MsgBox.question:
@@ -38,12 +38,15 @@ def msgbox(title: str, msg: str, type: MsgBox=None, buttons: dict[str, Callable]
         else:
             icon_size = imgui.ImVec2(0, 0)
         imgui.begin_group()
-        msg_size_y = imgui.calc_text_size(msg).y
+        msg_size_y = imgui.calc_text_size(msg).y if isinstance(msg, str) else 0
         if more:
             msg_size_y += imgui.get_text_line_height_with_spacing() + imgui.get_frame_height_with_spacing()
-        if icon and (diff := icon_size.y - msg_size_y) > 0:
+        if icon and isinstance(msg, str) and (diff := icon_size.y - msg_size_y) > 0:
             imgui.dummy((0, diff / 2 - imgui.get_style().item_spacing.y))
-        imgui.text_unformatted(msg)
+        if isinstance(msg, str):
+            imgui.text_unformatted(msg)
+        else:
+            msg()
         if more:
             imgui.text("")
             if imgui.tree_node_ex("More info", flags=imgui.TreeNodeFlags_.span_avail_width):
