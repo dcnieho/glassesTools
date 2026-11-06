@@ -70,7 +70,7 @@ for style_type, compatible_names in (
 ):
     json.register_type(json.TypeEntry(
         style_type,
-        f'glassesTools.drawing.{style_type.__name__}',
+        f'__glassesTools.drawing.{style_type.__name__}__',
         lambda value: value._asdict(),
         lambda value, style_type=style_type: style_type(**value),
         compatible_names,
