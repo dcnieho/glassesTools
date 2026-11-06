@@ -30,12 +30,39 @@ def dump(obj, file: pathlib.Path):
 def json_decoder(d):
     for t in TYPE_REGISTRY:
         if t.reg_name in d:
-            return t.from_json(d[t.reg_name])
+            value = d[t.reg_name]
+            defaults = getattr(t.type, '_field_defaults', {})
+            if defaults and isinstance(value, dict):
+                value = dict(value)
+                for name, field_value in value.items():
+                    if name in defaults:
+                        value[name] = restore_defaults(field_value, defaults[name])
+            return t.from_json(value)
         elif t.compatible_reg_names is not None:
             for r_name in t.compatible_reg_names:
                 if r_name in d:
                     return t.from_json(d[r_name])
     return d
+
+
+def restore_defaults(value, default):
+    if isinstance(default, tuple) and hasattr(default, '_asdict') and isinstance(value, dict):
+        default_fields = default._asdict()
+        fields = default_fields.copy()
+        for name, field_value in value.items():
+            fields[name] = restore_defaults(field_value, default_fields.get(name))
+        return type(default)(**fields)
+    if isinstance(default, dict) and isinstance(value, dict):
+        fields = default.copy()
+        for name, field_value in value.items():
+            fields[name] = restore_defaults(field_value, default.get(name))
+        return fields
+    if isinstance(default, list) and isinstance(value, list):
+        return [
+            restore_defaults(field_value, default[i] if i < len(default) else None)
+            for i, field_value in enumerate(value)
+        ]
+    return value
 
 def load(file: pathlib.Path):
     with open(file, 'r') as f:
