@@ -7,12 +7,22 @@ import math
 import typing
 
 
-from . import data_files, drawing, marker, transforms
+from . import data_files, drawing, json, marker, transforms
 from .marker_assembly import MarkerAssembly as _MarkerAssembly
 
 class Coordinate(typing.NamedTuple):
     x: float = 0.
     y: float = 0.
+
+
+json.register_type(json.TypeEntry(
+    Coordinate,
+    '__glassesTools.plane.Coordinate__',
+    lambda value: value._asdict(),
+    lambda value: Coordinate(**value),
+    always_export_all_fields=True,
+))
+
 
 class Plane(_MarkerAssembly):
     default_ref_image_name = 'reference_image.png'
