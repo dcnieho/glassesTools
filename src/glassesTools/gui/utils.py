@@ -19,9 +19,69 @@ def reset_table_display_order(column_count: int) -> bool:
     return True
 
 
-# https://gist.github.com/Willy-JL/f733c960c6b0d2284bcbee0316f88878
+def _trim_remote_process_traceback(remote_tb: str) -> str|None:
+    # Removes the frames up to the last recognized wrapper/plumbing frame in each traceback section
+    lines = remote_tb.splitlines()
+    if not lines or not lines[0].startswith('Traceback (most recent call last):'):
+        return None
+
+    traceback_headers = [i for i, line in enumerate(lines) if line.startswith('Traceback (most recent call last):')]
+    if not traceback_headers or traceback_headers[0] != 0:
+        return None
+
+    def frame_path(line: str) -> str|None:
+        frame = line.lstrip()
+        if not (frame.startswith('File "') and ', line ' in frame and ', in ' in frame):
+            return None
+        return '/' + frame.split('"', 2)[1].replace('\\', '/').strip('/').lower()
+
+    def is_wrapper_frame(path: str) -> bool:
+        return (
+            '/pebble/' in path
+            or '/glassestools/process_pool.py' in path
+            or '/glassestools/propagating_thread.py' in path
+        )
+
+    formatted_lines: list[str] = []
+    trimmed_any = False
+    for section_idx, header in enumerate(traceback_headers):
+        end = traceback_headers[section_idx + 1] if section_idx + 1 < len(traceback_headers) else len(lines)
+        frames = [
+            (i, path)
+            for i in range(header + 1, end)
+            if (path := frame_path(lines[i])) is not None
+        ]
+        wrapper_indices = [i for i, path in frames if is_wrapper_frame(path)]
+        if not wrapper_indices:
+            formatted_lines.extend(lines[header:end])
+            continue
+
+        start = next((i for i, _ in frames if i > wrapper_indices[-1]), None)
+        if start is None:
+            return None
+        formatted_lines.append(lines[header])
+        formatted_lines.extend(lines[start:end])
+        trimmed_any = True
+
+    if not trimmed_any:
+        # fall back to normal printing of the traceback if we didn't trim anything, this traceback did not match our expectations
+        return None
+    return '\n'.join(formatted_lines).rstrip() + '\n'
+
+
 def get_traceback(*exc_info: list):
     exc_info = exc_info or sys.exc_info()
+    if len(exc_info) > 1 and isinstance(exc_info[1], BaseException):
+        cause = exc_info[1].__cause__
+        remote_tb = getattr(cause, 'traceback', None)
+        # Remove the plumbing frames from the traceback, to make it more readable.
+        # Furthermore, pebble (used to implement our process pool) wraps exceptions in a RemoteTraceback object. This wrapping in the RemoteTraceback object using __cause__ causes the main error to be printed twice when using normal exception formatting.
+        # The filtering of the traceback runs directly on only the remote traceback, in effect filtering out the duplicated message
+        if type(cause).__name__ == 'RemoteTraceback' and isinstance(remote_tb, str):
+            if trimmed_tb := _trim_remote_process_traceback(remote_tb):
+                return trimmed_tb
+
+    # fallback to normal printing of the traceback
     tb_lines = traceback.format_exception(*exc_info)
     tb = "".join(tb_lines)
     return tb
