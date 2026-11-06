@@ -16,7 +16,7 @@ class OverlayGazeStyles(typing.NamedTuple):
 
 json.register_type(json.TypeEntry(
     OverlayGazeStyles,
-    'glassesTools.gaze_headref.OverlayGazeStyles',
+    '__glassesTools.gaze_headref.OverlayGazeStyles__',
     lambda value: value._asdict(),
     lambda value: OverlayGazeStyles(**value),
 ))

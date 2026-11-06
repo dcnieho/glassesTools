@@ -19,7 +19,7 @@ class MappedGazeStyles(typing.NamedTuple):
 
 json.register_type(json.TypeEntry(
     MappedGazeStyles,
-    'glassesTools.gaze_worldref.MappedGazeStyles',
+    '__glassesTools.gaze_worldref.MappedGazeStyles__',
     lambda value: value._asdict(),
     lambda value: MappedGazeStyles(**value),
 ))
