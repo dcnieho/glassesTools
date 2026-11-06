@@ -140,9 +140,10 @@ def project_points(points_world: np.ndarray[tuple[M, typing.Literal[3]], np.dtyp
                                  cam_params.camera_mtx,
                                  np.zeros((1, 5)) if ignore_distortion else cam_params.distort_coeffs)[0].reshape((-1,2))
     elif cam_params.has_colmap_camera():
-        if rot_vec is not None and trans_vec is not None:
-            RMat = cv2.Rodrigues(rot_vec)[0]
-            RtMat = np.hstack((RMat, trans_vec.reshape(3,1)))
+        if rot_vec is not None or trans_vec is not None:
+            RMat = cv2.Rodrigues(np.zeros(3) if rot_vec is None else rot_vec)[0]
+            translation = np.zeros(3) if trans_vec is None else trans_vec
+            RtMat = np.hstack((RMat, translation.reshape(3,1)))
             points_world = np.matmul(RtMat,cv2.convertPointsToHomogeneous(points_world.reshape((-1,3))).reshape((-1,4)).T).T
         if ignore_distortion:
             img_points = cam_params.colmap_camera_no_distortion.img_from_cam(points_world.reshape((-1,3)))
