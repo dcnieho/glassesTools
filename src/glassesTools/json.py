@@ -6,7 +6,7 @@ import pathlib
 
 
 
-def json_encoder(obj):
+def get_type_entry(obj) -> 'TypeEntry':
     matches: dict[typing.Type, TypeEntry] = {}
     for t in TYPE_REGISTRY:
         if isinstance(obj, t.type):
@@ -17,9 +17,15 @@ def json_encoder(obj):
         for t2 in matches:
             if t is None or issubclass(t2,t):
                 t = t2
-        return {matches[t].reg_name: matches[t].to_json(obj)}
+        return matches[t]
     else:
         raise TypeError(f'type {type(obj)} cannot be serialized')
+
+
+def json_encoder(obj):
+    entry = get_type_entry(obj)
+    return {entry.reg_name: entry.to_json(obj)}
+
 
 def dump(obj, file: pathlib.Path):
     data = orjson.dumps(obj, json_encoder, orjson.OPT_INDENT_2|orjson.OPT_PASSTHROUGH_SUBCLASS)
@@ -79,6 +85,7 @@ class TypeEntry:
     to_json             : typing.Callable
     from_json           : typing.Callable
     compatible_reg_names: list[str]|None = None
+    always_export_all_fields: bool = False
 
 TYPE_REGISTRY = []
 def register_type(entry: TypeEntry):

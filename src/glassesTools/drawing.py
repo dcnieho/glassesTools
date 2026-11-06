@@ -74,6 +74,7 @@ for style_type, compatible_names in (
         lambda value: value._asdict(),
         lambda value, style_type=style_type: style_type(**value),
         compatible_names,
+        always_export_all_fields=style_type is RgbColor,
     ))
 
 DEFAULT_MAPPED_MARKER_STYLES = MarkerStyles(
