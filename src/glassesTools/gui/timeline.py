@@ -46,6 +46,9 @@ class Timeline:
         self._h_scroll      = 0
         self._scale         = 1.
         self._new_h_scroll  = None
+        self._available_width = 0.
+        self._scrollbar_width = 0.
+        self._timeline_width = 0.
 
         self._current_time = 0.
         self._dragged_time: float|None = None
@@ -285,7 +288,8 @@ class Timeline:
                 return
 
             self._scale += delta_scale
-            new_h_scroll = min(max(0., self._h_scroll + mouse_pos.x*delta_scale), self.draw_width)
+            max_h_scroll = max(0., self._timeline_width*self._scale + self._scrollbar_width - self._available_width)
+            new_h_scroll = min(max(0., self._h_scroll + mouse_pos.x*delta_scale), max_h_scroll)
             if not np.isclose(self._h_scroll, new_h_scroll):
                 self._new_h_scroll = new_h_scroll
 
@@ -555,7 +559,12 @@ class Timeline:
         if self._allow_timeline_zoom:
             flags |= imgui.WindowFlags_.always_horizontal_scrollbar
         available = imgui.get_content_region_avail()
-        draw_width = available.x*self._scale
+        self._available_width = available.x
+        self._scrollbar_width = imgui.get_style().scrollbar_size if self._annotations_frame else 0.
+        self._timeline_width = max(0., self._available_width-self._scrollbar_width)
+        draw_width = self._timeline_width*self._scale
+        scroll_content_width = draw_width+self._scrollbar_width
+        # Reserve a fixed strip at the right for the tracks child's conditional vertical scrollbar.
         if draw_width != self.draw_width:
             self.draw_width = draw_width
             self._calc_scale_fac()
@@ -563,15 +572,15 @@ class Timeline:
         if self._major_ticks_lbl is None:
             return
         # deal with scroll requests: submit content size and scroll for next window to avoid glitch (one frame delay in scroll)
-        imgui.set_next_window_content_size((self.draw_width,0))
+        imgui.set_next_window_content_size((scroll_content_width,0))
         if self._new_h_scroll is not None:
             imgui.set_next_window_scroll((self._new_h_scroll, -1))
             self._new_h_scroll = None
         imgui.push_style_var(imgui.StyleVar_.item_spacing, (0., 0.))
         imgui.begin_child('##all', size=available, window_flags=flags | imgui.WindowFlags_.no_scroll_with_mouse)
         self._h_scroll = imgui.get_scroll_x()
-        imgui.begin_child('##timeline',size=(self.draw_width,0), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scrollbar | imgui.WindowFlags_.no_scroll_with_mouse)
-        imgui.begin_child('##ruler',size=(self.draw_width,imgui.get_font_size()+2*imgui.get_style().frame_padding.y), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scrollbar | imgui.WindowFlags_.no_scroll_with_mouse)
+        imgui.begin_child('##timeline',size=(scroll_content_width,0), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scrollbar | imgui.WindowFlags_.no_scroll_with_mouse)
+        imgui.begin_child('##ruler',size=(scroll_content_width,imgui.get_font_size()+2*imgui.get_style().frame_padding.y), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scrollbar | imgui.WindowFlags_.no_scroll_with_mouse)
         self._draw_time_ruler()
         imgui.end_child()
 
@@ -579,7 +588,8 @@ class Timeline:
         if self._annotations_frame:
             cursor_pos = imgui.get_cursor_screen_pos()
             size       = imgui.get_content_region_avail()
-            imgui.begin_child('##tracks',size=(self.draw_width,0), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scroll_with_mouse)
+            # Counter the parent's horizontal scroll so the vertical scrollbar stays at the viewport edge.
+            imgui.begin_child('##tracks',size=(self._available_width+self._h_scroll,0), child_flags=imgui.ChildFlags_.borders, window_flags=imgui.WindowFlags_.no_background | imgui.WindowFlags_.no_scroll_with_mouse)
             height = int(self.track_height*imgui.get_window_dpi_scale())*len(self._annotations_frame)
             self._draw_tracks(cursor_pos, size, height)
             imgui.end_child()
