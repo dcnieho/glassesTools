@@ -104,6 +104,7 @@ def summarize_and_store_data_quality(df: pd.DataFrame, output_file_or_dir: str |
             'target': 'validation target ID',
             'num_targets': 'number of included targets',
             'order': 'target presentation order within interval',
+            'target_sample_window_duration': 'target sample window duration (s)',
             'plane_target_direction_x': 'target azimuth (Fick) relative to validation plane center target (deg)',
             'plane_target_direction_y': 'target elevation (Fick) relative to validation plane center target (deg)',
             'acc_x': 'accuracy azimuth (Fick) component (deg)',

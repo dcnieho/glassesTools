@@ -77,6 +77,7 @@ def compute(
                 continue
             start_timestamp = target_sample_windows.loc[(validation_episode_number,t),'start_timestamp']
             end_timestamp = target_sample_windows.loc[(validation_episode_number,t),  'end_timestamp']
+            target_sample_window_duration = end_timestamp - start_timestamp
             target_sample_gazes_by_frame = {}
             target_sample_timestamps = []
             for frame_idx, frame_gazes in samples_per_frame.items():
@@ -107,6 +108,7 @@ def compute(
                     rms, rms_x, rms_y = rms_s2s(azi, ele)
                     std_total, std_x, std_y = std(azi, ele)
                     row = idxer[validation_episode_number,dt,t]
+                    df.loc[row,'target_sample_window_duration'] = target_sample_window_duration
                     df.loc[row,'plane_target_direction_x'] = plane_target_azi
                     df.loc[row,'plane_target_direction_y'] = plane_target_ele
                     df.loc[row,'acc_x'] = median_azi
@@ -142,6 +144,7 @@ def compute(
                     'type': 'gaze data type',
                     'target': 'validation target ID',
                     'order': 'target presentation order within interval',
+                    'target_sample_window_duration': 'target sample window duration (s)',
                     'plane_target_direction_x': 'target azimuth (Fick) relative to validation plane center target (deg)',
                     'plane_target_direction_y': 'target elevation (Fick) relative to validation plane center target (deg)',
                     'acc_x': 'accuracy azimuth (Fick) component (deg)',
