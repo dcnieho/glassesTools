@@ -149,6 +149,12 @@ def plot(
                 if data:
                     gaze = np.vstack(data)
                     other_intervals.loc[t,['xpos','ypos']] = np.nanmedian(gaze,axis=0)
+    # make sure we have x and y positions for all intervals, else plotting will fail
+    for intervals in (selected_intervals, other_intervals):
+        if intervals is not None:
+            for coordinate in ('xpos', 'ypos'):
+                if coordinate not in intervals.columns:
+                    intervals[coordinate] = np.nan
     # make plot of data overlaid on poster, and show for each target which interval was selected
     # prep data
     if other_intervals is not None:
@@ -163,7 +169,8 @@ def plot(
     plt.plot(all_intervals['xpos'],all_intervals['ypos'],'go')
     # draw target matching
     for t, row in selected_intervals.iterrows():
-        plt.plot([row['xpos'], targets[t][0]], [row['ypos'], targets[t][1]],'r-')
+        if pd.notna(row['xpos']) and pd.notna(row['ypos']):
+            plt.plot([row['xpos'], targets[t][0]], [row['ypos'], targets[t][1]],'r-')
 
     # cosmetics
     plt.xlabel('mm')
