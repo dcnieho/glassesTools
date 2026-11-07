@@ -65,9 +65,12 @@ def compute(
         df_idx = pd.DataFrame(np.vstack(tuple(df_idx)),columns=[target_sample_windows.index.names[0],'type',target_sample_windows.index.names[1]])
         df  = pd.DataFrame(index=pd.MultiIndex.from_frame(df_idx.astype({target_sample_windows.index.names[0]: 'int64', 'type': 'category', target_sample_windows.index.names[1]: 'int64'})))
 
-        # determine order in which targets were looked at
+        # Determine each target's chronological rank, kept in target-index order.
+        target_start_timestamps = target_sample_windows.loc[validation_episode_number,:]['start_timestamp']
+        target_order = target_start_timestamps.rank(method='first')
+        target_order = target_order.reindex(idxs[:,0]).to_numpy(dtype=np.int64)
         for dt in d_types:
-            df.loc[idxer[validation_episode_number,dt,:],'order'] = np.argsort(target_sample_windows.loc(axis=0)[validation_episode_number,:]['start_timestamp'].to_numpy())+1
+            df.loc[idxer[validation_episode_number,dt,:],'order'] = target_order
         if df['order'].dtype==np.dtype('float64'):  # ensure int if needed
             df['order'] = df['order'].astype(np.int64)
 
