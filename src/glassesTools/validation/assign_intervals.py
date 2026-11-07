@@ -74,7 +74,7 @@ def dynamic_markers(
         marker_observations_per_target: dict[int, pd.DataFrame],    # {target: dataframe}
         markers_per_target: dict[int,list[marker.MarkerID]],        # {target: [marker,...]}, one or multiple markers per target
         timestamps_file: str|pathlib.Path,
-        episode: list[int],
+        validation_episode_frame_range: list[int],
         skip_first_duration: float,
         max_gap_duration: int,
         min_duration: int,
@@ -86,12 +86,12 @@ def dynamic_markers(
     ts_col      = 'timestamp_stretched' if 'timestamp_stretched' in timestamps else 'timestamp'
 
     # make local copy of marker_observations, containing only the current episode
-    marker_observations_per_target = {t:mo.loc[episode[0]:episode[1],:] for t,mo in marker_observations_per_target.items()}
+    marker_observations_per_target = {t:mo.loc[validation_episode_frame_range[0]:validation_episode_frame_range[1],:] for t,mo in marker_observations_per_target.items()}
     # check we have data for at least one of the markers for a given target
     for t in marker_observations_per_target:
         if marker_observations_per_target[t].empty and not allow_missing:
             missing_str  = '\n- '.join([marker.marker_ID_to_str(m) for m in markers_per_target[t]])
-            extra = f'from frame {episode[0]} to frame {episode[1]}' if name=='' else f'"{name}" from frame {episode[0]} to frame {episode[1]}'
+            extra = f'from frame {validation_episode_frame_range[0]} to frame {validation_episode_frame_range[1]}' if name=='' else f'"{name}" from frame {validation_episode_frame_range[0]} to frame {validation_episode_frame_range[1]}'
             raise RuntimeError(f'None of the markers for target {t} were observed during the episode {extra}:\n- {missing_str}')
 
     # marker presence signal only contains marker detections (True). We need to fill the gaps in between detections with False (not detected) so we have a continuous signal without gaps
@@ -119,10 +119,10 @@ def plot(
         other_intervals: pd.DataFrame|None,
         targets: dict[int, np.ndarray],
         gazes: str|pathlib.Path|dict[int, list[gaze_worldref.Gaze]],
-        episode: list[int],
+        validation_episode_frame_range: list[int],
         output_directory: str|pathlib.Path,
         filename_stem: str = naming.fixation_assignment_prefix,
-        iteration = 0,
+        validation_episode_index = 0,
         background_image: tuple[np.ndarray, list[float]]|None = None,    # (image, extent in mm [l r t b])
         plot_limits: list[list[float]]|None = None
     ):
@@ -133,7 +133,7 @@ def plot(
         if not isinstance(gazes,dict):
             gazes = gaze_worldref.read_dict_from_file(gazes, ts_column_suffixes=['VOR',''])
         if 'xpos' not in selected_intervals.columns:
-            samples_per_frame = {k:v for (k,v) in gazes.items() if k>=episode[0] and k<=episode[1]}
+            samples_per_frame = {k:v for (k,v) in gazes.items() if k>=validation_episode_frame_range[0] and k<=validation_episode_frame_range[1]}
             has_ray = np.any(np.logical_not(np.isnan([s.gazePosPlane2D_vidPos_ray for v in gazes.values() for s in v])))
             field = 'gazePosPlane2D_vidPos_ray' if has_ray else 'gazePosPlane2D_vidPos_homography'
             for t in selected_intervals.index:
@@ -173,28 +173,31 @@ def plot(
         plt.ylim(plot_limits[1])
     plt.gca().invert_yaxis()
 
-    f.savefig(output_directory / f'{filename_stem}_interval_{iteration+1:02d}.png')
+    f.savefig(output_directory / f'{filename_stem}_interval_{validation_episode_index+1:02d}.png')
     plt.close(f)
 
 def to_tsv(
         selected_intervals: pd.DataFrame,
         output_directory: str|pathlib.Path,
         filename_stem: str = naming.fixation_assignment_prefix,
-        iteration = 0,
+        validation_episode_index = 0,
     ):
     output_directory = pathlib.Path(output_directory)
     # store selected intervals
     selected_intervals = selected_intervals \
                             .drop(columns=[c for c in ('xpos','ypos') if c in selected_intervals.columns]) \
                             .rename(columns={'startT': 'start_timestamp', 'endT': 'end_timestamp'})
+    if 'validation_episode_number' in selected_intervals.columns:
+        assert all(selected_intervals['validation_episode_number']==validation_episode_index+1)
+        selected_intervals = selected_intervals.drop(columns='validation_episode_number')
     if 'marker_interval' in selected_intervals.columns:
         # check matches
-        assert all(selected_intervals['marker_interval']==iteration+1)
+        assert all(selected_intervals['marker_interval']==validation_episode_index+1)
     else:
-        selected_intervals.insert(0, 'marker_interval', iteration+1)
+        selected_intervals.insert(0, 'marker_interval', validation_episode_index+1)
 
     selected_intervals.to_csv(
         output_directory / f'{filename_stem}.tsv',
-        mode='w' if iteration==0 else 'a',
-        header=iteration==0,
+        mode='w' if validation_episode_index==0 else 'a',
+        header=validation_episode_index==0,
         sep='\t', na_rep='nan', float_format="%.3f")

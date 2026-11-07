@@ -13,8 +13,8 @@ from .. import data_types, gaze_worldref, naming, ocv, pose, transforms
 def compute(
         gazes: str|pathlib.Path|dict[int, list[gaze_worldref.Gaze]],
         poses: str|pathlib.Path|dict[int, pose.Pose]|dict[int, list[pose.Pose]],
-        marker_intervals: str|pathlib.Path|pd.DataFrame,
-        validation_intervals: list[list[int]],
+        target_sample_windows: str|pathlib.Path|pd.DataFrame,
+        validation_episode_frame_ranges: list[list[int]],
         targets: dict[int, np.ndarray],
         distance_mm_for_homography: float,
         output_directory: str|pathlib.Path,
@@ -27,14 +27,15 @@ def compute(
         d_types = []
 
     # read input if needed
-    if not isinstance(marker_intervals, pd.DataFrame):
-        marker_intervals = pd.read_csv(marker_intervals, delimiter='\t', dtype={'marker_interval':int},index_col=['marker_interval','target'])
-    if not all((c in marker_intervals or c in marker_intervals.index.names for c in ('marker_interval','target','start_timestamp','end_timestamp'))):
-        raise ValueError('Provided marker intervals should contain the following columns: [marker_interval, target, start_timestamp, end_timestamp]')
+    if not isinstance(target_sample_windows, pd.DataFrame):
+        target_sample_windows = pd.read_csv(target_sample_windows, delimiter='\t', dtype={'marker_interval':int},index_col=['marker_interval','target'])
+    target_sample_windows = target_sample_windows.rename_axis(index={'marker_interval': 'validation_episode_number'})
+    if not all((c in target_sample_windows or c in target_sample_windows.index.names for c in ('validation_episode_number','target','start_timestamp','end_timestamp'))):
+        raise ValueError('Provided target sample windows should contain the following columns: [marker_interval, target, start_timestamp, end_timestamp]')
     if not isinstance(gazes, dict):
-        gazes = gaze_worldref.read_dict_from_file(gazes, validation_intervals, ts_column_suffixes=['VOR',''])
+        gazes = gaze_worldref.read_dict_from_file(gazes, validation_episode_frame_ranges, ts_column_suffixes=['VOR',''])
     if not isinstance(poses, dict):
-        poses = pose.read_list_dict_from_file(poses,validation_intervals, ts_column_suffixes=['VOR',''])
+        poses = pose.read_list_dict_from_file(poses,validation_episode_frame_ranges, ts_column_suffixes=['VOR',''])
     # prep targets
     targets_for_homography = {t_id: np.append(targets[t_id][0:2], distance_mm_for_homography) for t_id in targets}
 
@@ -43,10 +44,11 @@ def compute(
 
     # for each frame during analysis interval, determine offset
     # (angle) of gaze (each eye) to each of the targets
-    for idx,iv in enumerate(validation_intervals):
-        samples_per_frame = {k:v for k,v in gazes.items() if iv[0] <= k <= iv[1]}
+    for validation_episode_index, validation_episode_frame_range in enumerate(validation_episode_frame_ranges):
+        validation_episode_number = validation_episode_index + 1
+        samples_per_frame = {frame_idx: frame_gazes for frame_idx, frame_gazes in gazes.items() if validation_episode_frame_range[0] <= frame_idx <= validation_episode_frame_range[1]}
         if not samples_per_frame:
-            raise RuntimeError(f'There is no gaze data on the glassesValidator surface for validation interval (frames {iv[0]} to {iv[1]}), cannot proceed. This may be because there was no gaze during this interval or because the plane was not detected.')
+            raise RuntimeError(f'There is no gaze data on the glassesValidator surface for validation episode (frames {validation_episode_frame_range[0]} to {validation_episode_frame_range[1]}), cannot proceed. This may be because there was no gaze during this episode or because the plane was not detected.')
 
         # check what data quality types we should output. Go with good defaults
         # first see what we have available
@@ -57,30 +59,39 @@ def compute(
         # prepare output data frame
         df_idx  = []
         idxer = pd.IndexSlice
-        idxs = marker_intervals.loc[idx+1,:].index.to_frame().to_numpy()
+        idxs = target_sample_windows.loc[validation_episode_number,:].index.to_frame().to_numpy()
         for dt in d_types:
-            df_idx.append(np.vstack((np.full((idxs.shape[0],),idx+1,dtype='int'),idxs.shape[0]*[dt],idxs[:,0])).T)
-        df_idx = pd.DataFrame(np.vstack(tuple(df_idx)),columns=[marker_intervals.index.names[0],'type',marker_intervals.index.names[1]])
-        df  = pd.DataFrame(index=pd.MultiIndex.from_frame(df_idx.astype({marker_intervals.index.names[0]: 'int64', 'type': 'category', marker_intervals.index.names[1]: 'int64'})))
+            df_idx.append(np.vstack((np.full((idxs.shape[0],),validation_episode_number,dtype='int'),idxs.shape[0]*[dt],idxs[:,0])).T)
+        df_idx = pd.DataFrame(np.vstack(tuple(df_idx)),columns=[target_sample_windows.index.names[0],'type',target_sample_windows.index.names[1]])
+        df  = pd.DataFrame(index=pd.MultiIndex.from_frame(df_idx.astype({target_sample_windows.index.names[0]: 'int64', 'type': 'category', target_sample_windows.index.names[1]: 'int64'})))
 
         # determine order in which targets were looked at
         for dt in d_types:
-            df.loc[idxer[idx+1,dt,:],'order'] = np.argsort(marker_intervals.loc(axis=0)[idx+1,:]['start_timestamp'].to_numpy())+1
+            df.loc[idxer[validation_episode_number,dt,:],'order'] = np.argsort(target_sample_windows.loc(axis=0)[validation_episode_number,:]['start_timestamp'].to_numpy())+1
         if df['order'].dtype==np.dtype('float64'):  # ensure int if needed
             df['order'] = df['order'].astype(np.int64)
 
-        # now compute
+        # now compute values per target and data type
         for t in targets:
-            if (idx+1,t) not in marker_intervals.index:
+            if (validation_episode_number,t) not in target_sample_windows.index:
                 continue
-            ts = np.asarray([s.timestamp for v in samples_per_frame.values() for s in v], dtype=float)
-            st = marker_intervals.loc[(idx+1,t),'start_timestamp']
-            et = marker_intervals.loc[(idx+1,t),  'end_timestamp']
-            q_data = np.logical_and(ts>=st, ts<=et)
+            start_timestamp = target_sample_windows.loc[(validation_episode_number,t),'start_timestamp']
+            end_timestamp = target_sample_windows.loc[(validation_episode_number,t),  'end_timestamp']
+            target_sample_gazes_by_frame = {}
+            target_sample_timestamps = []
+            for frame_idx, frame_gazes in samples_per_frame.items():
+                target_gazes = [gaze for gaze in frame_gazes if start_timestamp <= gaze.timestamp <= end_timestamp]
+                if target_gazes:
+                    target_sample_gazes_by_frame[frame_idx] = target_gazes
+                    target_sample_timestamps.extend(gaze.timestamp for gaze in target_gazes)
+            target_sample_timestamps = np.asarray(target_sample_timestamps, dtype=float)
 
-            _, _, relative_vectors = data_types.calculate_target_relative_gaze_vectors(samples_per_frame, poses, targets, d_types, targets_for_homography, distance_mm_for_homography)
+            if target_sample_gazes_by_frame:
+                _, _, relative_vectors = data_types.calculate_target_relative_gaze_vectors(target_sample_gazes_by_frame, poses, {t: targets[t]}, d_types, {t: targets_for_homography[t]}, distance_mm_for_homography)
+            else:
+                relative_vectors = {t: {dt: np.empty((0, 3)) for dt in d_types}}
             plane_target_azi, plane_target_ele, video_target_azi, video_target_ele, plane_distance = _target_geometry(
-                samples_per_frame, poses, targets[t], targets_for_homography[t], ts, q_data, camera_params,
+                target_sample_gazes_by_frame, poses, targets[t], targets_for_homography[t], target_sample_timestamps, np.ones(target_sample_timestamps.size, dtype=bool), camera_params
             )
 
             # compute data quality for this target
@@ -88,14 +99,14 @@ def compute(
                 warnings.simplefilter("ignore") # ignore warnings from np.nanmean, np.nanmedian and np.nanstd
 
                 for dt in d_types:
-                    vectors = relative_vectors[t][dt][q_data]
+                    vectors = relative_vectors[t][dt]
                     azi, ele = data_types.target_relative_vectors_to_fick(vectors)
                     median_vector = frechet_median_on_sphere(vectors)
                     median_azi, median_ele = data_types.target_relative_vectors_to_fick(median_vector)
                     acc = np.degrees(np.arctan2(np.hypot(median_vector[0], median_vector[1]), median_vector[2]))
                     rms, rms_x, rms_y = rms_s2s(azi, ele)
                     std_total, std_x, std_y = std(azi, ele)
-                    row = idxer[idx+1,dt,t]
+                    row = idxer[validation_episode_number,dt,t]
                     df.loc[row,'plane_target_direction_x'] = plane_target_azi
                     df.loc[row,'plane_target_direction_y'] = plane_target_ele
                     df.loc[row,'acc_x'] = median_azi
@@ -121,13 +132,13 @@ def compute(
 
     if out_df is not None:
         output_file = output_directory / filename
-        out_df = out_df.reset_index()
+        out_df = out_df.reset_index().rename(columns={'validation_episode_number': 'marker_interval'})
         with output_file.open('w', encoding='utf-8', newline='') as output:
             writer = csv.writer(output, delimiter='\t', lineterminator='\n', quoting=csv.QUOTE_MINIMAL)
             writer.writerow(out_df.columns)
             if include_unit_header_row:
                 column_info = {
-                    'marker_interval': 'validation interval number',
+                    'marker_interval': 'validation episode number',
                     'type': 'gaze data type',
                     'target': 'validation target ID',
                     'order': 'target presentation order within interval',

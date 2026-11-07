@@ -45,6 +45,7 @@ def collect_data_quality(rec_dirs: typing.Sequence[str | pathlib.Path], file_nam
         return None, None, None
     # set indices
     df = df.set_index(idx_vals+['marker_interval','type','target'])
+    df = df.rename_axis(index={'marker_interval': 'validation_episode_number'})
     # change type index into enum
     typeIdx = df.index.names.index('type')
     df.index = df.index.set_levels(pd.CategoricalIndex([getattr(data_types.DataType,x) for x in df.index.levels[typeIdx]]),level='type')
@@ -86,6 +87,7 @@ def summarize_and_store_data_quality(df: pd.DataFrame, output_file_or_dir: str |
         df = gb.mean()
         # add number of targets count (there may be some missing data)
         df.insert(0,'num_targets',count['acc'])
+    df = df.rename_axis(index={'validation_episode_number': 'marker_interval'})
 
     # store
     output_file_or_dir = pathlib.Path(output_file_or_dir)
@@ -97,7 +99,7 @@ def summarize_and_store_data_quality(df: pd.DataFrame, output_file_or_dir: str |
             'session': 'session name',
             'recording': 'recording name',
             'plane': 'validation plane name',
-            'marker_interval': 'validation interval number',
+            'marker_interval': 'validation episode number',
             'type': 'gaze data type',
             'target': 'validation target ID',
             'num_targets': 'number of included targets',
