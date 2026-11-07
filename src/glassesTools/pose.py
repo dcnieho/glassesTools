@@ -251,7 +251,8 @@ def write_plane_list_to_file(poses: list[PlanePose], fileName:str|pathlib.Path, 
                                     PlanePose._columns_optional,
                                     skip_all_nan=skip_failed)
 
-def get_sample_pose(poses: dict[int, Pose] | dict[int, list[Pose]], frame_idx: int, sample_idx: int|None=None, timestamp: float|None=None, timestamp_tolerance: float=1e-4) -> Pose|None:
+_PoseT = typing.TypeVar('_PoseT', bound=Pose)
+def get_sample_pose(poses: typing.Mapping[int, _PoseT] | typing.Mapping[int, list[_PoseT]], frame_idx: int, sample_idx: int|None=None, timestamp: float|None=None, timestamp_tolerance: float=1e-4) -> _PoseT|None:
     if frame_idx not in poses:
         return None
     pose_or_list = poses[frame_idx]

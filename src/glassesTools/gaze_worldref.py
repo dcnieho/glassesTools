@@ -205,14 +205,14 @@ def write_dict_to_file(gazes: list[Gaze] | dict[int,list[Gaze]], file_name:str|p
                                    skip_all_nan=skip_missing)
 
 @typing.overload
-def from_head(poses:           pose.Pose , gazes_head:               gaze_headref.Gaze  , camera_params: ocv.CameraParams) ->               Gaze  : ...
+def from_head(poses:           pose.PlanePose , gazes:               gaze_headref.Gaze  , camera_params: ocv.CameraParams) ->               Gaze  : ...
 @typing.overload
-def from_head(poses: dict[int, pose.Pose], gazes_head: dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams, progress_updater: typing.Callable[[], None]=None) -> dict[int,list[Gaze]]: ...
+def from_head(poses: dict[int, pose.PlanePose], gazes: dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams, progress_updater: typing.Callable[[], None]|None=None) -> dict[int,list[Gaze]]: ...
 @typing.overload
-def from_head(poses: dict[int, list[pose.Pose]], gazes_head: dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams, progress_updater: typing.Callable[[], None]=None) -> dict[int,list[Gaze]]: ...
+def from_head(poses: dict[int, list[pose.PlanePose]], gazes: dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams, progress_updater: typing.Callable[[], None]|None=None) -> dict[int,list[Gaze]]: ...
 
-def from_head(poses: pose.Pose|dict[int, pose.Pose]|dict[int, list[pose.Pose]], gazes: gaze_headref.Gaze|dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams, progress_updater: typing.Callable[[], None]=None) -> Gaze|dict[int,list[Gaze]]:
-    if not isinstance(poses, dict):
+def from_head(poses: pose.PlanePose|dict[int, pose.PlanePose]|dict[int, list[pose.PlanePose]], gazes: gaze_headref.Gaze|dict[int,list[gaze_headref.Gaze]], camera_params: ocv.CameraParams, progress_updater: typing.Callable[[], None]|None=None) -> Gaze|dict[int,list[Gaze]]:
+    if not isinstance(poses, dict) or not isinstance(gazes, dict):
         return _from_head_impl(poses, gazes, camera_params)
 
     world_gazes = {}
@@ -232,7 +232,7 @@ def from_head(poses: pose.Pose|dict[int, pose.Pose]|dict[int, list[pose.Pose]], 
             del world_gazes[frame_idx]
     return world_gazes
 
-def _from_head_impl(pose: pose.Pose, gaze: gaze_headref.Gaze, camera_params: ocv.CameraParams) -> Gaze:
+def _from_head_impl(pose: pose.PlanePose, gaze: gaze_headref.Gaze, camera_params: ocv.CameraParams) -> Gaze:
     gaze_world = Gaze(gaze.timestamp, gaze.frame_idx, gaze.timestamp_ori, gaze.frame_idx_ori, gaze.timestamp_VOR, gaze.frame_idx_VOR, gaze.timestamp_ref, gaze.frame_idx_ref)
     if pose.pose_successful():
         # get transform from ET data's coordinate frame to camera's coordinate frame

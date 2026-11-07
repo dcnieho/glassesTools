@@ -174,7 +174,7 @@ def select_data_types_to_use(dq_types: typing.Iterable[DataType]|DataType|str|No
     return dq_types
 
 
-def calculate_target_relative_gaze_vectors(plane_gazes: dict[int, list[gaze_worldref.Gaze]], poses: dict[int, pose.Pose] | dict[int, list[pose.Pose]], points: dict[int, np.ndarray], d_types: list[DataType], points_for_homography: dict[int, np.ndarray]|None=None, viewing_distance: float|None = None) -> tuple[list[int], np.ndarray, dict[int, dict[DataType, np.ndarray]]]:
+def calculate_target_relative_gaze_vectors(plane_gazes: dict[int, list[gaze_worldref.Gaze]], poses: typing.Mapping[int, pose.Pose] | typing.Mapping[int, list[pose.Pose]], points: dict[int, np.ndarray], d_types: list[DataType], points_for_homography: dict[int, np.ndarray]|None=None, viewing_distance: float|None = None) -> tuple[list[int], np.ndarray, dict[int, dict[DataType, np.ndarray]]]:
     requested_types = list(dict.fromkeys(d_types))
     selected_types = [d_type for d_type in requested_types if d_type != DataType.pose_left_right_avg]
     if DataType.pose_left_right_avg in requested_types:
@@ -245,7 +245,7 @@ def average_gaze_vectors(left: np.ndarray, right: np.ndarray) -> np.ndarray:
     valid &= midpoint_norm > 1e-12
     return np.divide(midpoint, midpoint_norm, out=np.full_like(midpoint, np.nan), where=valid)
 
-def calculate_gaze_angles_to_point(plane_gazes: dict[int, list[gaze_worldref.Gaze]], poses: dict[int, pose.Pose] | dict[int, list[pose.Pose]], points: dict[int, np.ndarray], d_types: list[DataType], points_for_homography: dict[int, np.ndarray]|None=None, viewing_distance: float|None = None) -> tuple[list[int], np.ndarray, dict[int, dict[DataType, np.ndarray]]]:
+def calculate_gaze_angles_to_point(plane_gazes: dict[int, list[gaze_worldref.Gaze]], poses: typing.Mapping[int, pose.Pose] | typing.Mapping[int, list[pose.Pose]], points: dict[int, np.ndarray], d_types: list[DataType], points_for_homography: dict[int, np.ndarray]|None=None, viewing_distance: float|None = None) -> tuple[list[int], np.ndarray, dict[int, dict[DataType, np.ndarray]]]:
     frame_idxs, timestamps, vectors = calculate_target_relative_gaze_vectors(plane_gazes, poses, points, d_types, points_for_homography, viewing_distance)
     out: dict[int, dict[DataType, np.ndarray]] = {}
     for target_id, target_vectors in vectors.items():
