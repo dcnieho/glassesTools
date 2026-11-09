@@ -461,7 +461,7 @@ class FilePicker:
         # filter box
         imgui.same_line(spacing=imgui.get_style().item_spacing.x/2)
         imgui.set_next_item_width(imgui.get_content_region_avail().x)
-        _, value = imgui.input_text_with_hint('##filter_box', f'Filter {self._get_path_leaf_display_name(self.loc)}', self.filter_box_text)
+        _, value = imgui.input_text_with_hint('##filter_box', f'Filter {self._get_path_leaf_display_name(self.loc)}', self.filter_box_text, flags=imgui.InputTextFlags_.elide_left)
         if value != self.filter_box_text:
             self.filter_box_text = value
             self.require_sort = True
@@ -627,7 +627,7 @@ class FilePicker:
                     state |= 0b100
 
             loc_str = self._get_path_display_name(self.loc, for_edit=True)
-            confirmed, loc = imgui.input_text("##pathbox_input",loc_str,imgui.InputTextFlags_.enter_returns_true)
+            confirmed, loc = imgui.input_text("##pathbox_input", loc_str, flags=imgui.InputTextFlags_.elide_left|imgui.InputTextFlags_.enter_returns_true)
             if confirmed:
                 self.goto(loc)
             if not skip_active_check and not imgui.is_item_active():
