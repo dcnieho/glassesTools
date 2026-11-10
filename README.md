@@ -10,7 +10,7 @@ If you use this package or any of the code in this repository, please cite:<br>
 A data quality tool for eye tracking glasses. Behavior Research Methods. doi: 10.3758/s13428-023-02105-5](https://doi.org/10.3758/s13428-023-02105-5) ([BibTeX](#bibtex))
 
 # How to acquire
-GlassesTools is available from `https://github.com/dcnieho/glassesTools`, and supports Python 3.10 and 3.11 on Windows, MacOS and Linux.
+GlassesTools is available from `https://github.com/dcnieho/glassesTools`, and supports Python 3.11 and later on Windows, MacOS and Linux.
 
 The easiest way to acquire glassesTools is to install it directly into your Python distribution using the command
 `python -m pip install glassesTools`. If you run into problems on MacOS to install the `imgui_bundle` package, you can
