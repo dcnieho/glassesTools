@@ -115,7 +115,7 @@ class RecordingTable:
             i_col += 1
         self._show_hide_commands.clear()
         self._column_layout_signature = tuple((column.position, column.name) for column in self._columns)
-        if previous_layout is not None and self._column_layout_signature != previous_layout:
+        if previous_layout is None or self._column_layout_signature != previous_layout:
             self._reset_column_order_pending = True
 
     def show_hide_columns(self, show_hide: dict[str, bool]):
