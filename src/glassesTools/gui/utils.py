@@ -14,8 +14,7 @@ def reset_table_display_order(column_count: int) -> bool:
     table = imgui.internal.get_current_table()
     if table is None or table.columns_count != column_count:
         return False
-    for column_idx in range(column_count):
-        imgui.internal.table_set_column_display_order(table, column_idx, column_idx)
+    table.is_reset_display_order_request = True
     return True
 
 
